@@ -117,6 +117,20 @@ app.patch('/sessions/:id', async (c) => {
   return c.json(await service.recordSession(Number(c.req.param('id')), { ...body, actorId: c.get('actor').id }));
 });
 
+app.get('/cases/:id/detail', async (c) => {
+  const detail = await service.getCaseDetail(Number(c.req.param('id')));
+  return detail ? c.json(detail) : c.json({ error: '사례를 찾지 못했어요.' }, 404);
+});
+
+app.post('/cases/:id/close', async (c) => {
+  const body = z
+    .object({ close_reason: z.string().min(1), unfinished_note: z.string().nullish() })
+    .parse(await c.req.json());
+  return c.json(
+    await service.closeCase(Number(c.req.param('id')), { ...body, actorId: c.get('actor').id }),
+  );
+});
+
 app.get('/participants', async (c) => c.json(await service.listParticipants()));
 
 app.get('/schedules', async (c) => {

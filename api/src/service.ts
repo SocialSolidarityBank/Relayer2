@@ -4,6 +4,7 @@ import { decryptPii, encryptPii, KEY_VERSION } from './pii.ts';
 import { buildBriefing, type Briefing } from './domain/briefing.ts';
 import { openCards, resolveOutcomes, type OutcomeSubmission } from './domain/cards.ts';
 import { carryOverOnRecord } from './domain/goals.ts';
+import { buildSessionLine } from './domain/session-line.ts';
 import type { Card, CardOutcome, Session, SupportCase } from './domain/types.ts';
 
 const ANIMALS = [
@@ -200,6 +201,106 @@ export async function getCase(caseId: number) {
     sessions,
     open_cards: openCards(cards, outcomes, sessions),
   };
+}
+
+export type CaseDetail = {
+  case: SupportCase;
+  pseudonym: string;
+  participant: { name: string | null; phone: string | null; email: string | null };
+  sessions: Array<{
+    id: number;
+    seq: number;
+    kind: string;
+    status: string;
+    held_at: string | null;
+    scheduled_at: string | null;
+    line: string;
+    memo: string | null;
+    today_goal_text: string | null;
+  }>;
+  goal_revisions: Array<{ text: string | null; created_at: string }>;
+  open_cards: Array<ReturnType<typeof openCards>[number] & { source_session_seq: number | null }>;
+  closure: {
+    closed_at: string;
+    close_reason: string;
+    unfinished_note: string | null;
+    last_session_seq: number | null;
+  } | null;
+};
+
+/** 당사자 정보 화면(탭 4)의 재료를 한 번에 낸다. 탭마다 따로 부르지 않는다. */
+export async function getCaseDetail(caseId: number): Promise<CaseDetail | null> {
+  const loaded = await loadCase(caseId);
+  if (!loaded) return null;
+  const { supportCase, pseudonym, sessions, cards, outcomes } = loaded;
+
+  const [vault] = await sql<Array<{ enc_name: string | null; enc_phone: string | null; enc_email: string | null }>>`
+    select enc_name, enc_phone, enc_email from participant_pii
+    where participant_id = ${supportCase.participant_id}`;
+
+  const revisions = await sql<Array<{ text: string | null; created_at: string }>>`
+    select text, created_at from goal_revisions where case_id = ${caseId} order by created_at`;
+
+  // 상담 종결은 회차가 아니다. 회차별 요약에서 마지막 상담과 나란히 별도 항목으로 보인다(SPEC §4-3).
+  const [closure] = await sql<Array<{ closed_at: string; close_reason: string; unfinished_note: string | null; last_session_id: number | null }>>`
+    select closed_at, close_reason, unfinished_note, last_session_id from case_closures where case_id = ${caseId}`;
+
+  return {
+    case: supportCase,
+    pseudonym,
+    participant: {
+      name: decryptPii(vault?.enc_name ?? null),
+      phone: decryptPii(vault?.enc_phone ?? null),
+      email: decryptPii(vault?.enc_email ?? null),
+    },
+    sessions: sessions.map((s) => ({
+      id: s.id,
+      seq: s.seq,
+      kind: s.kind,
+      status: s.status,
+      held_at: s.held_at,
+      scheduled_at: s.scheduled_at,
+      line: buildSessionLine(s, cards),
+      memo: s.memo,
+      today_goal_text: s.today_goal_text,
+    })),
+    goal_revisions: revisions,
+    open_cards: openCards(cards, outcomes, sessions).map((c) => ({
+      ...c,
+      source_session_seq: sessions.find((s) => s.id === c.source_session_id)?.seq ?? null,
+    })),
+    closure: closure
+      ? {
+          closed_at: closure.closed_at,
+          close_reason: closure.close_reason,
+          unfinished_note: closure.unfinished_note,
+          last_session_seq: sessions.find((s) => s.id === closure.last_session_id)?.seq ?? null,
+        }
+      : null,
+  };
+}
+
+/**
+ * 상담 종결. 회차를 만들지 않는다 — `case_closures` 한 줄과 사례 상태만 바꾼다.
+ * 미완료 과제와 목표를 자동으로 완료·중단 처리하지 않는다(SPEC §4-3).
+ * 같은 사례를 두 번 닫아도 처음 기록을 그대로 돌려준다.
+ */
+export async function closeCase(
+  caseId: number,
+  input: { close_reason: string; unfinished_note?: string | null; actorId?: number },
+): Promise<{ case_id: number; closed_at: string }> {
+  return await sql.begin(async (tx) => {
+    const [last] = await tx<Array<{ id: number }>>`
+      select id from sessions where case_id = ${caseId} and status = 'done' order by seq desc limit 1`;
+    const [row] = await tx<Array<{ closed_at: string }>>`
+      insert into case_closures (case_id, last_session_id, close_reason, unfinished_note, created_by)
+      values (${caseId}, ${last?.id ?? null}, ${input.close_reason},
+              ${input.unfinished_note ?? null}, ${input.actorId ?? null})
+      on conflict (case_id) do update set case_id = excluded.case_id
+      returning closed_at`;
+    await tx`update support_cases set status = 'closed' where id = ${caseId}`;
+    return { case_id: caseId, closed_at: row.closed_at };
+  });
 }
 
 export type ParticipantRow = {

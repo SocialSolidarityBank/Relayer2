@@ -3,10 +3,12 @@
 import { useEffect, useState } from 'react';
 import { getMe, logout, Unauthorized, type Me } from './api.ts';
 import { BriefingScreen } from './screens/briefing.tsx';
+import { CloseScreen } from './screens/close.tsx';
 import { HomeScreen } from './screens/home.tsx';
 import { IntakeScreen } from './screens/intake.tsx';
 import { LoginScreen } from './screens/login.tsx';
 import { ParticipantNewScreen } from './screens/participant-new.tsx';
+import { ParticipantInfoScreen } from './screens/participant-info.tsx';
 import { ParticipantsScreen } from './screens/participants.tsx';
 import { RecordScreen } from './screens/record.tsx';
 import { ScheduleNewScreen } from './screens/schedule-new.tsx';
@@ -37,12 +39,14 @@ export function Routes() {
     if (hash === '#/participants') return <ParticipantsScreen />;
     if (hash === '#/participants/new') return <ParticipantNewScreen />;
 
-    const byCase = hash.match(/^#\/cases\/(\d+)\/(briefing|record|schedule|intake)$/);
+    const byCase = hash.match(/^#\/cases\/(\d+)\/(briefing|record|schedule|intake|info|close)$/);
     if (byCase) {
       const caseId = Number(byCase[1]);
       if (byCase[2] === 'briefing') return <BriefingScreen caseId={caseId} />;
       if (byCase[2] === 'record') return <RecordScreen caseId={caseId} />;
       if (byCase[2] === 'intake') return <IntakeScreen caseId={caseId} />;
+      if (byCase[2] === 'info') return <ParticipantInfoScreen caseId={caseId} />;
+      if (byCase[2] === 'close') return <CloseScreen caseId={caseId} />;
       return <ScheduleNewScreen caseId={caseId} />;
     }
 
@@ -60,6 +64,7 @@ export function Routes() {
         <a href="#/participants/new">당사자 등록</a>
         {caseId && (
           <>
+            <a href={`#/cases/${caseId}/info`}>당사자 정보</a>
             <a href={`#/cases/${caseId}/intake`}>인테이크 작성하기</a>
             <a href={`#/cases/${caseId}/briefing`}>15초 다시보기</a>
             <a href={`#/cases/${caseId}/record`}>상담 기록하기</a>

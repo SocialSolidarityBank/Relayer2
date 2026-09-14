@@ -20,3 +20,8 @@ body { margin: 0; }
 .app-nav-logout:hover { color: var(--ink); }
 
 .home-open { display: inline-flex; gap: var(--space-2); margin-left: var(--space-2); vertical-align: middle; }
+
+.info-tabs { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-4); }
+.info-tabs .wire-step { cursor: pointer; }
+.info-tabs .wire-step[aria-selected="true"] { border-color: var(--ink); background: var(--ink); color: var(--on-badge); }
+.info-original { margin: var(--space-2) 0 0; padding: var(--space-3); border-radius: var(--radius-md); background: var(--panel-alt, var(--panel)); color: var(--ink); white-space: pre-wrap; }

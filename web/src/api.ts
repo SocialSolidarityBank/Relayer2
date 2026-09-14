@@ -76,6 +76,45 @@ export type ScheduleRow = {
   open_questions: number;
 };
 
+export type CaseDetail = {
+  case: {
+    id: number;
+    program_name: string;
+    status: 'open' | 'closed';
+    overall_goal: string | null;
+    sessions_planned: number | null;
+  };
+  pseudonym: string;
+  participant: { name: string | null; phone: string | null; email: string | null };
+  sessions: Array<{
+    id: number;
+    seq: number;
+    kind: string;
+    status: string;
+    held_at: string | null;
+    scheduled_at: string | null;
+    line: string;
+    memo: string | null;
+    today_goal_text: string | null;
+  }>;
+  goal_revisions: Array<{ text: string | null; created_at: string }>;
+  open_cards: Array<{ id: number; kind: string; text: string; source_session_seq?: number | null }>;
+  closure: {
+    closed_at: string;
+    close_reason: string;
+    unfinished_note: string | null;
+    last_session_seq: number | null;
+  } | null;
+};
+
+export const getCaseDetail = (caseId: number) => json<CaseDetail>(`/cases/${caseId}/detail`);
+
+export const closeCase = (caseId: number, body: { close_reason: string; unfinished_note?: string | null }) =>
+  json<{ case_id: number; closed_at: string }>(`/cases/${caseId}/close`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
 export const listParticipants = () => json<ParticipantRow[]>('/participants');
 export const listSchedules = () => json<ScheduleRow[]>('/schedules');
 

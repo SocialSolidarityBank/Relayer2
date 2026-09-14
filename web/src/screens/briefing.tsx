@@ -14,7 +14,8 @@ const AI_OFF_LABEL: Record<string, string> = {
 const source = (item: BriefingItem): string =>
   `${item.source_session_seq}회차${item.last_result === 'unchecked' ? ' · 지난 회차 미확인' : ''}`;
 
-export function BriefingScreen({ caseId }: { caseId: number }) {
+/** `hideHeader` 는 당사자 정보 탭 안에서 쓸 때다. 제목이 두 번 뜨지 않게 한다. */
+export function BriefingScreen({ caseId, hideHeader }: { caseId: number; hideHeader?: boolean }) {
   const [briefing, setBriefing] = useState<Briefing | null>(null);
   useEffect(() => {
     void getBriefing(caseId).then(setBriefing);
@@ -26,7 +27,9 @@ export function BriefingScreen({ caseId }: { caseId: number }) {
 
   return (
     <>
-      <PageHeader title="15초 다시보기" meta={`${card.name ?? card.pseudonym} · ${card.program_name}`} />
+      {!hideHeader && (
+        <PageHeader title="15초 다시보기" meta={`${card.name ?? card.pseudonym} · ${card.program_name}`} />
+      )}
 
       <div className="wire-container">
         {/* 1. 위험 신호 — 비어도 빠지지 않는다. 화면에서 유일한 위험색 테두리다. */}

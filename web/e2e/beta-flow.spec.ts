@@ -146,3 +146,61 @@ test('예정 회차가 없어도 상담 기록하기에서 일시를 적고 기�
   await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
   await expect(page.locator('.participant-card, .wire-container').first()).toContainText('2회차');
 });
+
+// 상담 종결은 회차가 아니다. 회차 번호를 받지 않고, 미완료 과제를 자동 처리하지 않는다(SPEC §4-3).
+test('상담 종결은 회차를 만들지 않고 미완료 과제를 그대로 남긴다', async ({ page }) => {
+  const name = `E2E 종결${Date.now()}`;
+  const task = '주민센터에서 서류 떼어 오기';
+
+  await page.goto('/');
+  await page.locator('#email').fill('worker@relayer.test');
+  await page.locator('#password').fill(process.env.SEED_PASSWORD ?? 'relayer-beta');
+  await page.getByRole('button', { name: '로그인' }).click();
+
+  await page.goto('/#/participants/new');
+  await page.locator('#name').fill(name);
+  await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
+  await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
+
+  // 예정 없이 2회차를 기록하면서 과제를 하나 남긴다
+  await expect(page.getByRole('heading', { name: '상담 일정 등록' })).toBeVisible();
+  await page.getByRole('link', { name: '상담 기록하기' }).click();
+  await page.locator('#held-at').fill('2026-09-20T14:00');
+  await page.locator('#memo').fill('서류를 떼어 오기로 함');
+  await page.getByRole('textbox', { name: '수행할 과제' }).fill(task);
+  await page.getByRole('button', { name: '추가' }).first().click();
+  await page.getByRole('button', { name: '저장' }).click();
+  await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
+
+  // 당사자 정보 › 정보 탭에서 종결로 들어간다
+  await page.getByRole('link', { name: '당사자 정보' }).click();
+  await page.getByRole('tab', { name: '정보' }).click();
+  await page.locator('.wire-container').getByRole('button', { name: '상담 종결' }).click();
+  await page.waitForURL(/\/close$/);
+  await expect(page.getByRole('heading', { name: '종결 사유' })).toBeVisible();
+
+  // 미완료 과제가 출처 회차와 함께 보이고, 종결해도 사라지지 않는다
+  // '미완료 과제' 는 종결 사유 카드의 안내문에도 들어 있다. 제목으로 카드를 집는다.
+  const unfinished = page
+    .locator('section.wire-card')
+    .filter({ has: page.getByRole('heading', { name: '미완료 과제' }) });
+  await expect(unfinished).toContainText(task);
+  await expect(unfinished).toContainText('2회차에서 시작');
+  await page.getByRole('radio', { name: '타 기관 의뢰' }).check();
+  await page.locator('#note').fill('연계 기관에서 이어받기로 함');
+  await page.getByRole('button', { name: '종결 확정' }).click();
+
+  // 회차별 요약: 마지막 상담과 상담 종결이 두 항목. 종결은 회차 번호를 받지 않는다.
+  await expect(page.getByRole('tab', { name: '회차별 요약' })).toBeVisible();
+  const closure = page
+    .locator('section.wire-card')
+    .filter({ has: page.getByRole('heading', { name: '상담 종결' }) });
+  await expect(closure).toContainText('타 기관 의뢰');
+  await expect(closure).toContainText('연계 기관에서 이어받기로 함');
+  await expect(closure).not.toContainText('3회차');
+
+  // 목록에서도 종결로 보인다
+  await page.getByRole('link', { name: '당사자 목록', exact: true }).click();
+  await page.locator('#q').fill(name);
+  await expect(page.locator('.wire-item', { hasText: name })).toContainText('종결');
+});

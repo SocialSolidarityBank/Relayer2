@@ -64,6 +64,9 @@ export function ParticipantsScreen() {
                 desc={sessionLabel(row)}
                 action={
                   <>
+                    <Button onClick={() => (window.location.hash = `#/cases/${row.case_id}/info`)}>
+                      당사자 정보
+                    </Button>
                     <Button onClick={() => (window.location.hash = `#/cases/${row.case_id}/briefing`)}>
                       15초 다시보기
                     </Button>

@@ -135,6 +135,18 @@ export const Badge = ({ tone, children }: { tone?: 'mint' | 'lavender' | 'blue';
   </span>
 );
 
+/** 이름·값 표. 이식 CSS 의 CCC-81 표 부품을 그대로 쓴다. */
+export const DataRows = ({ rows }: { rows: ReadonlyArray<[string, ReactNode]> }) => (
+  <dl className="wire-data-rows">
+    {rows.map(([label, value]) => (
+      <div className="wire-data-row" key={label}>
+        <dt>{label}</dt>
+        <dd>{value}</dd>
+      </div>
+    ))}
+  </dl>
+);
+
 export const Empty = ({ children }: { children: ReactNode }) => <p className="empty">{children}</p>;
 
 export const FormActions = ({ children }: { children: ReactNode }) => (
