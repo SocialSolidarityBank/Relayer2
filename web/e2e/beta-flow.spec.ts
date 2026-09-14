@@ -14,8 +14,8 @@ test('등록부터 15초 다시보기까지 한 바퀴', async ({ page }) => {
   // ── 로그인 ──────────────────────────────────────────────────
   // 로그인하지 않으면 어떤 화면도 열리지 않는다. 계정은 시드가 만든다.
   await page.goto('/');
-  await page.locator('#email').fill('worker@relayer.test');
-  await page.locator('#password').fill(process.env.SEED_PASSWORD ?? 'relayer-beta');
+  await page.locator('#email').fill('test2');
+  await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인' }).click();
 
   // ── 당사자 등록 ─────────────────────────────────────────────
@@ -121,8 +121,8 @@ test('예정 회차가 없어도 상담 기록하기에서 일시를 적고 기�
   const name = `E2E 즉석${Date.now()}`;
 
   await page.goto('/');
-  await page.locator('#email').fill('worker@relayer.test');
-  await page.locator('#password').fill(process.env.SEED_PASSWORD ?? 'relayer-beta');
+  await page.locator('#email').fill('test2');
+  await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인' }).click();
 
   await page.goto('/#/participants/new');
@@ -153,8 +153,8 @@ test('상담 종결은 회차를 만들지 않고 미완료 과제를 그대로 
   const task = '주민센터에서 서류 떼어 오기';
 
   await page.goto('/');
-  await page.locator('#email').fill('worker@relayer.test');
-  await page.locator('#password').fill(process.env.SEED_PASSWORD ?? 'relayer-beta');
+  await page.locator('#email').fill('test2');
+  await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인' }).click();
 
   await page.goto('/#/participants/new');
@@ -210,8 +210,8 @@ test('종결 상담으로 저장하면 종결 화면으로 이어진다', async 
   const name = `E2E 종결상담${Date.now()}`;
 
   await page.goto('/');
-  await page.locator('#email').fill('worker@relayer.test');
-  await page.locator('#password').fill(process.env.SEED_PASSWORD ?? 'relayer-beta');
+  await page.locator('#email').fill('test2');
+  await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인' }).click();
 
   await page.goto('/#/participants/new');
@@ -238,4 +238,15 @@ test('종결 상담으로 저장하면 종결 화면으로 이어진다', async 
   await page.getByRole('radio', { name: '목표 달성' }).check();
   await page.getByRole('button', { name: '종결 확정' }).click();
   await expect(page.getByRole('tab', { name: '정보' })).toBeVisible();
+});
+
+// 당사자는 비밀번호가 맞아도 들어오지 못한다. 열람은 실무자가 보낸 링크와 코드다(GLOSSARY §3).
+test('당사자 계정은 로그인되지 않고 이유를 말한다', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#email').fill('test3');
+  await page.locator('#password').fill('test3');
+  await page.getByRole('button', { name: '로그인' }).click();
+
+  await expect(page.getByText('당사자는 로그인하지 않아요', { exact: false })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '일정', exact: true })).toHaveCount(0);
 });

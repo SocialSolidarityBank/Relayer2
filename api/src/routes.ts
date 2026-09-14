@@ -31,10 +31,16 @@ app.get('/health', (c) => c.json({ ok: true }));
 
 app.post('/auth/login', async (c) => {
   const body = z.object({ email: z.string().min(1), password: z.string().min(1) }).parse(await c.req.json());
-  const actor = await login(body.email, body.password);
-  if (!actor) return c.json({ error: '이메일이나 비밀번호가 맞지 않아요.' }, 401);
-  c.header('set-cookie', issueCookie(actor.id));
-  return c.json(actor);
+  const result = await login(body.email, body.password);
+  if (!result.ok) {
+    const message =
+      result.reason === 'participant'
+        ? '당사자는 로그인하지 않아요. 실무자가 보낸 링크와 코드로 열어요.'
+        : '아이디나 비밀번호가 맞지 않아요.';
+    return c.json({ error: message }, 401);
+  }
+  c.header('set-cookie', issueCookie(result.actor.id));
+  return c.json(result.actor);
 });
 
 app.post('/auth/logout', (c) => {

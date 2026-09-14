@@ -9,12 +9,19 @@ const day = (offset: number): string =>
 
 await sql`truncate participants, support_cases restart identity cascade`;
 
-// 베타 시험 계정. 합성 데이터 전용이며 실제 당사자 자료에는 쓰지 않는다.
-const BETA_PASSWORD = process.env.SEED_PASSWORD ?? 'relayer-beta';
-await sql`delete from users where email in ('worker@relayer.test', 'admin@relayer.test')`;
-await sql`insert into users (email, password_hash, name, role) values
-  ('worker@relayer.test', ${await hashPassword(BETA_PASSWORD)}, '시험 실무자', 'worker'),
-  ('admin@relayer.test', ${await hashPassword(BETA_PASSWORD)}, '시험 관리자', 'admin')`;
+// 베타 시험 계정. 아이디와 비밀번호가 같다. 합성 데이터 전용이며 실데이터에는 쓰지 않는다.
+// test3 은 당사자다 — 만들어 두지만 로그인하지 않는다(GLOSSARY §3, 열람은 P2 의 링크+코드).
+const TEST_USERS = [
+  { id: 'test1', name: '시험 관리자', role: 'admin' },
+  { id: 'test2', name: '시험 실무자', role: 'worker' },
+  { id: 'test3', name: '시험 당사자', role: 'participant' },
+] as const;
+
+await sql`delete from users where email in ${sql(TEST_USERS.map((u) => u.id))}`;
+for (const u of TEST_USERS) {
+  await sql`insert into users (email, password_hash, name, role)
+    values (${u.id}, ${await hashPassword(u.id)}, ${u.name}, ${u.role})`;
+}
 
 const created = await createCase({
   name: '김민희',
@@ -70,7 +77,7 @@ console.log(
       case_id: created.case_id,
       pseudonym: created.pseudonym,
       sessions: [1, second.seq, third.seq],
-      login: { email: 'worker@relayer.test', password: BETA_PASSWORD },
+      login: TEST_USERS.map((u) => `${u.id}/${u.id} (${u.name})`),
     },
     null,
     2,

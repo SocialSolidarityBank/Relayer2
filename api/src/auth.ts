@@ -56,17 +56,27 @@ export function verifyToken(token: string | null): number | null {
 export async function actorFromCookie(cookieHeader: string | undefined): Promise<Actor | null> {
   const userId = verifyToken(readToken(cookieHeader));
   if (!userId) return null;
-  const [user] = await sql<Actor[]>`
+  const [user] = await sql<Array<{ id: number; name: string; role: Actor['role'] | 'participant' }>>`
     select id, name, role from users where id = ${userId} and deactivated_at is null`;
-  return user ?? null;
+  // 당사자는 쿠키가 있어도 들어오지 못한다. 열람은 P2 의 링크+코드다.
+  if (!user || user.role === 'participant') return null;
+  return { id: user.id, name: user.name, role: user.role };
 }
 
-/** 로그인. 이메일이 없거나 비밀번호가 틀리면 같은 결과를 낸다(어느 쪽인지 알려주지 않는다). */
-export async function login(email: string, password: string): Promise<Actor | null> {
-  const [user] = await sql<Array<Actor & { password_hash: string | null }>>`
+export type LoginResult =
+  | { ok: true; actor: Actor }
+  | { ok: false; reason: 'bad_credentials' | 'participant' };
+
+/**
+ * 로그인. 아이디가 없거나 비밀번호가 틀리면 같은 결과를 낸다(어느 쪽인지 알려주지 않는다).
+ * 당사자는 비밀번호가 맞아도 들어오지 못한다 — 당사자 열람은 링크+코드이며 P2 다(GLOSSARY §3).
+ */
+export async function login(email: string, password: string): Promise<LoginResult> {
+  const [user] = await sql<Array<{ id: number; name: string; role: Actor['role'] | 'participant'; password_hash: string | null }>>`
     select id, name, role, password_hash from users
     where email = ${email} and deactivated_at is null`;
-  if (!user?.password_hash) return null;
-  if (!(await verify(user.password_hash, password))) return null;
-  return { id: user.id, name: user.name, role: user.role };
+  if (!user?.password_hash) return { ok: false, reason: 'bad_credentials' };
+  if (!(await verify(user.password_hash, password))) return { ok: false, reason: 'bad_credentials' };
+  if (user.role === 'participant') return { ok: false, reason: 'participant' };
+  return { ok: true, actor: { id: user.id, name: user.name, role: user.role } };
 }

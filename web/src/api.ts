@@ -46,8 +46,12 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
     credentials: 'same-origin',
     headers: init?.body ? { 'content-type': 'application/json' } : undefined,
   });
-  if (res.status === 401) throw new Unauthorized('로그인이 필요해요.');
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `${res.status}`);
+  if (!res.ok) {
+    const message = (await res.json().catch(() => ({}))).error;
+    // 401 의 사연은 서버가 안다(만료인지, 당사자 계정인지). 화면이 문구를 지어내지 않는다.
+    if (res.status === 401) throw new Unauthorized(message ?? '로그인이 필요해요.');
+    throw new Error(message ?? `${res.status}`);
+  }
   return (await res.json()) as T;
 }
 

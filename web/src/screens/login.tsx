@@ -27,10 +27,10 @@ export function LoginScreen({ onDone }: { onDone: () => void }) {
       <PageHeader title="릴레이어" meta="실무자와 관리자가 들어오는 자리예요" />
       <div className="wire-container">
         <Card title="로그인">
-          <Field label="이메일" htmlFor="email" required>
+          <Field label="아이디" htmlFor="email" required>
             <input
               id="email"
-              type="email"
+              type="text"
               autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}

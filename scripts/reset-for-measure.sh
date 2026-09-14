@@ -12,6 +12,9 @@ echo
 echo "접속 주소"
 echo "  이 맥:       http://localhost:5173/"
 echo "  같은 Wi-Fi:  http://$(ipconfig getifaddr en0 2>/dev/null || echo '(en0 없음)'):5173/"
-echo "계정: worker@relayer.test / ${SEED_PASSWORD:-relayer-beta}"
+echo "계정 (아이디 = 비밀번호)"
+echo "  test1  관리자"
+echo "  test2  실무자   ← 대본은 이 계정으로"
+echo "  test3  당사자   ← 로그인되지 않는 것이 정상"
 echo
 echo "계수기: 참가자 브라우저 콘솔에 docs/measure.js 를 붙여 넣고, 끝나면 relayer측정.끝()"
