@@ -4,13 +4,7 @@
 import { useEffect, useState } from 'react';
 import { getCase, planSession, type CaseView, type NewSessionInput } from '../api.ts';
 import { Button, Card, Choice, ChoiceGroup, ErrorText, Field, FormActions, PageHeader } from '../ui.tsx';
-
-const METHODS: ReadonlyArray<{ key: NewSessionInput['method']; label: string }> = [
-  { key: 'in_person', label: '대면' },
-  { key: 'visit', label: '방문' },
-  { key: 'phone', label: '전화' },
-  { key: 'video', label: '화상' },
-];
+import { METHODS } from '../vocab.ts';
 
 export function ScheduleNewScreen({ caseId }: { caseId: number }) {
   const [view, setView] = useState<CaseView | null>(null);

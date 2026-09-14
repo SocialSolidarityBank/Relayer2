@@ -19,7 +19,8 @@ test('등록부터 15초 다시보기까지 한 바퀴', async ({ page }) => {
   await page.getByRole('button', { name: '로그인' }).click();
 
   // ── 당사자 등록 ─────────────────────────────────────────────
-  await expect(page.getByRole('heading', { name: '당사자 등록' })).toBeVisible();
+  // 로그인하면 홈은 다가오는 상담이다
+  await expect(page.getByRole('heading', { name: '다가오는 상담' })).toBeVisible();
   await page.goto('/#/participants/new');
   await page.locator('#name').fill(NAME);
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
@@ -103,4 +104,14 @@ test('등록부터 15초 다시보기까지 한 바퀴', async ({ page }) => {
   await page.getByRole('button', { name: '상담 기록하기' }).click();
   await expect(page.getByText('사실', { exact: true })).toHaveCount(0);
   await expect(page.getByText('약속한 일', { exact: true })).toHaveCount(0);
+
+  // ── 돌아오는 길 ─────────────────────────────────────────────
+  // URL 을 외우지 않고 목록에서 이 사례로 되돌아올 수 있어야 한다.
+  await page.getByRole('link', { name: '당사자', exact: true }).click();
+  await page.locator('#q').fill(NAME);
+  const row = page.locator('.wire-item', { hasText: NAME });
+  await expect(row).toContainText('2회차까지 기록');
+  await row.getByRole('button', { name: '15초 다시보기' }).click();
+  await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
+  await expect(page.locator('section.wire-card', { hasText: '확인할 과제' })).toContainText(TASK);
 });

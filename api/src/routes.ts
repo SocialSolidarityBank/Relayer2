@@ -117,6 +117,15 @@ app.patch('/sessions/:id', async (c) => {
   return c.json(await service.recordSession(Number(c.req.param('id')), { ...body, actorId: c.get('actor').id }));
 });
 
+app.get('/participants', async (c) => c.json(await service.listParticipants()));
+
+app.get('/schedules', async (c) => {
+  const now = new Date();
+  const from = c.req.query('from') ?? new Date(now.getTime() - 86_400_000).toISOString();
+  const to = c.req.query('to') ?? new Date(now.getTime() + 30 * 86_400_000).toISOString();
+  return c.json(await service.listSchedules(from, to));
+});
+
 app.get('/cases/:id/briefing', async (c) => {
   const found = await service.getBriefing(Number(c.req.param('id')));
   return found ? c.json(found) : c.json({ error: 'not found' }, 404);

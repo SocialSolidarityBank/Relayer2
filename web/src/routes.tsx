@@ -3,13 +3,15 @@
 import { useEffect, useState } from 'react';
 import { getMe, logout, Unauthorized, type Me } from './api.ts';
 import { BriefingScreen } from './screens/briefing.tsx';
+import { HomeScreen } from './screens/home.tsx';
 import { IntakeScreen } from './screens/intake.tsx';
 import { LoginScreen } from './screens/login.tsx';
 import { ParticipantNewScreen } from './screens/participant-new.tsx';
+import { ParticipantsScreen } from './screens/participants.tsx';
 import { RecordScreen } from './screens/record.tsx';
 import { ScheduleNewScreen } from './screens/schedule-new.tsx';
 
-const HOME = '#/participants/new';
+const HOME = '#/schedules';
 
 export function Routes() {
   const [hash, setHash] = useState(window.location.hash || HOME);
@@ -31,7 +33,9 @@ export function Routes() {
   if (!me) return <LoginScreen onDone={() => void getMe().then(setMe)} />;
 
   const screen = (() => {
-    if (hash === HOME) return <ParticipantNewScreen />;
+    if (hash === HOME) return <HomeScreen />;
+    if (hash === '#/participants') return <ParticipantsScreen />;
+    if (hash === '#/participants/new') return <ParticipantNewScreen />;
 
     const byCase = hash.match(/^#\/cases\/(\d+)\/(briefing|record|schedule|intake)$/);
     if (byCase) {
@@ -51,7 +55,9 @@ export function Routes() {
   return (
     <>
       <nav className="app-nav">
-        <a href={HOME}>당사자 등록</a>
+        <a href={HOME}>다가오는 상담</a>
+        <a href="#/participants">당사자</a>
+        <a href="#/participants/new">당사자 등록</a>
         {caseId && (
           <>
             <a href={`#/cases/${caseId}/intake`}>인테이크 작성하기</a>

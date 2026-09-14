@@ -50,6 +50,35 @@ export const login = (email: string, password: string) =>
   json<Me>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
 export const logout = () => json<{ ok: true }>('/auth/logout', { method: 'POST' });
 
+export type ParticipantRow = {
+  case_id: number;
+  participant_id: number;
+  pseudonym: string;
+  name: string | null;
+  program_name: string;
+  status: 'open' | 'closed';
+  last_session_seq: number | null;
+  next_scheduled_at: string | null;
+};
+
+export type ScheduleRow = {
+  session_id: number;
+  case_id: number;
+  seq: number;
+  scheduled_at: string;
+  method: string | null;
+  place: string | null;
+  plan_memo: string | null;
+  pseudonym: string;
+  name: string | null;
+  program_name: string;
+  open_tasks: number;
+  open_questions: number;
+};
+
+export const listParticipants = () => json<ParticipantRow[]>('/participants');
+export const listSchedules = () => json<ScheduleRow[]>('/schedules');
+
 export const getBriefing = (caseId: number) => json<Briefing>(`/cases/${caseId}/briefing`);
 export const getCase = (caseId: number) => json<CaseView>(`/cases/${caseId}`);
 

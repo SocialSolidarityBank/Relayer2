@@ -129,6 +129,12 @@ export function Item({ title, desc, action }: { title: ReactNode; desc?: ReactNo
   );
 }
 
+export const Badge = ({ tone, children }: { tone?: 'mint' | 'lavender' | 'blue'; children: ReactNode }) => (
+  <span className="wire-badge" data-tone={tone}>
+    <span className="wire-badge-label">{children}</span>
+  </span>
+);
+
 export const Empty = ({ children }: { children: ReactNode }) => <p className="empty">{children}</p>;
 
 export const FormActions = ({ children }: { children: ReactNode }) => (

@@ -202,6 +202,78 @@ export async function getCase(caseId: number) {
   };
 }
 
+export type ParticipantRow = {
+  case_id: number;
+  participant_id: number;
+  pseudonym: string;
+  name: string | null;
+  program_name: string;
+  status: 'open' | 'closed';
+  last_session_seq: number | null;
+  next_scheduled_at: string | null;
+};
+
+/**
+ * 당사자 목록. 이름은 금고 암호문이라 **서버에서 이름으로 검색할 수 없다** —
+ * 복호화해서 내려보내고 거르는 일은 화면이 한다. 기관 하나 규모라 이 대가를 받아들인다.
+ */
+export async function listParticipants(): Promise<ParticipantRow[]> {
+  const rows = await sql<Array<Omit<ParticipantRow, 'name'> & { enc_name: string | null }>>`
+    select c.id as case_id,
+           p.id as participant_id,
+           p.pseudonym,
+           v.enc_name,
+           c.program_name,
+           c.status,
+           (select max(seq) from sessions s where s.case_id = c.id and s.status = 'done') as last_session_seq,
+           (select min(scheduled_at) from sessions s where s.case_id = c.id and s.status = 'planned') as next_scheduled_at
+    from support_cases c
+    join participants p on p.id = c.participant_id
+    left join participant_pii v on v.participant_id = p.id
+    order by c.opened_at desc`;
+  return rows.map(({ enc_name, ...row }) => ({ ...row, name: decryptPii(enc_name) }));
+}
+
+export type ScheduleRow = {
+  session_id: number;
+  case_id: number;
+  seq: number;
+  scheduled_at: string;
+  method: string | null;
+  place: string | null;
+  plan_memo: string | null;
+  pseudonym: string;
+  name: string | null;
+  program_name: string;
+  open_tasks: number;
+  open_questions: number;
+};
+
+/** 다가오는 상담. 홈 화면의 재료다. 열린 과제·질문 수를 함께 센다(일정 화면의 `할 일` 띠). */
+export async function listSchedules(from: string, to: string): Promise<ScheduleRow[]> {
+  const rows = await sql<Array<Omit<ScheduleRow, 'name'> & { enc_name: string | null }>>`
+    select s.id as session_id, s.case_id, s.seq, s.scheduled_at, s.method, s.place, s.plan_memo,
+           p.pseudonym, v.enc_name, c.program_name
+    from sessions s
+    join support_cases c on c.id = s.case_id
+    join participants p on p.id = c.participant_id
+    left join participant_pii v on v.participant_id = p.id
+    where s.status = 'planned' and s.scheduled_at between ${from} and ${to}
+    order by s.scheduled_at`;
+  const out: ScheduleRow[] = [];
+  for (const { enc_name, ...row } of rows) {
+    const loaded = await loadCase(row.case_id);
+    const open = loaded ? openCards(loaded.cards, loaded.outcomes, loaded.sessions) : [];
+    out.push({
+      ...row,
+      name: decryptPii(enc_name),
+      open_tasks: open.filter((c) => c.kind === 'promise').length,
+      open_questions: open.filter((c) => c.kind === 'question').length,
+    });
+  }
+  return out;
+}
+
 export async function getBriefing(caseId: number): Promise<Briefing | null> {
   const loaded = await loadCase(caseId);
   if (!loaded) return null;
