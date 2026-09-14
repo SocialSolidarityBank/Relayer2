@@ -1,6 +1,7 @@
 // CCC wire 계약을 쓰는 최소 부품. 클래스 이름과 구조는 정본 그대로이며 새 이름을 만들지 않는다.
 // 근거: web/src/styles/wire.css(=CCC wire-styles.ts), web/src/styles/shell.css(=CCC layout.tsx).
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { LIFE_AREAS } from './areas.ts';
 
 export function PageHeader({ title, meta }: { title: string; meta?: ReactNode }) {
   return (
@@ -122,6 +123,76 @@ export function Choice({
         {hint && <span className="wire-choice-hint">{hint}</span>}
       </span>
     </label>
+  );
+}
+
+export type Line = { text: string; area?: string };
+
+/** 한 줄씩 적어 쌓는 입력. 인테이크와 상담 기록하기가 같은 부품을 쓴다. */
+export function LineList({
+  id,
+  label,
+  placeholder,
+  withArea,
+  lines,
+  onChange,
+}: {
+  /** id 는 공백 없는 슬러그다. 라벨을 그대로 쓰면 유효하지 않은 id 가 된다. */
+  id: string;
+  label: string;
+  placeholder: string;
+  withArea?: boolean;
+  lines: Line[];
+  onChange: (next: Line[]) => void;
+}) {
+  const [draft, setDraft] = useState('');
+  const [area, setArea] = useState<string>(LIFE_AREAS[0].key);
+  const add = () => {
+    if (!draft.trim()) return;
+    onChange([...lines, withArea ? { text: draft.trim(), area } : { text: draft.trim() }]);
+    setDraft('');
+  };
+  return (
+    <>
+      {withArea && (
+        <Field label="영역" htmlFor={`${id}-area`} control="select">
+          <select id={`${id}-area`} value={area} onChange={(e) => setArea(e.target.value)}>
+            {LIFE_AREAS.map((a) => (
+              <option key={a.key} value={a.key}>
+                {a.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
+      <div className="wire-field-with-action">
+        <Field label={label} htmlFor={`${id}-input`}>
+          <input
+            id={`${id}-input`}
+            type="text"
+            aria-label={label}
+            placeholder={placeholder}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                add();
+              }
+            }}
+          />
+        </Field>
+        <Button onClick={add}>추가</Button>
+      </div>
+      {lines.map((line, i) => (
+        <div className="wire-repeat-card" key={`${line.text}-${i}`}>
+          <Item
+            title={`${withArea ? `${LIFE_AREAS.find((a) => a.key === line.area)?.label} · ` : ''}${line.text}`}
+            action={<Button onClick={() => onChange(lines.filter((_, j) => j !== i))}>지우기</Button>}
+          />
+        </div>
+      ))}
+    </>
   );
 }
 

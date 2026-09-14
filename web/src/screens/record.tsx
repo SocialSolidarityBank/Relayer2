@@ -12,8 +12,20 @@ import {
   type NewSessionInput,
   type OutcomeInput,
 } from '../api.ts';
-import { LIFE_AREAS } from '../areas.ts';
-import { Button, Card, Choice, ChoiceGroup, Empty, ErrorText, Field, FormActions, Item, PageHeader } from '../ui.tsx';
+import {
+  Button,
+  Card,
+  Choice,
+  ChoiceGroup,
+  Empty,
+  ErrorText,
+  Field,
+  FormActions,
+  Item,
+  LineList,
+  PageHeader,
+  type Line,
+} from '../ui.tsx';
 import { METHODS } from '../vocab.ts';
 
 /** `datetime-local` 이 바로 먹는 지역시각 문자열. 지금 시각을 분 단위로 자른다. */
@@ -21,75 +33,6 @@ function localNow(): string {
   const d = new Date();
   d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
   return d.toISOString().slice(0, 16);
-}
-
-type Line = { text: string; area?: string };
-
-function LineList({
-  id,
-  label,
-  placeholder,
-  withArea,
-  lines,
-  onChange,
-}: {
-  /** id 는 공백 없는 슬러그다. 라벨을 그대로 쓰면 유효하지 않은 id 가 된다. */
-  id: string;
-  label: string;
-  placeholder: string;
-  withArea?: boolean;
-  lines: Line[];
-  onChange: (next: Line[]) => void;
-}) {
-  const [draft, setDraft] = useState('');
-  const [area, setArea] = useState<string>(LIFE_AREAS[0].key);
-  const add = () => {
-    if (!draft.trim()) return;
-    onChange([...lines, withArea ? { text: draft.trim(), area } : { text: draft.trim() }]);
-    setDraft('');
-  };
-  return (
-    <>
-      {withArea && (
-        <Field label="영역" htmlFor={`${id}-area`} control="select">
-          <select id={`${id}-area`} value={area} onChange={(e) => setArea(e.target.value)}>
-            {LIFE_AREAS.map((a) => (
-              <option key={a.key} value={a.key}>
-                {a.label}
-              </option>
-            ))}
-          </select>
-        </Field>
-      )}
-      <div className="wire-field-with-action">
-        <Field label={label} htmlFor={`${id}-input`}>
-          <input
-            id={`${id}-input`}
-            type="text"
-            aria-label={label}
-            placeholder={placeholder}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                add();
-              }
-            }}
-          />
-        </Field>
-        <Button onClick={add}>추가</Button>
-      </div>
-      {lines.map((line, i) => (
-        <div className="wire-repeat-card" key={`${line.text}-${i}`}>
-          <Item
-            title={`${withArea ? `${LIFE_AREAS.find((a) => a.key === line.area)?.label} · ` : ''}${line.text}`}
-            action={<Button onClick={() => onChange(lines.filter((_, j) => j !== i))}>지우기</Button>}
-          />
-        </div>
-      ))}
-    </>
-  );
 }
 
 export function RecordScreen({ caseId }: { caseId: number }) {

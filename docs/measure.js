@@ -29,6 +29,8 @@
     (e) => {
       const el = e.target;
       if (!(el instanceof HTMLElement)) return;
+      // 라디오·체크는 '선택'으로 따로 센다. 여기서 또 세면 두 번 센다.
+      if (el.type === 'radio' || el.type === 'checkbox') return;
       if (el.value?.trim()) filled.add(label(el));
     },
     true,

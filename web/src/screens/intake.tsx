@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { getCase, saveIntake, type CaseView } from '../api.ts';
 import {
+  intakeSectionLabel,
   NOT_APPLICABLE_OPTION,
   NO_RESPONSE_OPTION,
   STEP1_GROUPS,
@@ -14,7 +15,18 @@ import {
   type IntakeQuestionGroup,
 } from '../intake-questions.ts';
 import { ECONOMY_NUMBER_FIELDS, NEED_AREAS } from '../need-areas.ts';
-import { Button, Card, Choice, ChoiceGroup, ErrorText, Field as FormField, FormActions, Item, PageHeader } from '../ui.tsx';
+import {
+  Button,
+  Card,
+  Choice,
+  ChoiceGroup,
+  ErrorText,
+  Field as FormField,
+  FormActions,
+  LineList,
+  PageHeader,
+  type Line,
+} from '../ui.tsx';
 
 const AREA_QUESTION_KEY = 'difficulty_areas';
 const EXCLUSIVE_OPTIONS = [NO_RESPONSE_OPTION, NOT_APPLICABLE_OPTION];
@@ -85,8 +97,9 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
   const [view, setView] = useState<CaseView | null>(null);
   const [answers, setAnswers] = useState<Answers>({});
   const [overallGoal, setOverallGoal] = useState('');
-  const [questions, setQuestions] = useState<string[]>([]);
-  const [draft, setDraft] = useState('');
+  const [questions, setQuestions] = useState<Line[]>([]);
+  // 첫 상담에서도 약속은 나온다("다음까지 서류 떼어 오기"). 2026-09-15 예행연습에서 드러난 빈자리.
+  const [tasks, setTasks] = useState<Line[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -115,7 +128,7 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
     setAnswers((prev) => ({ ...prev, [key]: value }));
 
   const renderGroup = (group: IntakeQuestionGroup) => (
-    <Card title={group.title} key={group.title}>
+    <Card title={intakeSectionLabel(group.title)} key={group.title}>
       {group.questions.map((q) => (
         <Question key={q.key} question={q} value={answers[q.key]} onChange={(v) => setAnswer(q.key, v)} />
       ))}
@@ -131,7 +144,10 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
         overall_goal: overallGoal.trim() || null,
         detail: answers,
         // I-08: 다음에 물어볼 것은 상담 기록하기와 같은 입력이며 확인할 것 카드가 된다.
-        cards: questions.map((text) => ({ kind: 'question', text, section: 'intake' })),
+        cards: [
+          ...questions.map((q) => ({ kind: 'question', text: q.text, section: 'intake' })),
+          ...tasks.map((t) => ({ kind: 'promise', text: t.text, section: 'promise' })),
+        ],
       });
       window.location.hash = `#/cases/${caseId}/schedule`;
     } catch (e) {
@@ -151,7 +167,7 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
       <div className="wire-container">
         {STEP1_GROUPS.map(renderGroup)}
 
-        <Card title={areaGroup.title} hint="고른 영역만 아래에 세부 질문이 열려요.">
+        <Card title={intakeSectionLabel(areaGroup.title)} hint="고른 영역만 아래에 세부 질문이 열려요.">
           {areaGroup.questions.map((q) => (
             <Question key={q.key} question={q} value={answers[q.key]} onChange={(v) => setAnswer(q.key, v)} />
           ))}
@@ -216,44 +232,24 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
           </FormField>
         </Card>
 
+        <Card title="수행할 과제" hint="저장하면 다음 상담의 확인할 과제로 올라가요.">
+          <LineList
+            id="intake-task"
+            label="수행할 과제"
+            placeholder="예: 채무 내역서 떼어 오기"
+            lines={tasks}
+            onChange={setTasks}
+          />
+        </Card>
+
         <Card title="다음에 물어볼 것" hint="저장하면 1회차 15초 다시보기의 오늘 물어볼 것으로 올라가요.">
-          <div className="wire-field-with-action">
-            <FormField label="다음에 물어볼 것" htmlFor="intake-question">
-              <input
-                id="intake-question"
-                type="text"
-                aria-label="다음에 물어볼 것"
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && draft.trim()) {
-                    e.preventDefault();
-                    setQuestions([...questions, draft.trim()]);
-                    setDraft('');
-                  }
-                }}
-              />
-            </FormField>
-            <Button
-              onClick={() => {
-                if (!draft.trim()) return;
-                setQuestions([...questions, draft.trim()]);
-                setDraft('');
-              }}
-            >
-              추가
-            </Button>
-          </div>
-          {questions.map((q, i) => (
-            <div className="wire-repeat-card" key={`${q}-${i}`}>
-              <Item
-                title={q}
-                action={
-                  <Button onClick={() => setQuestions(questions.filter((_, j) => j !== i))}>지우기</Button>
-                }
-              />
-            </div>
-          ))}
+          <LineList
+            id="intake-question"
+            label="다음에 물어볼 것"
+            placeholder="예: 통원 주기가 어떻게 되는지"
+            lines={questions}
+            onChange={setQuestions}
+          />
         </Card>
 
         <FormActions>

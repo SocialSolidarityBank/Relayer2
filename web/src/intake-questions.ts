@@ -430,6 +430,16 @@ export function channelForMethod(method: string): 'in_person' | 'phone' | 'video
  * 읽힌다) 공백을 - 로 접는다. 한글 id 는 유효하다. 작성 위저드와 조회 화면이 같은 헬퍼를
  * 쓰므로 같은 제목은 두 화면에서 같은 자리로 간다.
  */
+/**
+ * 화면에 쓰는 소절 이름. 정본 문서의 절 번호(`1-2.`)는 떼고 보여 준다.
+ * 구 모듈 2-1~2-5 가 표준 영역 모듈로 대체되고 3-3·4-2 가 빠지면서 번호가 띄엄띄엄해졌는데,
+ * 실무자 눈에는 화면이 고장 난 것처럼 읽힌다. 번호는 정본 대조용으로 데이터에만 남긴다.
+ * (2026-09-15 예행연습에서 발견)
+ */
+export function intakeSectionLabel(title: string): string {
+  return title.replace(/^\d+-\d+\.\s*/, '');
+}
+
 export function intakeSectionAnchor(title: string): string {
   return `intake-sec-${title.replace(/\./g, '').replace(/\s+/g, '-')}`;
 }
