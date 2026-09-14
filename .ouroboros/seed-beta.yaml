@@ -1,0 +1,200 @@
+goal: >-
+  릴레이어 베타를 만든다. 실무자 한 명이 합성 당사자 한 명을 등록하고 인테이크 작성하기와
+  상담 일정 등록을 거쳐 2회차 상담 기록하기까지 마치면, 15초 다시보기가 확인할 과제와
+  오늘 물어볼 것과 오늘 상담 목표와 수기 위험 신호를 각각 출처 회차 번호와 함께 보여 준다.
+  AI와 STT 없이 성립하며, 기록을 남기는 일이 현행 CCC 베타보다 번거로워지지 않는다.
+
+task_type: code
+
+project_type: greenfield
+
+metadata:
+  version: "1.0.0"
+  ambiguity_score: 0.2
+
+constraints:
+  - "런타임과 형태: Node 22, TypeScript 5.9, pnpm 워크스페이스 api·web, Vite React SPA 하나, Hono 라우터 하나, zod 검증 한 곳"
+  - "데이터와 배포 경계: PostgreSQL 하나, 배포 모드 하나, 기관 하나. DB 이식성 계층·어댑터 추상화·RLS·capability 게이팅·설치 매니페스트를 만들지 않는다"
+  - "DB 무결성 가드 트리거는 만들지 않고, append-only 테이블의 UPDATE·DELETE만 트리거로 차단한다"
+  - "베타 기능 경계: AI 호출·STT·녹음 업로드와 그에 딸린 테이블·큐·워커·프롬프트를 만들지 않는다. cards.source_type 에 ai_approved 값 자리만 남긴다"
+  - "베타 데이터 경계: 합성 자료만 쓴다. 실제 당사자 자료를 넣지 않으며 CCC records/test 의 실인물 녹음을 가져오지 않는다"
+  - "이름은 GLOSSARY.md 가 정본이다. 2026-09-13 확정 표시명(15초 다시보기·상담 기록하기·인테이크 작성하기·상담 종결·AI가 정리한 내용 검토하기·내 정보·설정·열람 기록·상담 기록 처리 현황·AI 연결 설정)을 쓰고, URL·DB 컬럼·module 값·역할 코드 같은 식별자는 표시명이 바뀌어도 바꾸지 않는다"
+  - "도메인 표시 규칙: 기록지의 구획이 곧 카드 분류다. 사람이 적는 항목이 비면 화면에서 빼고 AI가 관여하는 항목은 빼지 않고 상태를 쓴다. 언급 없음을 변화 없음이나 진행 중으로 추정하지 않고 마지막 확인 회차를 적는다"
+  - "개인정보 경계: 당사자 실명·연락처·생년월일·주소는 participant_pii 금고에 AES-256-GCM 암호문으로만 저장하고 자유 글 컬럼과 로그에 옮겨 적지 않는다"
+  - "이식 경계: CCC 레포는 읽기 전용이며 가져온 파일 첫머리에 원본 경로를 주석으로 남기고 NOTICE 에 Apache-2.0 승계를 적는다"
+  - "검증 범위: 조립 로직 단위 테스트와 E2E 하나로 한정하고 DOM 클래스·스냅샷 결합 테스트를 만들지 않는다"
+  - "배포처(D2)와 실데이터 전환(P1의 동의·감사·자유 글 암호화·백업)은 사용자가 확정하기 전까지 구현을 시작하지 않는다"
+  - "구현 계약은 SPEC.md 를 따른다. 카드 생성표·결과 5종·15초 다시보기 6구획 상태·목표 이어받기와 수정·회차 한 줄 조립·국가 표준 욕구영역 10종+기타가 그 문서에 고정돼 있다"
+  - "역할은 participant 당사자 · worker 실무자 · admin 관리자 셋뿐이다. 기관 관리자와 기술 관리자로 쪼개지 않는다"
+  - "모든 목표는 고칠 수 있고 전체 상담 목표는 비어 있어도 된다. 고치면 이전 문구를 goal_revisions 에 남기고 이미 저장한 회차의 당시 목표는 소급 변경하지 않는다"
+  - "상담 종결 기록은 상담 회차가 아니다. sessions.kind 에 종결 값을 넣지 않고 case_closures 로 분리하며 회차 번호·회차 수·다음 상담 목표 소비에서 제외한다"
+  - "2026-09-13 후속 요구로 삭제된 입력(위기도·상담 유형·추가 기록·과제 기한·과제 수행 주체·이번 상담 목표 구획·일치하지 않는 기록 구획)을 만들지 않는다. 삭제는 입력과 표시에서만이며 기존 저장값을 추정해 채우지 않는다"
+
+acceptance_criteria:
+  - description: >-
+      합성 사례를 등록하고 인테이크 작성하기·상담 일정 등록·2회차 상담 기록하기를 마치면
+      15초 다시보기가 확인할 과제·오늘 물어볼 것·수기 위험 신호를 각각 출처 회차 번호와 함께 보여 주고,
+      기록 화면에는 문장별 카드 분류를 고르는 입력이 없다
+    verify_command: "pnpm --dir web exec playwright test e2e/beta-flow.spec.ts --reporter=line"
+    expected_artifacts: ["web/e2e/beta-flow.spec.ts", "web/src/routes.tsx"]
+    output_assertion: "NONE"
+  - description: >-
+      회차에서 열린 카드의 결과를 누르지 않으면 그 회차의 결과가 unchecked 로 남고
+      카드는 닫히지 않은 채 다음 15초 다시보기에 다시 올라온다
+    verify_command: "pnpm --dir api exec vitest run test/outcomes.test.ts --reporter=basic"
+    expected_artifacts: ["api/src/domain/cards.ts", "api/test/outcomes.test.ts"]
+    output_assertion: "NONE"
+  - description: >-
+      15초 다시보기에서 목표·오늘 물어볼 것·확인할 과제는 비면 빠지고,
+      위험 신호와 직전 회차 요약은 비어도 확인함·확인 못 함·확인 중 상태와 함께 남으며,
+      이번 상담 목표와 일치하지 않는 기록 구획은 어디에도 나타나지 않는다
+    verify_command: "pnpm --dir api exec vitest run test/briefing.test.ts --reporter=basic"
+    expected_artifacts: ["api/src/domain/briefing.ts", "api/test/briefing.test.ts"]
+    output_assertion: "NONE"
+  - description: >-
+      등록한 실명·연락처·생년월일·주소가 금고 테이블에 암호문으로만 존재하고
+      API 응답과 로그와 자유 글 컬럼에서 평문으로 나오지 않는다
+    verify_command: "pnpm --dir api exec vitest run test/pii.test.ts --reporter=basic"
+    expected_artifacts: ["api/src/domain/pii.ts", "api/test/pii.test.ts"]
+    output_assertion: "NONE"
+  - description: >-
+      AI·STT 자격증명과 외부 네트워크가 전혀 없는 상태에서도 등록부터 15초 다시보기까지 흐름이 통과하고
+      AI나 녹음을 켜라고 요구하는 UI가 나타나지 않는다
+    verify_command: "pnpm --dir api exec vitest run test/scope.test.ts --reporter=basic"
+    expected_artifacts: ["api/test/scope.test.ts"]
+    output_assertion: "NONE"
+  - description: >-
+      상담 기록하기에 쓴 다음 상담 목표가 같은 사례의 다음 실제 상담의 15초 다시보기에서 오늘 상담 목표로 표시되고,
+      조회나 예약 취소로 소비되지 않으며, 전체 상담 목표를 비워도 저장되고 나중에 고치면 이전 문구가 이력으로 남는다
+    verify_command: "pnpm --dir api exec vitest run test/goal-carryover.test.ts --reporter=basic"
+    expected_artifacts: ["api/src/domain/goals.ts", "api/test/goal-carryover.test.ts"]
+    output_assertion: "NONE"
+  - description: >-
+      CCC에서 이식한 파일의 첫머리에 원본 출처 경로가 있고 NOTICE 에 Apache-2.0 승계가 적혀 있다
+    verify_command: "head -n 5 web/src/styles/tokens.css | grep -q 'CCC-new/design/tokens.css' && head -n 5 web/src/styles/wire.css | grep -q 'wire-styles.ts' && grep -q 'Apache-2.0' NOTICE"
+    expected_artifacts: ["web/src/styles/tokens.css", "web/src/styles/wire.css", "NOTICE"]
+    output_assertion: "NONE"
+  - description: >-
+      실무자 한 명이 도움 없이 합성 사례 2회차를 기록했을 때 필수 입력 수와 소요 시간이
+      경쟁 제품인 현행 CCC 베타보다 늘지 않고 다음 상담에도 쓰겠다고 답한 기록이 남는다
+    verify_command: "NONE"
+    verify_exemption_reason: "사람이 직접 쓰는 관문이라 자동 판정할 수 없다. 측정값과 응답을 docs/beta-gate2.md 에 기록한다"
+    expected_artifacts: ["docs/beta-gate2.md"]
+    output_assertion: "NONE"
+
+ontology_schema:
+  name: "RelayerCaseRecord"
+  description: >-
+    상담 한 건의 기록이 카드로 쌓이고, 카드가 회차마다 결과를 받아
+    15초 다시보기로 조립되는 도메인 모델. 파생 사실 카드는 저장하지 않고 읽기 시점에 조립한다.
+  fields:
+    - name: "participant"
+      type: "object"
+      description: "당사자. 본체에는 가명 ID(동물 슬러그)만 둔다"
+    - name: "participant_pii"
+      type: "object"
+      description: "당사자 실명·연락처·생년월일·주소를 AES-256-GCM 암호문과 key_version 으로만 보관하는 금고"
+    - name: "support_case"
+      type: "object"
+      description: "참여 사업. 당사자 1명 × 사업 1개. 장기목표와 그 출처(합의 목표 / 신청 시 욕구)를 갖는다"
+    - name: "session"
+      type: "object"
+      description: "회차. status 가 planned 이면 상담 일정 등록, done 이면 기록된 회차다. seq·수기 메모·구획 상세·이어받은 오늘 상담 목표·다음 상담 목표를 갖는다"
+    - name: "card"
+      type: "object"
+      description: "사실·확인할 것·약속한 일·판단 4종. 출처 회차·출처 구획·출처 종류와 영역·주제키를 갖고 closed_at 을 두지 않는다"
+    - name: "card_outcome"
+      type: "object"
+      description: "회차별 카드 결과. done·in_progress·not_done·confirmed·unchecked 와 continue·stop 및 사유를 append-only 로 기록하며, unchecked 면 카드를 닫지 않고 다음 회차에 다시 올린다"
+    - name: "goal"
+      type: "object"
+      description: "목표 세 층. 전체 상담 목표(사례, 비어 있어도 됨·수정 시 이력 보존) · 오늘 상담 목표(직전 회차에서 이어받아 15초 다시보기에 표시) · 다음 상담 목표(이 회차에서 씀)"
+    - name: "case_closure"
+      type: "object"
+      description: "상담 종결 기록. 마지막 상담에 붙는 확인 절차이자 기록이며 상담 회차가 아니다. 사례당 하나"
+    - name: "session_line"
+      type: "string"
+      description: "AI 없는 회차의 한 줄. 위기도·할 일 수·달라진 영역을 고정 순서로 조립하며 새 문장을 만들지 않는다"
+    - name: "briefing"
+      type: "object"
+      description: "15초 다시보기 6구획. 저장물이 아니라 카드·회차·상담 일정 등록에서 조립되는 읽기 결과"
+    - name: "check_status"
+      type: "object"
+      description: "AI 관여 항목의 상태. state(checked/not_checked/checking)·reason·through_session_seq"
+
+evaluation_principles:
+  - name: "지어내지 않는다"
+    description: "원문에 없는 해석·판단·숫자를 만들지 않고 모든 표시값이 출처 회차를 갖는다"
+    weight: 1.0
+  - name: "AI 없이 성립"
+    description: "AI를 끈 상태에서 15초 다시보기가 의미를 갖고 업무가 멈추지 않는다"
+    weight: 1.0
+  - name: "기록 부담 감소"
+    description: "필수 입력이 수기 메모 하나이고, 같은 회차를 남기는 데 드는 입력 수와 시간이 현행보다 늘지 않는다"
+    weight: 1.0
+  - name: "누락 방지"
+    description: "없음과 안 봤음을 구분해 표시한다"
+    weight: 0.9
+  - name: "최소 구현"
+    description: "추상화·포트·큐·게이트를 실제 필요가 증명되기 전에 만들지 않는다"
+    weight: 0.9
+  - name: "개인정보 최소"
+    description: "PII는 금고에만 두고 로그·에러·자유 글에 섞이지 않는다"
+    weight: 1.0
+
+exit_conditions:
+  - name: "관문 1 통과"
+    description: "핵심 흐름 E2E가 통과한다"
+    criteria: "pnpm --dir web exec playwright test e2e/beta-flow.spec.ts --reporter=line 명령의 종료 코드가 0이다"
+  - name: "범위 유지"
+    description: "AI·STT 없이도 흐름이 돌고 관련 UI가 없다"
+    criteria: "pnpm --dir api exec vitest run test/scope.test.ts --reporter=basic 명령의 종료 코드가 0이다"
+  - name: "관문 2 기록"
+    description: "실무자 실사용 측정이 기록되고 입력 수·시간이 현행보다 늘지 않았다"
+    criteria: "docs/beta-gate2.md 에 비교 대상·필수 입력 수·소요 시간·재사용 의사가 적혀 있고 입력 수와 시간이 현행 이하다"
+
+context_references:
+  - path: "/Users/seongqkim/DEVELOPER/PROJECTS/RELAYER2/SPEC.md"
+    role: "primary"
+    summary: "구현 계약. 화면 5개·카드 규칙·15초 다시보기 6구획 상태·목표 이어받기·회차 한 줄·도메인 값·결정 추적"
+  - path: "/Users/seongqkim/DEVELOPER/PROJECTS/RELAYER2/PLAN.md"
+    role: "primary"
+    summary: "단계 M0~M3와 P1~P4, 스키마 8테이블, API 6개, 확정 A1~A7·D1~D5"
+  - path: "/Users/seongqkim/DEVELOPER/PROJECTS/RELAYER2/CARRYOVER.md"
+    role: "primary"
+    summary: "CCC에서 버릴 것과 살릴 것의 판정과 근거 수치"
+  - path: "/Users/seongqkim/DEVELOPER/PROJECTS/CCC-new/inbox/2026-09-12/relayer-definitions-v2-2026-09-12.md"
+    role: "reference"
+    summary: "결과물 정의서 v2. 카드 4종·회차 요약 3층·구 7항목 정의(2026-09-13 확정이 우선)"
+  - path: "/Users/seongqkim/DEVELOPER/PROJECTS/CCC-new/inbox/2026-09-12/handoff-decisions-2026-09-12.md"
+    role: "reference"
+    summary: "확정 결정 01~54와 철회 목록, 남은 질문 Q1~Q8"
+  - path: "/Users/seongqkim/DEVELOPER/PROJECTS/CCC-new/inbox/2026-09-12/handoff-record-intake-redesign-2026-09-12.md"
+    role: "reference"
+    summary: "상담 기록하기·인테이크 작성하기의 화면 구조와 작업 항목"
+  - path: "/Users/seongqkim/DEVELOPER/PROJECTS/CCC-new/inbox/2026-09-13/handoff-sensitive-data-rules-2026-09-13.md"
+    role: "reference"
+    summary: "STT·AI·저장소·민감정보의 정한 것과 안 정한 것"
+  - path: "/Users/seongqkim/DEVELOPER/PROJECTS/CCC-new/design/tokens.css"
+    role: "reference"
+    summary: "디자인 토큰 397줄. 그대로 이식"
+  - path: "/Users/seongqkim/DEVELOPER/PROJECTS/CCC-new/apps/web/app/components/wire/wire-styles.ts"
+    role: "reference"
+    summary: "디자인 CSS 1,442줄. 백틱을 벗겨 .css 로 이식"
+
+existing_patterns:
+  - "승인 전 AI 정리는 공식 기록이 아니다. 수기 메모는 저장 즉시 공식 기록이다"
+  - "지원 지속·중단 판단, 심리 진단, 승인 없는 기록 확정은 구현하지 않는다"
+  - "삭제 대신 시각 컬럼. 카드 결과는 append-only"
+  - "가명 ID는 동물 슬러그(swallow-003) 형식을 유지한다"
+  - "위기도 미선택은 판단 안 함이며 안정으로 기록하지 않는다"
+
+existing_dependencies:
+  - "hono"
+  - "zod"
+  - "postgres"
+  - "argon2"
+  - "vite"
+  - "react"
+  - "vitest"
+  - "@playwright/test"

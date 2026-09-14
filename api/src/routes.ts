@@ -1,0 +1,99 @@
+// 라우터 하나, 검증 한 곳. 베타 API 6개(PLAN §5).
+import { Hono } from 'hono';
+import { z } from 'zod';
+import * as service from './service.ts';
+
+const area = z.enum([
+  'economy', 'employment', 'housing', 'health', 'mental_health', 'family', 'care', 'legal', 'other',
+]);
+
+const cardInput = z.object({
+  kind: z.enum(['fact', 'question', 'promise', 'judgment']),
+  text: z.string().min(1),
+  section: z.enum(['intake', 'memo', 'change', 'promise', 'question', 'judgment']),
+  area: area.optional(),
+  risk_type: z.string().optional(),
+  quote: z.string().optional(),
+});
+
+const outcomeInput = z.object({
+  card_id: z.number().int(),
+  result: z.enum(['done', 'in_progress', 'not_done', 'confirmed']),
+  follow: z.enum(['continue', 'stop']).optional(),
+  reason: z.string().optional(),
+  note: z.string().optional(),
+});
+
+export const app = new Hono();
+
+app.get('/health', (c) => c.json({ ok: true }));
+
+app.post('/cases', async (c) => {
+  const body = z
+    .object({
+      name: z.string().min(1),
+      phone: z.string().optional(),
+      email: z.string().optional(),
+      birth: z.string().optional(),
+      address: z.string().optional(),
+      program_name: z.string().min(1),
+      sessions_planned: z.number().int().positive().optional(),
+    })
+    .parse(await c.req.json());
+  return c.json(await service.createCase(body), 201);
+});
+
+app.put('/cases/:id/intake', async (c) => {
+  const body = z
+    .object({
+      held_at: z.string().optional(),
+      memo: z.string().optional(),
+      // 전체 상담 목표는 비워둘 수 있다.
+      overall_goal: z.string().nullable().optional(),
+      detail: z.record(z.unknown()).optional(),
+      cards: z.array(cardInput).optional(),
+    })
+    .parse(await c.req.json());
+  return c.json(await service.saveIntake(Number(c.req.param('id')), body));
+});
+
+app.post('/cases/:id/sessions', async (c) => {
+  const body = z
+    .object({
+      scheduled_at: z.string(),
+      method: z.enum(['in_person', 'phone', 'video', 'visit']),
+      place: z.string().optional(),
+      plan_memo: z.string().optional(),
+    })
+    .parse(await c.req.json());
+  if (body.place && body.method !== 'in_person') {
+    return c.json({ error: '상담 장소는 대면일 때만 적어요.' }, 400);
+  }
+  return c.json(await service.planSession(Number(c.req.param('id')), body), 201);
+});
+
+app.get('/cases/:id', async (c) => {
+  const found = await service.getCase(Number(c.req.param('id')));
+  return found ? c.json(found) : c.json({ error: 'not found' }, 404);
+});
+
+app.patch('/sessions/:id', async (c) => {
+  const body = z
+    .object({
+      held_at: z.string().optional(),
+      memo: z.string().min(1), // 유일한 필수 입력
+      place: z.string().optional(),
+      detail: z.record(z.unknown()).optional(),
+      next_goal_text: z.string().nullable().optional(),
+      overall_goal: z.string().nullable().optional(),
+      cards: z.array(cardInput).optional(),
+      outcomes: z.array(outcomeInput).optional(),
+    })
+    .parse(await c.req.json());
+  return c.json(await service.recordSession(Number(c.req.param('id')), body));
+});
+
+app.get('/cases/:id/briefing', async (c) => {
+  const found = await service.getBriefing(Number(c.req.param('id')));
+  return found ? c.json(found) : c.json({ error: 'not found' }, 404);
+});

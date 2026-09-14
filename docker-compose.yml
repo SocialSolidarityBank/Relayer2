@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: relayer-db
+    environment:
+      POSTGRES_USER: relayer
+      POSTGRES_PASSWORD: relayer
+      POSTGRES_DB: relayer
+    ports:
+      - "55432:5432"
+    volumes:
+      - relayer-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U relayer"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  relayer-pgdata:

@@ -1,0 +1,16 @@
+/* 베타 전용 임시 내비. CCC 사이드바(.app-shell/.wire-sidebar)는 베타 범위 밖이라
+   그 계약을 흉내 내지 않고 최소한의 줄만 둔다. 화면 안쪽은 전부 wire 계약을 쓴다. */
+body { margin: 0; }
+
+.app-nav {
+  display: flex;
+  gap: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--line);
+}
+.app-nav a {
+  color: var(--sub);
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+.app-nav a:hover { color: var(--ink); text-decoration: underline; }

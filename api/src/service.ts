@@ -1,0 +1,214 @@
+// DB 접근은 여기 하나로 모은다. 쓰기는 전부 트랜잭션 하나 안에서 끝낸다.
+import { sql } from './db.ts';
+import { decryptPii, encryptPii, KEY_VERSION } from './pii.ts';
+import { buildBriefing, type Briefing } from './domain/briefing.ts';
+import { openCards, resolveOutcomes, type OutcomeSubmission } from './domain/cards.ts';
+import { carryOverOnRecord } from './domain/goals.ts';
+import type { Card, CardOutcome, Session, SupportCase } from './domain/types.ts';
+
+const ANIMALS = [
+  'swallow', 'otter', 'heron', 'badger', 'marten', 'crane', 'gecko', 'finch', 'ibex', 'lynx',
+];
+
+export type NewCardInput = {
+  kind: Card['kind'];
+  text: string;
+  section: Card['source_section'];
+  area?: Card['area'];
+  risk_type?: string | null;
+  quote?: string | null;
+};
+
+async function nextPseudonym(tx: typeof sql): Promise<string> {
+  const [{ count }] = await tx<{ count: string }[]>`select count(*)::text as count from participants`;
+  const n = Number(count) + 1;
+  return `${ANIMALS[n % ANIMALS.length]}-${String(n).padStart(3, '0')}`;
+}
+
+export async function createCase(input: {
+  name: string;
+  phone?: string;
+  email?: string;
+  birth?: string;
+  address?: string;
+  program_name: string;
+  sessions_planned?: number;
+  assigned_user_id?: number;
+}): Promise<{ case_id: number; participant_id: number; pseudonym: string }> {
+  return await sql.begin(async (tx) => {
+    const pseudonym = await nextPseudonym(tx as unknown as typeof sql);
+    const [participant] = await tx<{ id: number }[]>`
+      insert into participants (pseudonym) values (${pseudonym}) returning id`;
+    await tx`insert into participant_pii (participant_id, enc_name, enc_phone, enc_email, enc_birth, enc_address, key_version)
+      values (${participant.id}, ${encryptPii(input.name)}, ${encryptPii(input.phone)},
+              ${encryptPii(input.email)}, ${encryptPii(input.birth)}, ${encryptPii(input.address)}, ${KEY_VERSION})`;
+    const [c] = await tx<{ id: number }[]>`
+      insert into support_cases (participant_id, program_name, sessions_planned, assigned_user_id)
+      values (${participant.id}, ${input.program_name}, ${input.sessions_planned ?? null}, ${input.assigned_user_id ?? null})
+      returning id`;
+    return { case_id: c.id, participant_id: participant.id, pseudonym };
+  });
+}
+
+/** 인테이크 작성하기. 전체 상담 목표는 비워둘 수 있다. */
+export async function saveIntake(
+  caseId: number,
+  input: { held_at?: string; memo?: string; overall_goal?: string | null; detail?: Record<string, unknown>; cards?: NewCardInput[] },
+): Promise<{ session_id: number }> {
+  return await sql.begin(async (tx) => {
+    const [existing] = await tx<{ id: number }[]>`
+      select id from sessions where case_id = ${caseId} limit 1`;
+    if (existing) throw new Error('이미 회차가 있어요. 인테이크는 첫 회차예요.');
+    const [session] = await tx<{ id: number }[]>`
+      insert into sessions (case_id, seq, kind, status, held_at, memo, detail)
+      values (${caseId}, 1, 'intake', 'done', ${input.held_at ?? new Date().toISOString()},
+              ${input.memo ?? null}, ${tx.json(input.detail ?? {})})
+      returning id`;
+    if (input.overall_goal !== undefined) {
+      await setOverallGoal(tx as unknown as typeof sql, caseId, input.overall_goal);
+    }
+    await insertCards(tx as unknown as typeof sql, caseId, session.id, input.cards ?? []);
+    return { session_id: session.id };
+  });
+}
+
+/** 상담 일정 등록. 예정 회차 1건. 메모는 카드가 아니다(요구 4). */
+export async function planSession(
+  caseId: number,
+  input: { scheduled_at: string; method: string; place?: string | null; plan_memo?: string | null },
+): Promise<{ session_id: number; seq: number }> {
+  return await sql.begin(async (tx) => {
+    const [{ seq }] = await tx<{ seq: number }[]>`
+      select coalesce(max(seq), 0) + 1 as seq from sessions where case_id = ${caseId}`;
+    const [s] = await tx<{ id: number }[]>`
+      insert into sessions (case_id, seq, kind, status, scheduled_at, method, place, plan_memo)
+      values (${caseId}, ${seq}, 'regular', 'planned', ${input.scheduled_at}, ${input.method},
+              ${input.place ?? null}, ${input.plan_memo ?? null})
+      returning id`;
+    return { session_id: s.id, seq };
+  });
+}
+
+/**
+ * 상담 기록하기. 한 트랜잭션에서
+ *  - 회차를 done 으로 저장하고
+ *  - 직전 회차의 다음 상담 목표를 이어받고
+ *  - 새 카드를 만들고
+ *  - 제출된 결과를 쓰고, 제출되지 않은 열린 카드는 unchecked 로 남긴다.
+ */
+export async function recordSession(
+  sessionId: number,
+  input: {
+    held_at?: string;
+    memo: string;
+    place?: string | null;
+    detail?: Record<string, unknown>;
+    next_goal_text?: string | null;
+    overall_goal?: string | null;
+    cards?: NewCardInput[];
+    outcomes?: OutcomeSubmission[];
+  },
+): Promise<{ session_id: number; unchecked: number }> {
+  return await sql.begin(async (tx) => {
+    const [target] = await tx<Session[]>`select * from sessions where id = ${sessionId} for update`;
+    if (!target) throw new Error('session not found');
+    const sessions = await tx<Session[]>`select * from sessions where case_id = ${target.case_id}`;
+    const cards = await tx<Card[]>`select * from cards where case_id = ${target.case_id}`;
+    const outcomes = await tx<CardOutcome[]>`
+      select o.* from card_outcomes o join cards c on c.id = o.card_id where c.case_id = ${target.case_id}`;
+
+    const carry = carryOverOnRecord(target, sessions);
+    await tx`update sessions set
+        status = 'done',
+        held_at = ${input.held_at ?? new Date().toISOString()},
+        memo = ${input.memo},
+        place = ${input.place ?? target.place},
+        detail = ${tx.json(input.detail ?? {})},
+        next_goal_text = ${input.next_goal_text ?? null},
+        today_goal_text = coalesce(today_goal_text, ${carry?.text ?? null}),
+        today_goal_from_session_id = coalesce(today_goal_from_session_id, ${carry?.fromSessionId ?? null})
+      where id = ${sessionId}`;
+    if (carry) {
+      await tx`update sessions set next_goal_consumed_by_session_id = ${sessionId}
+        where id = ${carry.fromSessionId}`;
+    }
+    if (input.overall_goal !== undefined) {
+      await setOverallGoal(tx as unknown as typeof sql, target.case_id, input.overall_goal);
+    }
+
+    await insertCards(tx as unknown as typeof sql, target.case_id, sessionId, input.cards ?? []);
+
+    const rows = resolveOutcomes(openCards(cards, outcomes, sessions), input.outcomes ?? []);
+    for (const row of rows) {
+      const full = row as OutcomeSubmission & { result: string };
+      await tx`insert into card_outcomes (card_id, session_id, result, follow, reason, note)
+        values (${row.card_id}, ${sessionId}, ${row.result}, ${full.follow ?? null},
+                ${full.reason ?? null}, ${full.note ?? null})`;
+    }
+    return { session_id: sessionId, unchecked: rows.filter((r) => r.result === 'unchecked').length };
+  });
+}
+
+/** 전체 상담 목표 수정. 이전 문구를 이력으로 남긴다(append-only). */
+async function setOverallGoal(tx: typeof sql, caseId: number, text: string | null): Promise<void> {
+  const [current] = await tx<{ overall_goal: string | null }[]>`
+    select overall_goal from support_cases where id = ${caseId}`;
+  if (current?.overall_goal === text) return;
+  await tx`update support_cases set
+      overall_goal = ${text},
+      overall_goal_source = ${text ? 'agreed' : null}
+    where id = ${caseId}`;
+  await tx`insert into goal_revisions (case_id, text) values (${caseId}, ${text})`;
+}
+
+async function insertCards(
+  tx: typeof sql,
+  caseId: number,
+  sessionId: number,
+  cards: NewCardInput[],
+): Promise<void> {
+  for (const card of cards) {
+    await tx`insert into cards (case_id, kind, text, area, risk_type, quote, source_session_id, source_section)
+      values (${caseId}, ${card.kind}, ${card.text}, ${card.area ?? null}, ${card.risk_type ?? null},
+              ${card.quote ?? null}, ${sessionId}, ${card.section})`;
+  }
+}
+
+async function loadCase(caseId: number) {
+  const [supportCase] = await sql<SupportCase[]>`select * from support_cases where id = ${caseId}`;
+  if (!supportCase) return null;
+  const [participant] = await sql<{ pseudonym: string }[]>`
+    select pseudonym from participants where id = ${supportCase.participant_id}`;
+  const [vault] = await sql<{ enc_name: string | null }[]>`
+    select enc_name from participant_pii where participant_id = ${supportCase.participant_id}`;
+  const sessions = await sql<Session[]>`select * from sessions where case_id = ${caseId} order by seq`;
+  const cards = await sql<Card[]>`select * from cards where case_id = ${caseId} order by id`;
+  const outcomes = await sql<CardOutcome[]>`
+    select o.* from card_outcomes o join cards c on c.id = o.card_id where c.case_id = ${caseId}`;
+  return { supportCase, pseudonym: participant.pseudonym, vault, sessions, cards, outcomes };
+}
+
+export async function getCase(caseId: number) {
+  const loaded = await loadCase(caseId);
+  if (!loaded) return null;
+  const { supportCase, pseudonym, sessions, cards, outcomes } = loaded;
+  return {
+    case: supportCase,
+    pseudonym,
+    sessions,
+    open_cards: openCards(cards, outcomes, sessions),
+  };
+}
+
+export async function getBriefing(caseId: number): Promise<Briefing | null> {
+  const loaded = await loadCase(caseId);
+  if (!loaded) return null;
+  return buildBriefing({
+    supportCase: loaded.supportCase,
+    pseudonym: loaded.pseudonym,
+    name: decryptPii(loaded.vault?.enc_name ?? null),
+    sessions: loaded.sessions,
+    cards: loaded.cards,
+    outcomes: loaded.outcomes,
+  });
+}

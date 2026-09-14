@@ -1,0 +1,14 @@
+{
+  "name": "relayer",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "migrate": "node api/src/migrate.ts",
+    "seed": "node api/src/seed.ts",
+    "dev": "node api/src/index.ts",
+    "test": "pnpm --dir api exec vitest run"
+  }
+}

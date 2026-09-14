@@ -1,0 +1,268 @@
+// 인테이크 작성하기 — 공통 뼈대 + 고른 영역 모듈. 사업 모듈은 P2.
+// I-05: 고른 영역의 세부 질문을 실제로 펼친다. 제목·배지만 보여주면 미완이다.
+// I-09: 전체 상담 목표는 사례의 overall_goal 을 쓴다. 비워둘 수 있다.
+import { useEffect, useState } from 'react';
+import { getCase, saveIntake, type CaseView } from '../api.ts';
+import {
+  NOT_APPLICABLE_OPTION,
+  NO_RESPONSE_OPTION,
+  STEP1_GROUPS,
+  STEP2_GROUPS,
+  STEP3_GROUPS,
+  STEP4_GROUPS,
+  type IntakeQuestion,
+  type IntakeQuestionGroup,
+} from '../intake-questions.ts';
+import { ECONOMY_NUMBER_FIELDS, NEED_AREAS } from '../need-areas.ts';
+import { Button, Card, Choice, ChoiceGroup, ErrorText, Field as FormField, FormActions, Item, PageHeader } from '../ui.tsx';
+
+const AREA_QUESTION_KEY = 'difficulty_areas';
+const EXCLUSIVE_OPTIONS = [NO_RESPONSE_OPTION, NOT_APPLICABLE_OPTION];
+
+type Answers = Record<string, string | string[]>;
+
+function Question({
+  question,
+  value,
+  onChange,
+}: {
+  question: IntakeQuestion;
+  value: string | string[] | undefined;
+  onChange: (next: string | string[]) => void;
+}) {
+  if (question.kind === 'text') {
+    // 예시는 placeholder 하나로만 보여 준다. 같은 문장을 도움말로 또 쓰면 두 번 읽힌다.
+    return (
+      <FormField label={question.label} htmlFor={question.key}>
+        <input
+          id={question.key}
+          type="text"
+          value={typeof value === 'string' ? value : ''}
+          placeholder={question.hint}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      </FormField>
+    );
+  }
+
+  const options = question.options ?? [];
+  const chosen = Array.isArray(value) ? value : value ? [value] : [];
+
+  const toggle = (option: string) => {
+    if (question.kind === 'select') {
+      onChange(chosen[0] === option ? '' : option);
+      return;
+    }
+    // 무응답·해당 없음은 다른 선택과 함께 고를 수 없다(I-02).
+    if (EXCLUSIVE_OPTIONS.includes(option)) {
+      onChange(chosen.includes(option) ? [] : [option]);
+      return;
+    }
+    const next = chosen.includes(option)
+      ? chosen.filter((v) => v !== option)
+      : [...chosen.filter((v) => !EXCLUSIVE_OPTIONS.includes(v)), option];
+    onChange(next);
+  };
+
+  // 선택은 알약 버튼이 아니라 네이티브 radio·checkbox 다(DESIGN-RULES).
+  return (
+    <ChoiceGroup legend={question.label}>
+      {options.map((option) => (
+        <Choice
+          key={option}
+          type={question.kind === 'select' ? 'radio' : 'checkbox'}
+          name={question.key}
+          label={option}
+          checked={chosen.includes(option)}
+          onChange={() => toggle(option)}
+        />
+      ))}
+    </ChoiceGroup>
+  );
+}
+
+export function IntakeScreen({ caseId }: { caseId: number }) {
+  const [view, setView] = useState<CaseView | null>(null);
+  const [answers, setAnswers] = useState<Answers>({});
+  const [overallGoal, setOverallGoal] = useState('');
+  const [questions, setQuestions] = useState<string[]>([]);
+  const [draft, setDraft] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void getCase(caseId).then((v) => {
+      setView(v);
+      setOverallGoal(v.case.overall_goal ?? '');
+    });
+  }, [caseId]);
+
+  if (!view) return <p className="empty">불러오는 중이에요.</p>;
+  if (view.sessions.length > 0)
+    return (
+      <p className="empty">
+        이 사례에는 이미 회차가 있어요. 인테이크는 첫 회차예요.{' '}
+        <a href={`#/cases/${caseId}/briefing`}>15초 다시보기</a>로 가세요.
+      </p>
+    );
+
+  const chosenAreas = (answers[AREA_QUESTION_KEY] as string[] | undefined) ?? [];
+  // 고른 영역만 표준 하위영역(선택 2 + 상세 1)을 편다. 정본 세부항목은 need-areas.ts 에 있다.
+  const openAreas = NEED_AREAS.filter((a) => chosenAreas.includes(a.label) && a.subdomains.length > 0);
+  const areaGroup = STEP2_GROUPS[0];
+
+  const setAnswer = (key: string, value: string | string[]) =>
+    setAnswers((prev) => ({ ...prev, [key]: value }));
+
+  const renderGroup = (group: IntakeQuestionGroup) => (
+    <Card title={group.title} key={group.title}>
+      {group.questions.map((q) => (
+        <Question key={q.key} question={q} value={answers[q.key]} onChange={(v) => setAnswer(q.key, v)} />
+      ))}
+    </Card>
+  );
+
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await saveIntake(caseId, {
+        memo: (answers.application_reason_detail as string) || undefined,
+        overall_goal: overallGoal.trim() || null,
+        detail: answers,
+        // I-08: 다음에 물어볼 것은 상담 기록하기와 같은 입력이며 확인할 것 카드가 된다.
+        cards: questions.map((text) => ({ kind: 'question', text, section: 'intake' })),
+      });
+      window.location.hash = `#/cases/${caseId}/schedule`;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '저장하지 못했어요.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <PageHeader
+        title="인테이크 작성하기"
+        meta={`${view.pseudonym} · ${view.case.program_name} · 1회차`}
+      />
+
+      <div className="wire-container">
+        {STEP1_GROUPS.map(renderGroup)}
+
+        <Card title={areaGroup.title} hint="고른 영역만 아래에 세부 질문이 열려요.">
+          {areaGroup.questions.map((q) => (
+            <Question key={q.key} question={q} value={answers[q.key]} onChange={(v) => setAnswer(q.key, v)} />
+          ))}
+        </Card>
+
+        {openAreas.map((area) => (
+          <Card title={area.label} key={area.key}>
+            {area.subdomains.map((sub) => (
+              <Question
+                key={sub.key}
+                question={{
+                  key: `need_${area.key}_${sub.key}`,
+                  label: sub.title,
+                  kind: 'multi',
+                  options: sub.items,
+                }}
+                value={answers[`need_${area.key}_${sub.key}`]}
+                onChange={(v) => setAnswer(`need_${area.key}_${sub.key}`, v)}
+              />
+            ))}
+            {area.key === 'economy' &&
+              ECONOMY_NUMBER_FIELDS.map((f) => (
+                <Question
+                  key={f.key}
+                  question={{ key: f.key, label: f.label, kind: 'text', hint: f.hint }}
+                  value={answers[f.key]}
+                  onChange={(v) => setAnswer(f.key, v)}
+                />
+              ))}
+            <Question
+              question={{ key: `need_${area.key}_detail`, label: `${area.label} 상세내용`, kind: 'text' }}
+              value={answers[`need_${area.key}_detail`]}
+              onChange={(v) => setAnswer(`need_${area.key}_detail`, v)}
+            />
+          </Card>
+        ))}
+        {chosenAreas.includes('기타') && (
+          <Card title="기타" key="other">
+            <Question
+              question={{ key: 'need_other_detail', label: '기타 상세내용', kind: 'text' }}
+              value={answers.need_other_detail}
+              onChange={(v) => setAnswer('need_other_detail', v)}
+            />
+          </Card>
+        )}
+
+        {STEP3_GROUPS.map(renderGroup)}
+        {STEP4_GROUPS.map(renderGroup)}
+
+        <Card title="전체 상담 목표">
+          <FormField
+            label="전체 상담 목표"
+            htmlFor="overall-goal"
+            hint="비워 두어도 괜찮아요. 나중에 상담 기록하기에서 세우거나 고칠 수 있어요."
+          >
+            <input
+              id="overall-goal"
+              type="text"
+              value={overallGoal}
+              onChange={(e) => setOverallGoal(e.target.value)}
+            />
+          </FormField>
+        </Card>
+
+        <Card title="다음에 물어볼 것" hint="저장하면 1회차 15초 다시보기의 오늘 물어볼 것으로 올라가요.">
+          <div className="wire-field-with-action">
+            <FormField label="다음에 물어볼 것" htmlFor="intake-question">
+              <input
+                id="intake-question"
+                type="text"
+                aria-label="다음에 물어볼 것"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && draft.trim()) {
+                    e.preventDefault();
+                    setQuestions([...questions, draft.trim()]);
+                    setDraft('');
+                  }
+                }}
+              />
+            </FormField>
+            <Button
+              onClick={() => {
+                if (!draft.trim()) return;
+                setQuestions([...questions, draft.trim()]);
+                setDraft('');
+              }}
+            >
+              추가
+            </Button>
+          </div>
+          {questions.map((q, i) => (
+            <div className="wire-repeat-card" key={`${q}-${i}`}>
+              <Item
+                title={q}
+                action={
+                  <Button onClick={() => setQuestions(questions.filter((_, j) => j !== i))}>지우기</Button>
+                }
+              />
+            </div>
+          ))}
+        </Card>
+
+        <FormActions>
+          {error && <ErrorText>{error}</ErrorText>}
+          <Button variant="primary" disabled={saving} onClick={() => void save()}>
+            {saving ? '저장 중…' : '저장하고 상담 일정 잡기'}
+          </Button>
+        </FormActions>
+      </div>
+    </>
+  );
+}
