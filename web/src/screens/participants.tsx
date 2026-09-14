@@ -35,7 +35,7 @@ export function ParticipantsScreen() {
 
   return (
     <>
-      <PageHeader title="당사자" meta={rows ? `${rows.length}명` : undefined} />
+      <PageHeader title="당사자 목록" meta={rows ? `${rows.length}명` : undefined} />
       <div className="wire-container">
         <Card>
           <Field label="찾기" htmlFor="q">
@@ -66,6 +66,9 @@ export function ParticipantsScreen() {
                   <>
                     <Button onClick={() => (window.location.hash = `#/cases/${row.case_id}/briefing`)}>
                       15초 다시보기
+                    </Button>
+                    <Button onClick={() => (window.location.hash = `#/cases/${row.case_id}/record`)}>
+                      상담 기록하기
                     </Button>
                     <Button onClick={() => (window.location.hash = `#/cases/${row.case_id}/schedule`)}>
                       상담 일정 등록

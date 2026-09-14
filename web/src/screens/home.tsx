@@ -37,12 +37,15 @@ export function HomeScreen() {
 
   return (
     <>
-      <PageHeader title="다가오는 상담" meta="앞으로 30일" />
+      <PageHeader title="일정" meta="앞으로 30일" />
       <div className="wire-container">
         {rows === null && <Empty>불러오는 중이에요.</Empty>}
         {rows?.length === 0 && (
-          <Card title="다가오는 상담">
-            <Empty>잡힌 상담이 없어요. 당사자 목록에서 일정을 등록하세요.</Empty>
+          <Card title="일정">
+            <Empty>
+              잡힌 상담이 없어요. <a href="#/participants">당사자 목록</a>에서 일정을 등록하거나, 이미 만난
+              상담이면 그 사람의 상담 기록하기에서 바로 적으면 돼요.
+            </Empty>
           </Card>
         )}
         {[...groups].map(([day, items]) => (

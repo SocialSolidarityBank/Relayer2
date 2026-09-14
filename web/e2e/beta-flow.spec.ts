@@ -19,8 +19,8 @@ test('등록부터 15초 다시보기까지 한 바퀴', async ({ page }) => {
   await page.getByRole('button', { name: '로그인' }).click();
 
   // ── 당사자 등록 ─────────────────────────────────────────────
-  // 로그인하면 홈은 다가오는 상담이다
-  await expect(page.getByRole('heading', { name: '다가오는 상담' })).toBeVisible();
+  // 로그인하면 홈은 일정이다
+  await expect(page.getByRole('heading', { name: '일정', exact: true })).toBeVisible();
   await page.goto('/#/participants/new');
   await page.locator('#name').fill(NAME);
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
@@ -107,11 +107,42 @@ test('등록부터 15초 다시보기까지 한 바퀴', async ({ page }) => {
 
   // ── 돌아오는 길 ─────────────────────────────────────────────
   // URL 을 외우지 않고 목록에서 이 사례로 되돌아올 수 있어야 한다.
-  await page.getByRole('link', { name: '당사자', exact: true }).click();
+  await page.getByRole('link', { name: '당사자 목록', exact: true }).click();
   await page.locator('#q').fill(NAME);
   const row = page.locator('.wire-item', { hasText: NAME });
   await expect(row).toContainText('2회차까지 기록');
   await row.getByRole('button', { name: '15초 다시보기' }).click();
   await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
   await expect(page.locator('section.wire-card', { hasText: '확인할 과제' })).toContainText(TASK);
+});
+
+// 일정을 미리 잡지 않고 만난 상담(갑작스러운 방문·전화)도 그 자리에서 기록돼야 한다.
+test('예정 회차가 없어도 상담 기록하기에서 일시를 적고 기록한다', async ({ page }) => {
+  const name = `E2E 즉석${Date.now()}`;
+
+  await page.goto('/');
+  await page.locator('#email').fill('worker@relayer.test');
+  await page.locator('#password').fill(process.env.SEED_PASSWORD ?? 'relayer-beta');
+  await page.getByRole('button', { name: '로그인' }).click();
+
+  await page.goto('/#/participants/new');
+  await page.locator('#name').fill(name);
+  await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
+  await expect(page.getByRole('heading', { name: '인테이크 작성하기' })).toBeVisible();
+  await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
+
+  // 일정 등록 화면이 떠도 등록하지 않고 바로 기록하기로 간다
+  await expect(page.getByRole('heading', { name: '상담 일정 등록' })).toBeVisible();
+  await page.getByRole('link', { name: '상담 기록하기' }).click();
+
+  const when = page.locator('section.wire-card', { hasText: '상담 일시와 상담 방식' });
+  await expect(when).toBeVisible();
+  await page.locator('#held-at').fill('2026-09-20T14:00');
+  await page.getByRole('radio', { name: '전화' }).check();
+  await page.locator('#memo').fill('예고 없이 전화가 와서 그 자리에서 상담함');
+  await page.getByRole('button', { name: '저장' }).click();
+
+  // 2회차로 저장되고, 다시보기가 그 회차를 가리킨다
+  await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
+  await expect(page.locator('.participant-card, .wire-container').first()).toContainText('2회차');
 });

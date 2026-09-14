@@ -11,7 +11,7 @@ import { ParticipantsScreen } from './screens/participants.tsx';
 import { RecordScreen } from './screens/record.tsx';
 import { ScheduleNewScreen } from './screens/schedule-new.tsx';
 
-const HOME = '#/schedules';
+const HOME = '#/schedule';
 
 export function Routes() {
   const [hash, setHash] = useState(window.location.hash || HOME);
@@ -55,8 +55,8 @@ export function Routes() {
   return (
     <>
       <nav className="app-nav">
-        <a href={HOME}>다가오는 상담</a>
-        <a href="#/participants">당사자</a>
+        <a href={HOME}>일정</a>
+        <a href="#/participants">당사자 목록</a>
         <a href="#/participants/new">당사자 등록</a>
         {caseId && (
           <>

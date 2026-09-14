@@ -90,6 +90,7 @@ export type OutcomeInput = {
 };
 
 export type RecordInput = {
+  held_at?: string;
   memo: string;
   place?: string;
   next_goal_text?: string | null;
