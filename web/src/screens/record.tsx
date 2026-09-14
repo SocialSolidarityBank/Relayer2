@@ -16,12 +16,15 @@ import { Button, Card, Choice, ChoiceGroup, Empty, ErrorText, Field, FormActions
 type Line = { text: string; area?: string };
 
 function LineList({
+  id,
   label,
   placeholder,
   withArea,
   lines,
   onChange,
 }: {
+  /** id 는 공백 없는 슬러그다. 라벨을 그대로 쓰면 유효하지 않은 id 가 된다. */
+  id: string;
   label: string;
   placeholder: string;
   withArea?: boolean;
@@ -38,8 +41,8 @@ function LineList({
   return (
     <>
       {withArea && (
-        <Field label="영역" htmlFor={`${label}-area`} control="select">
-          <select id={`${label}-area`} value={area} onChange={(e) => setArea(e.target.value)}>
+        <Field label="영역" htmlFor={`${id}-area`} control="select">
+          <select id={`${id}-area`} value={area} onChange={(e) => setArea(e.target.value)}>
             {LIFE_AREAS.map((a) => (
               <option key={a.key} value={a.key}>
                 {a.label}
@@ -49,9 +52,9 @@ function LineList({
         </Field>
       )}
       <div className="wire-field-with-action">
-        <Field label={label} htmlFor={`${label}-input`}>
+        <Field label={label} htmlFor={`${id}-input`}>
           <input
-            id={`${label}-input`}
+            id={`${id}-input`}
             type="text"
             aria-label={label}
             placeholder={placeholder}
@@ -266,15 +269,16 @@ export function RecordScreen({ caseId }: { caseId: number }) {
           </Card>
 
           <Card title="2. 수행할 과제" hint="다음 상담의 확인할 과제로 올라가요.">
-            <LineList label="수행할 과제" placeholder="예: 채무 내역서 준비하기" lines={tasks} onChange={setTasks} />
+            <LineList id="task" label="수행할 과제" placeholder="예: 채무 내역서 준비하기" lines={tasks} onChange={setTasks} />
           </Card>
 
           <Card title="3. 다음에 물어볼 것" hint="다음 상담의 오늘 물어볼 것으로 올라가요.">
-            <LineList label="다음에 물어볼 것" placeholder="예: 가족 지원 여부" lines={questions} onChange={setQuestions} />
+            <LineList id="question" label="다음에 물어볼 것" placeholder="예: 가족 지원 여부" lines={questions} onChange={setQuestions} />
           </Card>
 
           <Card title="4. 달라진 것" hint="비워 두면 이번 회차 미확인으로 남아요. 변화 없음이 아니에요.">
             <LineList
+              id="change"
               label="달라진 것"
               placeholder="예: 월세 계약을 6개월 연장함"
               withArea
