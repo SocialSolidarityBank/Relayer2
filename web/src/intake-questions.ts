@@ -16,6 +16,10 @@ export interface IntakeQuestion {
   kind: 'select' | 'multi' | 'text';
   options?: readonly string[];
   hint?: string;
+  /** 선택지가 길어 라디오로 늘어놓기 어려운 한 가지 고르기는 드롭다운으로 낸다. */
+  dropdown?: boolean;
+  /** 이 질문에서 고른 값은 선택지에서 뺀다. 1·2순위를 같은 값으로 고르지 못하게 한다. */
+  excludeChosenOf?: string;
 }
 
 export interface IntakeQuestionGroup {
@@ -86,7 +90,7 @@ export const STEP1_GROUPS: readonly IntakeQuestionGroup[] = [
       {
         key: 'contact_time',
         label: '주요 연락 가능 시간',
-        kind: 'select',
+        kind: 'multi',
         options: ['평일 오전', '평일 오후', '평일 저녁', '주말', '시간 협의 필요', NO_RESPONSE_OPTION],
       },
       {
@@ -285,8 +289,16 @@ export const STEP3_GROUPS: readonly IntakeQuestionGroup[] = [
   {
     title: '3-1. 우선적으로 필요한 도움',
     questions: [
-      { key: 'need_primary', label: '1순위 지원욕구', kind: 'select', options: NEED_OPTIONS },
-      { key: 'need_secondary', label: '2순위 지원욕구', kind: 'select', options: [NOT_APPLICABLE_OPTION, ...NEED_OPTIONS] },
+      { key: 'need_primary', label: '1순위 지원욕구', kind: 'select', options: NEED_OPTIONS, dropdown: true },
+      {
+        key: 'need_secondary',
+        label: '2순위 지원욕구',
+        kind: 'select',
+        options: [NOT_APPLICABLE_OPTION, ...NEED_OPTIONS],
+        dropdown: true,
+        // 1순위로 고른 것은 2순위 목록에서 사라진다. 같은 욕구를 두 번 적지 않는다.
+        excludeChosenOf: 'need_primary',
+      },
       {
         key: 'need_detail',
         label: '필요한 도움 상세내용',
@@ -296,24 +308,28 @@ export const STEP3_GROUPS: readonly IntakeQuestionGroup[] = [
     ],
   },
   {
-    title: '3-2. 이전 지원 경험',
+    title: '3-2. 이전에 받은 지원',
     questions: [
       {
         key: 'previous_support_detail',
-        label: '이전 지원 경험 상세내용',
+        // 표준 서식의 `기존 서비스 이용 및 지원 이력`이다. 우리 기관 상담 이력이 아니라
+        // 다른 기관에서 받았거나 신청했다 안 된 지원을 적는 칸이다.
+        label: '다른 기관에서 받았거나 신청한 지원',
         kind: 'text',
         hint: '예: 2025년 주민센터 긴급복지 상담, 소득기준 초과로 미지원',
       },
     ],
   },
   {
-    title: '3-4. 강점과 비공식 자원',
+    title: '3-4. 강점과 도와줄 사람',
     questions: [
       // I-07: 구 `도움을 요청할 사람`·`본인의 강점` 두 칸을 이 한 칸으로 합친다.
       // 옛 세 응답(strength_relational·strength_personal·strength_detail)은 덮어쓰지 않는다.
       {
         key: 'strength_detail',
-        label: '강점과 비공식 자원',
+        // 표준 용어는 `비공식 자원`(가족·이웃·지인처럼 제도 밖의 도움)이지만 화면에서는
+        // 읽히는 말로 부른다. 저장 키와 대조용 표준어는 그대로 둔다.
+        label: '강점과 도와줄 사람',
         kind: 'text',
         hint: '예: 누나와 직장 동료의 도움을 받을 수 있고, 어려움이 있어도 근로를 유지해 온 실행력이 있음',
       },
@@ -329,17 +345,19 @@ export const STEP4_GROUPS: readonly IntakeQuestionGroup[] = [
       {
         key: 'participation_barrier',
         label: '참여 방해요인',
-        kind: 'select',
+        kind: 'multi',
+        // `복수 요인`을 뺐다 — 한 가지만 고르게 해 놓고 둘 이상일 때 쓰라던 우회 선택지다.
         options: [
-          '없음', '근무시간', '돌봄 부담', '이동 어려움', '건강 문제', '연락 어려움',
-          '디지털 사용 어려움', '비용 부담', '복수 요인', '기타', NO_RESPONSE_OPTION,
+          '근무시간', '돌봄 부담', '이동 어려움', '건강 문제', '연락 어려움',
+          '디지털 사용 어려움', '비용 부담', '기타', NOT_APPLICABLE_OPTION, NO_RESPONSE_OPTION,
         ],
       },
       {
         key: 'participation_preferred_method',
         label: '선호 상담 방식',
-        kind: 'select',
-        options: ['대면', '전화', '온라인 화상', '방문', '혼합', NO_RESPONSE_OPTION],
+        kind: 'multi',
+        // `혼합`을 뺐다 — 여러 개를 고를 수 있으면 필요 없는 선택지다.
+        options: ['대면', '전화', '온라인 화상', '방문', NO_RESPONSE_OPTION],
       },
       {
         key: 'participation_detail',

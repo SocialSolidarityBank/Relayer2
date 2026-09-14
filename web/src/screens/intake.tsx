@@ -29,6 +29,10 @@ import {
 } from '../ui.tsx';
 
 const AREA_QUESTION_KEY = 'difficulty_areas';
+/** 다른 답에 딸린 질문들. 지금은 2순위 지원욕구 하나다. */
+const DEPENDENT_QUESTIONS = [...STEP1_GROUPS, ...STEP2_GROUPS, ...STEP3_GROUPS, ...STEP4_GROUPS]
+  .flatMap((g) => g.questions)
+  .filter((q) => q.excludeChosenOf);
 const EXCLUSIVE_OPTIONS = [NO_RESPONSE_OPTION, NOT_APPLICABLE_OPTION];
 
 type Answers = Record<string, string | string[]>;
@@ -36,10 +40,13 @@ type Answers = Record<string, string | string[]>;
 function Question({
   question,
   value,
+  options,
   onChange,
 }: {
   question: IntakeQuestion;
   value: string | string[] | undefined;
+  /** 다른 답에 따라 줄어든 선택지. 주지 않으면 질문이 가진 것을 그대로 쓴다. */
+  options?: readonly string[];
   onChange: (next: string | string[]) => void;
 }) {
   if (question.kind === 'text') {
@@ -57,8 +64,28 @@ function Question({
     );
   }
 
-  const options = question.options ?? [];
+  const choices = options ?? question.options ?? [];
   const chosen = Array.isArray(value) ? value : value ? [value] : [];
+
+  // 선택지가 열 개를 넘는 한 가지 고르기는 드롭다운이다. 라디오로 늘어놓으면 화면을 덮는다.
+  if (question.dropdown) {
+    return (
+      <FormField label={question.label} htmlFor={question.key} control="select">
+        <select
+          id={question.key}
+          value={typeof value === 'string' ? value : ''}
+          onChange={(e) => onChange(e.target.value)}
+        >
+          <option value="">고르세요</option>
+          {choices.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </FormField>
+    );
+  }
 
   const toggle = (option: string) => {
     if (question.kind === 'select') {
@@ -79,7 +106,7 @@ function Question({
   // 선택은 알약 버튼이 아니라 네이티브 radio·checkbox 다(DESIGN-RULES).
   return (
     <ChoiceGroup legend={question.label}>
-      {options.map((option) => (
+      {choices.map((option) => (
         <Choice
           key={option}
           type={question.kind === 'select' ? 'radio' : 'checkbox'}
@@ -125,12 +152,33 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
   const areaGroup = STEP2_GROUPS[0];
 
   const setAnswer = (key: string, value: string | string[]) =>
-    setAnswers((prev) => ({ ...prev, [key]: value }));
+    setAnswers((prev) => {
+      const next = { ...prev, [key]: value };
+      // 1순위를 바꿨는데 2순위가 그 값이면 2순위를 비운다. 목록에서만 빼면 이미 고른 값이 남는다.
+      for (const q of DEPENDENT_QUESTIONS) {
+        if (q.excludeChosenOf === key && next[q.key] === value) next[q.key] = '';
+      }
+      return next;
+    });
+
+  /** 다른 질문에서 이미 고른 값은 선택지에서 뺀다(1순위로 고른 욕구는 2순위에 안 뜬다). */
+  const optionsFor = (q: IntakeQuestion): readonly string[] | undefined => {
+    if (!q.excludeChosenOf) return undefined;
+    const taken = answers[q.excludeChosenOf];
+    if (typeof taken !== 'string' || !taken) return undefined;
+    return (q.options ?? []).filter((o) => o !== taken);
+  };
 
   const renderGroup = (group: IntakeQuestionGroup) => (
     <Card title={intakeSectionLabel(group.title)} key={group.title}>
       {group.questions.map((q) => (
-        <Question key={q.key} question={q} value={answers[q.key]} onChange={(v) => setAnswer(q.key, v)} />
+        <Question
+          key={q.key}
+          question={q}
+          value={answers[q.key]}
+          options={optionsFor(q)}
+          onChange={(v) => setAnswer(q.key, v)}
+        />
       ))}
     </Card>
   );
@@ -169,7 +217,13 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
 
         <Card title={intakeSectionLabel(areaGroup.title)} hint="고른 영역만 아래에 세부 질문이 열려요.">
           {areaGroup.questions.map((q) => (
-            <Question key={q.key} question={q} value={answers[q.key]} onChange={(v) => setAnswer(q.key, v)} />
+            <Question
+          key={q.key}
+          question={q}
+          value={answers[q.key]}
+          options={optionsFor(q)}
+          onChange={(v) => setAnswer(q.key, v)}
+        />
           ))}
         </Card>
 
