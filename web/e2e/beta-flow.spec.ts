@@ -204,3 +204,38 @@ test('상담 종결은 회차를 만들지 않고 미완료 과제를 그대로 
   await page.locator('#q').fill(name);
   await expect(page.locator('.wire-item', { hasText: name })).toContainText('종결');
 });
+
+// 요구 5 — 기록 화면에서 `종결 상담`을 고르면 저장 성공 뒤 종결 화면으로 간다.
+test('종결 상담으로 저장하면 종결 화면으로 이어진다', async ({ page }) => {
+  const name = `E2E 종결상담${Date.now()}`;
+
+  await page.goto('/');
+  await page.locator('#email').fill('worker@relayer.test');
+  await page.locator('#password').fill(process.env.SEED_PASSWORD ?? 'relayer-beta');
+  await page.getByRole('button', { name: '로그인' }).click();
+
+  await page.goto('/#/participants/new');
+  await page.locator('#name').fill(name);
+  await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
+  await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
+
+  // 일정 등록에서 종결 상담으로 잡는다
+  await expect(page.getByRole('heading', { name: '상담 일정 등록' })).toBeVisible();
+  await page.locator('#at').fill('2026-10-01T10:00');
+  await page.getByRole('checkbox', { name: '종결 상담' }).check();
+  await page.getByRole('button', { name: '등록', exact: true }).click();
+
+  // 기록 화면이 그 표시를 이어받는다
+  await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
+  await page.getByRole('link', { name: '상담 기록하기' }).click();
+  await expect(page.getByRole('checkbox', { name: '이번이 마지막 상담이에요' })).toBeChecked();
+  await page.locator('#memo').fill('마지막으로 정리하고 마무리함');
+  await page.getByRole('button', { name: '저장하고 종결로' }).click();
+
+  // 저장 성공 뒤 종결 화면. 아직 닫히지는 않았다.
+  await page.waitForURL(/\/close$/);
+  await expect(page.getByRole('heading', { name: '종결 사유' })).toBeVisible();
+  await page.getByRole('radio', { name: '목표 달성' }).check();
+  await page.getByRole('button', { name: '종결 확정' }).click();
+  await expect(page.getByRole('tab', { name: '정보' })).toBeVisible();
+});

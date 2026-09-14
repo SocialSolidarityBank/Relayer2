@@ -12,6 +12,8 @@ export function ScheduleNewScreen({ caseId }: { caseId: number }) {
   const [method, setMethod] = useState<NewSessionInput['method']>('in_person');
   const [place, setPlace] = useState('');
   const [memo, setMemo] = useState('');
+  // 종결 상담(요구 5). 이 회차를 기록해 저장하면 상담 종결 화면으로 이어진다.
+  const [isClosing, setIsClosing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,6 +30,7 @@ export function ScheduleNewScreen({ caseId }: { caseId: number }) {
         method,
         place: method === 'in_person' && place.trim() ? place.trim() : undefined,
         plan_memo: memo.trim() || undefined,
+        is_closing: isClosing,
       });
       window.location.hash = `#/cases/${caseId}/briefing`;
     } catch (e) {
@@ -55,6 +58,14 @@ export function ScheduleNewScreen({ caseId }: { caseId: number }) {
           <Field label="일시" htmlFor="at" required>
             <input id="at" type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} />
           </Field>
+
+          <Choice
+            type="checkbox"
+            label="종결 상담"
+            hint="이 회차를 기록해 저장하면 상담 종결 화면으로 이어져요. 지금 사례를 닫지는 않아요."
+            checked={isClosing}
+            onChange={() => setIsClosing((v) => !v)}
+          />
 
           <ChoiceGroup legend="상담 방식">
             {METHODS.map((m) => (

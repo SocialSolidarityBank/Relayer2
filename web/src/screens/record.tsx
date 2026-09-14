@@ -106,6 +106,8 @@ export function RecordScreen({ caseId }: { caseId: number }) {
   // 예정 회차가 없을 때 이 자리에서 바로 적는 일시·상담 방식.
   const [heldAt, setHeldAt] = useState(localNow());
   const [method, setMethod] = useState<NewSessionInput['method']>('in_person');
+  // 종결 상담(요구 5). 일정에서 미리 골랐으면 이어받고, 여기서 바꿀 수도 있다.
+  const [isClosing, setIsClosing] = useState(false);
   const [outcomes, setOutcomes] = useState<Record<number, OutcomeInput>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -117,7 +119,9 @@ export function RecordScreen({ caseId }: { caseId: number }) {
       setView(v);
       setOverallGoal(v.case.overall_goal ?? '');
       // 기록 대상은 다가오는 예정 회차다. 상담 일정 등록이 곧 그 회차를 만든다.
-      setPlace(v.sessions.filter((s) => s.status === 'planned').sort((a, b2) => a.seq - b2.seq)[0]?.place ?? '');
+      const planned = v.sessions.filter((s) => s.status === 'planned').sort((a, b2) => a.seq - b2.seq)[0];
+      setPlace(planned?.place ?? '');
+      setIsClosing(planned?.is_closing ?? false);
     })();
   }, [caseId]);
 
@@ -149,11 +153,13 @@ export function RecordScreen({ caseId }: { caseId: number }) {
             scheduled_at: new Date(heldAt).toISOString(),
             method,
             place: inPerson && place ? place : undefined,
+            is_closing: isClosing,
           })
         ).session_id;
 
       await recordSession(sessionId, {
         held_at: new Date(heldAt).toISOString(),
+        is_closing: isClosing,
         memo,
         place: inPerson && place ? place : undefined,
         next_goal_text: nextGoal.trim() || null,
@@ -166,7 +172,7 @@ export function RecordScreen({ caseId }: { caseId: number }) {
         ],
         outcomes: Object.values(outcomes),
       });
-      window.location.hash = `#/cases/${caseId}/briefing`;
+      window.location.hash = isClosing ? `#/cases/${caseId}/close` : `#/cases/${caseId}/briefing`;
     } catch (e) {
       setError(e instanceof Error ? e.message : '저장하지 못했어요.');
     } finally {
@@ -364,6 +370,16 @@ export function RecordScreen({ caseId }: { caseId: number }) {
             </Field>
           </Card>
 
+          <Card title="종결 상담">
+            <Choice
+              type="checkbox"
+              label="이번이 마지막 상담이에요"
+              hint="저장하면 상담 종결 화면으로 이어져요. 저장에 실패하면 사례를 닫지 않아요."
+              checked={isClosing}
+              onChange={() => setIsClosing((v) => !v)}
+            />
+          </Card>
+
           <FormActions>
             {error && <ErrorText>{error}</ErrorText>}
             <Button
@@ -371,7 +387,7 @@ export function RecordScreen({ caseId }: { caseId: number }) {
               disabled={!memo.trim() || (!session && !heldAt) || saving}
               onClick={() => void save()}
             >
-              {saving ? '저장 중…' : '저장'}
+              {saving ? '저장 중…' : isClosing ? '저장하고 종결로' : '저장'}
             </Button>
           </FormActions>
         </main>

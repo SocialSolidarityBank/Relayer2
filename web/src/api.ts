@@ -26,7 +26,15 @@ export type Briefing = {
 export type CaseView = {
   case: { id: number; program_name: string; overall_goal: string | null };
   pseudonym: string;
-  sessions: Array<{ id: number; seq: number; status: string; method: string | null; place: string | null; scheduled_at: string | null }>;
+  sessions: Array<{
+    id: number;
+    seq: number;
+    status: string;
+    method: string | null;
+    place: string | null;
+    scheduled_at: string | null;
+    is_closing: boolean;
+  }>;
 };
 
 /** 401 은 로그인 만료다. 화면이 각자 처리하지 않고 한 곳에서 구분한다. */
@@ -130,6 +138,7 @@ export type OutcomeInput = {
 
 export type RecordInput = {
   held_at?: string;
+  is_closing?: boolean;
   memo: string;
   place?: string;
   next_goal_text?: string | null;
@@ -163,6 +172,7 @@ export const createCase = (body: NewCaseInput) =>
   });
 
 export type NewSessionInput = {
+  is_closing?: boolean;
   scheduled_at: string;
   method: 'in_person' | 'phone' | 'video' | 'visit';
   place?: string;

@@ -88,6 +88,7 @@ app.post('/cases/:id/sessions', async (c) => {
       method: z.enum(['in_person', 'phone', 'video', 'visit']),
       place: z.string().optional(),
       plan_memo: z.string().optional(),
+      is_closing: z.boolean().optional(),
     })
     .parse(await c.req.json());
   if (body.place && body.method !== 'in_person') {
@@ -112,6 +113,7 @@ app.patch('/sessions/:id', async (c) => {
       overall_goal: z.string().nullable().optional(),
       cards: z.array(cardInput).optional(),
       outcomes: z.array(outcomeInput).optional(),
+      is_closing: z.boolean().optional(),
     })
     .parse(await c.req.json());
   return c.json(await service.recordSession(Number(c.req.param('id')), { ...body, actorId: c.get('actor').id }));

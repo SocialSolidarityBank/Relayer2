@@ -76,15 +76,21 @@ export async function saveIntake(
 /** 상담 일정 등록. 예정 회차 1건. 메모는 카드가 아니다(요구 4). */
 export async function planSession(
   caseId: number,
-  input: { scheduled_at: string; method: string; place?: string | null; plan_memo?: string | null },
+  input: {
+    scheduled_at: string;
+    method: string;
+    place?: string | null;
+    plan_memo?: string | null;
+    is_closing?: boolean;
+  },
 ): Promise<{ session_id: number; seq: number }> {
   return await sql.begin(async (tx) => {
     const [{ seq }] = await tx<{ seq: number }[]>`
       select coalesce(max(seq), 0) + 1 as seq from sessions where case_id = ${caseId}`;
     const [s] = await tx<{ id: number }[]>`
-      insert into sessions (case_id, seq, kind, status, scheduled_at, method, place, plan_memo)
+      insert into sessions (case_id, seq, kind, status, scheduled_at, method, place, plan_memo, is_closing)
       values (${caseId}, ${seq}, 'regular', 'planned', ${input.scheduled_at}, ${input.method},
-              ${input.place ?? null}, ${input.plan_memo ?? null})
+              ${input.place ?? null}, ${input.plan_memo ?? null}, ${input.is_closing ?? false})
       returning id`;
     return { session_id: s.id, seq };
   });
@@ -109,6 +115,7 @@ export async function recordSession(
     cards?: NewCardInput[];
     outcomes?: OutcomeSubmission[];
     actorId?: number;
+    is_closing?: boolean;
   },
 ): Promise<{ session_id: number; unchecked: number }> {
   return await sql.begin(async (tx) => {
@@ -128,6 +135,7 @@ export async function recordSession(
         detail = ${tx.json(input.detail ?? {})},
         next_goal_text = ${input.next_goal_text ?? null},
         created_by = coalesce(created_by, ${input.actorId ?? null}),
+        is_closing = ${input.is_closing ?? false},
         today_goal_text = coalesce(today_goal_text, ${carry?.text ?? null}),
         today_goal_from_session_id = coalesce(today_goal_from_session_id, ${carry?.fromSessionId ?? null})
       where id = ${sessionId}`;

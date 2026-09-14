@@ -96,12 +96,15 @@ export function Choice({
   type,
   name,
   label,
+  hint,
   checked,
   onChange,
 }: {
   type: 'radio' | 'checkbox';
-  name: string;
+  /** 라디오는 묶음 이름이 있어야 한다. 홀로 선 체크상자는 없어도 된다. */
+  name?: string;
   label: string;
+  hint?: string;
   checked: boolean;
   onChange: () => void;
 }) {
@@ -114,7 +117,10 @@ export function Choice({
         checked={checked}
         onChange={onChange}
       />
-      <span className="wire-choice-text">{label}</span>
+      <span className="wire-choice-text">
+        {label}
+        {hint && <span className="wire-choice-hint">{hint}</span>}
+      </span>
     </label>
   );
 }

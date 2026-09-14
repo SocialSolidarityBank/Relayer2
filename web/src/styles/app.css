@@ -25,3 +25,5 @@ body { margin: 0; }
 .info-tabs .wire-step { cursor: pointer; }
 .info-tabs .wire-step[aria-selected="true"] { border-color: var(--ink); background: var(--ink); color: var(--on-badge); }
 .info-original { margin: var(--space-2) 0 0; padding: var(--space-3); border-radius: var(--radius-md); background: var(--panel-alt, var(--panel)); color: var(--ink); white-space: pre-wrap; }
+
+.wire-choice-hint { display: block; margin-top: var(--space-1); font-size: var(--text-sm); font-weight: 400; color: var(--sub); }
