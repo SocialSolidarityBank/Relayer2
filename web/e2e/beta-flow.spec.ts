@@ -11,7 +11,15 @@ const NEXT_GOAL = '내역서를 함께 본다';
 const OVERALL_GOAL = '연체를 정리하고 생활을 안정시킨다';
 
 test('등록부터 15초 다시보기까지 한 바퀴', async ({ page }) => {
+  // ── 로그인 ──────────────────────────────────────────────────
+  // 로그인하지 않으면 어떤 화면도 열리지 않는다. 계정은 시드가 만든다.
+  await page.goto('/');
+  await page.locator('#email').fill('worker@relayer.test');
+  await page.locator('#password').fill(process.env.SEED_PASSWORD ?? 'relayer-beta');
+  await page.getByRole('button', { name: '로그인' }).click();
+
   // ── 당사자 등록 ─────────────────────────────────────────────
+  await expect(page.getByRole('heading', { name: '당사자 등록' })).toBeVisible();
   await page.goto('/#/participants/new');
   await page.locator('#name').fill(NAME);
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();

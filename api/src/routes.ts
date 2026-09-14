@@ -1,6 +1,7 @@
 // 라우터 하나, 검증 한 곳. 베타 API 6개(PLAN §5).
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { actorFromCookie, clearCookie, issueCookie, login, type Actor } from './auth.ts';
 import * as service from './service.ts';
 
 const area = z.enum([
@@ -24,9 +25,32 @@ const outcomeInput = z.object({
   note: z.string().optional(),
 });
 
-export const app = new Hono();
+export const app = new Hono<{ Variables: { actor: Actor } }>();
 
 app.get('/health', (c) => c.json({ ok: true }));
+
+app.post('/auth/login', async (c) => {
+  const body = z.object({ email: z.string().min(1), password: z.string().min(1) }).parse(await c.req.json());
+  const actor = await login(body.email, body.password);
+  if (!actor) return c.json({ error: '이메일이나 비밀번호가 맞지 않아요.' }, 401);
+  c.header('set-cookie', issueCookie(actor.id));
+  return c.json(actor);
+});
+
+app.post('/auth/logout', (c) => {
+  c.header('set-cookie', clearCookie());
+  return c.json({ ok: true });
+});
+
+// 여기부터는 로그인한 사람만. 실패는 401 하나로 답한다(무엇이 있는지 알려주지 않는다).
+app.use('*', async (c, next) => {
+  const actor = await actorFromCookie(c.req.header('cookie'));
+  if (!actor) return c.json({ error: '로그인이 필요해요.' }, 401);
+  c.set('actor', actor);
+  await next();
+});
+
+app.get('/me', (c) => c.json(c.get('actor')));
 
 app.post('/cases', async (c) => {
   const body = z
@@ -90,7 +114,7 @@ app.patch('/sessions/:id', async (c) => {
       outcomes: z.array(outcomeInput).optional(),
     })
     .parse(await c.req.json());
-  return c.json(await service.recordSession(Number(c.req.param('id')), body));
+  return c.json(await service.recordSession(Number(c.req.param('id')), { ...body, actorId: c.get('actor').id }));
 });
 
 app.get('/cases/:id/briefing', async (c) => {

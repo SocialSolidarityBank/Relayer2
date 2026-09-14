@@ -107,6 +107,7 @@ export async function recordSession(
     overall_goal?: string | null;
     cards?: NewCardInput[];
     outcomes?: OutcomeSubmission[];
+    actorId?: number;
   },
 ): Promise<{ session_id: number; unchecked: number }> {
   return await sql.begin(async (tx) => {
@@ -125,6 +126,7 @@ export async function recordSession(
         place = ${input.place ?? target.place},
         detail = ${tx.json(input.detail ?? {})},
         next_goal_text = ${input.next_goal_text ?? null},
+        created_by = coalesce(created_by, ${input.actorId ?? null}),
         today_goal_text = coalesce(today_goal_text, ${carry?.text ?? null}),
         today_goal_from_session_id = coalesce(today_goal_from_session_id, ${carry?.fromSessionId ?? null})
       where id = ${sessionId}`;

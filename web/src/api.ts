@@ -29,14 +29,26 @@ export type CaseView = {
   sessions: Array<{ id: number; seq: number; status: string; method: string | null; place: string | null; scheduled_at: string | null }>;
 };
 
+/** 401 은 로그인 만료다. 화면이 각자 처리하지 않고 한 곳에서 구분한다. */
+export class Unauthorized extends Error {}
+
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     ...init,
+    credentials: 'same-origin',
     headers: init?.body ? { 'content-type': 'application/json' } : undefined,
   });
+  if (res.status === 401) throw new Unauthorized('로그인이 필요해요.');
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `${res.status}`);
   return (await res.json()) as T;
 }
+
+export type Me = { id: number; name: string; role: 'worker' | 'admin' };
+
+export const getMe = () => json<Me>('/me');
+export const login = (email: string, password: string) =>
+  json<Me>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+export const logout = () => json<{ ok: true }>('/auth/logout', { method: 'POST' });
 
 export const getBriefing = (caseId: number) => json<Briefing>(`/cases/${caseId}/briefing`);
 export const getCase = (caseId: number) => json<CaseView>(`/cases/${caseId}`);

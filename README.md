@@ -13,10 +13,10 @@
 ```bash
 pnpm install
 docker compose up -d                               # Postgres 17 (localhost:55432)
-echo "PII_ENC_KEY=$(openssl rand -base64 32)" > .env
+printf 'PII_ENC_KEY=%s\nSESSION_SECRET=%s\n' "$(openssl rand -base64 32)" "$(openssl rand -base64 32)" > .env
 set -a && . ./.env && set +a
 node api/src/migrate.ts                            # 스키마 적용 (--check 로 미적용 여부만 확인)
-node api/src/seed.ts                               # 합성 사례 1건
+node api/src/seed.ts                               # 합성 사례 1건 + 시험 계정 2개
 node api/src/index.ts                              # API  http://localhost:8787
 pnpm --dir web exec vite                           # 화면 http://localhost:5173
 pnpm --dir api exec vitest run                     # 조립 로직 단위 테스트
@@ -36,6 +36,8 @@ open http://localhost:5173/               # 손으로 볼 때는 당사자 등�
 
 E2E는 실행할 때마다 새 합성 당사자를 만들어 이전 데이터에 기대지 않는다.
 
+시험 계정은 시드가 만든다: `worker@relayer.test` · `admin@relayer.test`, 비밀번호는 `SEED_PASSWORD`(기본 `relayer-beta`). **합성 데이터 전용**이며 실데이터 전환(P1) 때는 계정과 비밀번호 정책을 다시 정한다.
+
 **관문 2 (사람)** — 실무자 1명이 도움 없이 합성 사례 2회차를 기록했을 때, 필수 입력 수와 소요 시간이 현행 CCC 베타보다 늘지 않고 다음 상담에도 쓰겠다고 답한다.
 
 ## 지금 있는 것
@@ -49,7 +51,7 @@ E2E는 실행할 때마다 새 합성 당사자를 만들어 이전 데이터에
 | 화면 5개: 당사자 등록 · 인테이크 작성하기 · 상담 일정 등록 · 상담 기록하기 · 15초 다시보기 | 있음 (Vite React SPA, 이식 CSS 1,831줄 + 질문지 423줄) |
 | 관문 1 E2E | 있음 (`web/e2e/beta-flow.spec.ts`) |
 | 디자인(라벨·위계·컴포넌트 계약) | 미적용 — M2.5에서 한 번에 |
-| 로그인 | 없음 — M3 |
+| 로그인 | 있음 (Argon2id + HMAC 서명 httpOnly 쿠키) |
 | AI·STT | 범위 밖 (P3·P4) |
 
 베타는 **합성 자료만** 쓴다. 실제 당사자 자료를 넣으려면 동의·열람 기록·자유 글 암호화·백업이 먼저다(`PLAN.md` P1).

@@ -1,5 +1,6 @@
 // 합성 사례 1건. 베타 완료 판정 흐름을 그대로 따라간다.
 // 당사자 등록 → 인테이크 작성하기 → 상담 일정 등록 → 2회차 상담 기록하기 → 3회차 상담 일정 등록.
+import { hashPassword } from './auth.ts';
 import { sql } from './db.ts';
 import { createCase, planSession, recordSession, saveIntake } from './service.ts';
 
@@ -7,6 +8,13 @@ const day = (offset: number): string =>
   new Date(Date.now() + offset * 86_400_000).toISOString();
 
 await sql`truncate participants, support_cases restart identity cascade`;
+
+// 베타 시험 계정. 합성 데이터 전용이며 실제 당사자 자료에는 쓰지 않는다.
+const BETA_PASSWORD = process.env.SEED_PASSWORD ?? 'relayer-beta';
+await sql`delete from users where email in ('worker@relayer.test', 'admin@relayer.test')`;
+await sql`insert into users (email, password_hash, name, role) values
+  ('worker@relayer.test', ${await hashPassword(BETA_PASSWORD)}, '시험 실무자', 'worker'),
+  ('admin@relayer.test', ${await hashPassword(BETA_PASSWORD)}, '시험 관리자', 'admin')`;
 
 const created = await createCase({
   name: '김민희',
@@ -40,8 +48,8 @@ await recordSession(second.session_id, {
   next_goal_text: '채무 조정 서류 준비 상황을 함께 확인한다',
   cards: [
     { kind: 'promise', text: '채무 조정 서류 떼어 오기', section: 'promise', area: 'economy' },
-    { kind: 'question', text: '간병 부담을 나눌 가족이 있는지', section: 'question', area: 'care' },
-    { kind: 'fact', text: '주거는 변동 없음', section: 'change', area: 'housing' },
+    { kind: 'question', text: '간병 부담을 나눌 가족이 있는지', section: 'question', area: 'family' },
+    { kind: 'fact', text: '주거는 변동 없음', section: 'change', area: 'living_env' },
     { kind: 'judgment', text: '약속한 서류 제출이 두 번 미뤄짐', section: 'judgment', risk_type: '약속 불이행' },
   ],
   outcomes: [
@@ -58,7 +66,12 @@ const third = await planSession(created.case_id, {
 
 console.log(
   JSON.stringify(
-    { case_id: created.case_id, pseudonym: created.pseudonym, sessions: [1, second.seq, third.seq] },
+    {
+      case_id: created.case_id,
+      pseudonym: created.pseudonym,
+      sessions: [1, second.seq, third.seq],
+      login: { email: 'worker@relayer.test', password: BETA_PASSWORD },
+    },
     null,
     2,
   ),

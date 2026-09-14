@@ -14,3 +14,7 @@ body { margin: 0; }
   text-decoration: none;
 }
 .app-nav a:hover { color: var(--ink); text-decoration: underline; }
+
+.app-nav-me { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); color: var(--sub); font-size: var(--text-sm); }
+.app-nav-logout { border: 0; background: none; padding: 0; color: var(--sub); font: inherit; text-decoration: underline; cursor: pointer; }
+.app-nav-logout:hover { color: var(--ink); }

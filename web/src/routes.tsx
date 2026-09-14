@@ -1,7 +1,10 @@
-// 베타 라우팅. 화면이 넷이라 라우터 의존성을 두지 않는다.
+// 베타 라우팅. 화면이 다섯이라 라우터 의존성을 두지 않는다.
+// 로그인하지 않았으면 어떤 화면도 열지 않는다.
 import { useEffect, useState } from 'react';
+import { getMe, logout, Unauthorized, type Me } from './api.ts';
 import { BriefingScreen } from './screens/briefing.tsx';
 import { IntakeScreen } from './screens/intake.tsx';
+import { LoginScreen } from './screens/login.tsx';
 import { ParticipantNewScreen } from './screens/participant-new.tsx';
 import { RecordScreen } from './screens/record.tsx';
 import { ScheduleNewScreen } from './screens/schedule-new.tsx';
@@ -10,11 +13,22 @@ const HOME = '#/participants/new';
 
 export function Routes() {
   const [hash, setHash] = useState(window.location.hash || HOME);
+  const [me, setMe] = useState<Me | null | 'loading'>('loading');
+
   useEffect(() => {
     const onChange = () => setHash(window.location.hash || HOME);
     window.addEventListener('hashchange', onChange);
     return () => window.removeEventListener('hashchange', onChange);
   }, []);
+
+  useEffect(() => {
+    void getMe()
+      .then(setMe)
+      .catch((e) => setMe(e instanceof Unauthorized ? null : null));
+  }, []);
+
+  if (me === 'loading') return <p className="empty">불러오는 중이에요.</p>;
+  if (!me) return <LoginScreen onDone={() => void getMe().then(setMe)} />;
 
   const screen = (() => {
     if (hash === HOME) return <ParticipantNewScreen />;
@@ -46,6 +60,16 @@ export function Routes() {
             <a href={`#/cases/${caseId}/schedule`}>상담 일정 등록</a>
           </>
         )}
+        <span className="app-nav-me">
+          {me.name}
+          <button
+            type="button"
+            className="app-nav-logout"
+            onClick={() => void logout().then(() => setMe(null))}
+          >
+            로그아웃
+          </button>
+        </span>
       </nav>
       {screen}
     </>
