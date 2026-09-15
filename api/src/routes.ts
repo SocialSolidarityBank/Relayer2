@@ -84,8 +84,15 @@ app.post('/auth/logout', (c) => {
 /** 당사자 열람은 로그인 없이 연다. 대신 링크와 코드 두 자물쇠를 통과해야 한다. */
 const isParticipantGate = (path: string): boolean => path === '/access/open';
 
+/**
+ * 화면으로 들어오는 주소. 여기 없는 확장자 없는 경로는 전부 API 로 본다.
+ * `/test` 는 관문 2 측정용 입구다 — 참가자에게 `relayer.kr/test` 한 줄만 주면 된다.
+ * 목록으로 두는 이유: 아무 경로나 화면으로 열면 API 오타가 404 대신 화면을 뱉어 원인을 못 찾는다.
+ */
+const WEB_ENTRIES = new Set(['/', '/test']);
+
 const isWebAsset = (path: string): boolean =>
-  path === '/' || path.startsWith('/assets/') || /\.[a-z0-9]+$/i.test(path);
+  WEB_ENTRIES.has(path) || path.startsWith('/assets/') || /\.[a-z0-9]+$/i.test(path);
 
 // 여기부터는 로그인한 사람만. 실패는 401 하나로 답한다(무엇이 있는지 알려주지 않는다).
 app.use('*', async (c, next) => {
