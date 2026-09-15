@@ -27,3 +27,7 @@ body { margin: 0; }
 .info-original { margin: var(--space-2) 0 0; padding: var(--space-3); border-radius: var(--radius-md); background: var(--panel-alt, var(--panel)); color: var(--ink); white-space: pre-wrap; }
 
 .wire-choice-hint { display: block; margin-top: var(--space-1); font-size: var(--text-sm); font-weight: 400; color: var(--sub); }
+
+/* 라벨 행이 없는 반복 입력. 이식 CSS 의 버튼 내림값(라벨 행 + 간격)은 라벨이 있을 때 값이다. */
+.wire-field-with-action[data-no-label='true'] { align-items: center; }
+.wire-field-with-action[data-no-label='true'] > .wire-repeat-actions { margin-top: 0; }

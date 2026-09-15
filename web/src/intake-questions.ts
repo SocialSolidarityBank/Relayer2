@@ -106,11 +106,12 @@ export const STEP1_GROUPS: readonly IntakeQuestionGroup[] = [
     questions: [
       {
         key: 'application_reason',
-        label: '상담을 신청한 주된 사유는 무엇인가요?',
-        kind: 'select',
+        label: '상담을 신청한 사유',
+        kind: 'multi',
+        // `복합적인 어려움`을 뺐다 — 여러 개를 고를 수 있으면 그것이 곧 복합이다.
         options: [
           '경제·생계 어려움', '부채·연체 문제', '일자리·소득 불안정', '주거 문제', '건강·의료 문제',
-          '심리·정서 어려움', '가족·관계 문제', '돌봄 부담', '법률·행정 문제', '복합적인 어려움',
+          '심리·정서 어려움', '가족·관계 문제', '돌봄 부담', '법률·행정 문제',
           '기타', NO_RESPONSE_OPTION,
         ],
       },

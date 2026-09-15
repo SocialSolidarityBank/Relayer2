@@ -165,24 +165,30 @@ export function LineList({
           </select>
         </Field>
       )}
-      <div className="wire-field-with-action">
-        <Field label={label} htmlFor={`${id}-input`}>
-          <input
-            id={`${id}-input`}
-            type="text"
-            aria-label={label}
-            placeholder={placeholder}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                add();
-              }
-            }}
-          />
-        </Field>
-        <Button onClick={add}>추가</Button>
+      {/* 입력칸과 버튼은 한 행이다(DESIGN-RULES §3: 번호 없이 입력칸·버튼 순서로 가로 배치).
+          라벨은 카드 제목이 이미 말하므로 행마다 반복하지 않고 접근성 이름으로만 남긴다. */}
+      <div className="wire-field-with-action" data-no-label="true">
+        <div className="wire-form-field">
+          <div className="wire-input-box" data-control="input">
+            <input
+              id={`${id}-input`}
+              type="text"
+              aria-label={label}
+              placeholder={placeholder}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  add();
+                }
+              }}
+            />
+          </div>
+        </div>
+        <div className="wire-repeat-actions">
+          <Button onClick={add}>추가</Button>
+        </div>
       </div>
       {lines.map((line, i) => (
         <div className="wire-repeat-card" key={`${line.text}-${i}`}>
