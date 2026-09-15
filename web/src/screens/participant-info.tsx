@@ -29,7 +29,32 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
   const [openIds, setOpenIds] = useState<number[]>([]);
   const done = detail.sessions.filter((s) => s.status === 'done');
 
-  if (done.length === 0) return <Card title="회차별 요약"><Empty>아직 기록한 상담이 없어요.</Empty></Card>;
+  // 아직 아무 기록이 없으면 **여기서 바로 시작할 수 있어야 한다.**
+  // 빈 화면만 보여 주고 어디로 가라는 말이 없으면 위 메뉴를 뒤지게 된다.
+  if (done.length === 0) {
+    const hasIntake = detail.sessions.some((s) => s.kind === 'intake');
+    return (
+      <Card title="회차별 요약">
+        <Empty>아직 기록한 상담이 없어요.</Empty>
+        <FormActions>
+          {!hasIntake && (
+            <Button
+              variant="primary"
+              onClick={() => (window.location.hash = `#/cases/${caseId}/intake`)}
+            >
+              인테이크 작성하기
+            </Button>
+          )}
+          <Button onClick={() => (window.location.hash = `#/cases/${caseId}/record`)}>
+            상담 기록하기
+          </Button>
+          <Button onClick={() => (window.location.hash = `#/cases/${caseId}/schedule`)}>
+            상담 일정 등록
+          </Button>
+        </FormActions>
+      </Card>
+    );
+  }
 
   return (
     <>
