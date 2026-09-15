@@ -17,7 +17,8 @@ import type { Card, Session } from './domain/types.ts';
  */
 const PROVIDER = (process.env.AI_PROVIDER ?? 'openai') as AiProviderId;
 // gemini-2.5-flash 는 신규 사용자에게 닫혔다(2026-09-15 실측 404). 별칭을 쓴다.
-const MODEL = process.env.AI_MODEL ?? (PROVIDER === 'gemini' ? 'gemini-flash-latest' : 'gpt-5-mini');
+// openai 는 gpt-5.4-nano — 9개 모델을 재 보고 골랐다(SPEC.md §15-4).
+const MODEL = process.env.AI_MODEL ?? (PROVIDER === 'gemini' ? 'gemini-flash-latest' : 'gpt-5.4-nano');
 
 export type Draft = {
   id: number;
@@ -92,8 +93,8 @@ async function callOpenAi(prompt: string): Promise<Shape> {
     body: JSON.stringify({
       model: MODEL,
       // 추론을 길게 돌릴 일이 아니다. 적힌 말을 정리할 뿐이다.
-      // 실측(2026-09-15): minimal 5.5초 · low 8.2초 · medium 16.7초. 실무자가 기다릴 시간이 아니다.
-      reasoning: { effort: 'minimal' },
+      // gpt-5.4 이상은 'minimal' 을 받지 않는다. 'none' 이 같은 자리다.
+      reasoning: { effort: MODEL.startsWith('gpt-5.') ? 'none' : 'minimal' },
       input: [
         { role: 'system', content: SYSTEM },
         { role: 'user', content: prompt },
