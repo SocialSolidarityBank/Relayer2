@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# Infisical `prod:/RELAYER2` 의 값을 이 기기의 `.env` 로 내려받는다(600).
-# 값은 화면에 찍지 않는다. 이름과 건수만 낸다.
+# Infisical `prod:/RELAYER2` 의 값을 이 기기의 `.env`(600) 로 내려받는다.
+# 값은 화면에 찍지 않는다. 새 기기를 붙일 때 쓴다 — 키를 사람 손으로 옮기지 않기 위한 절차다.
 #
-#   ./scripts/pull-secrets.sh
-#
-# 새 기기를 붙일 때 쓴다. 키를 사람 손으로 옮기지 않기 위한 절차다.
+# 읽기도 Machine Identity 로 한다. project access token 의 스코프는 루트뿐이라
+# `/RELAYER2` 를 읽지 못한다(2026-09-15 실측).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 umask 077
@@ -12,28 +11,12 @@ umask 077
 opsvc="$HOME/.dotfiles/scripts/opsvc"
 [ -x "$opsvc" ] || { echo "opsvc 가 없다: $opsvc"; exit 1; }
 
-INFISICAL_TOKEN="$(OP_BIOMETRIC_UNLOCK_ENABLED=false "$opsvc" item get 'Infisical · account@ggbss.or.kr' \
-  --vault BSS --fields label=ggbss_project_access_token --reveal)"
-[ -n "$INFISICAL_TOKEN" ] || { echo "Infisical 토큰을 읽지 못했다"; exit 1; }
-export INFISICAL_TOKEN
+CLIENT_ID="$(OP_BIOMETRIC_UNLOCK_ENABLED=false "$opsvc" item get 'Infisical · account@ggbss.or.kr' \
+  --vault BSS --fields label=ggbss_client_ID --reveal)"
+CLIENT_SECRET="$(OP_BIOMETRIC_UNLOCK_ENABLED=false "$opsvc" item get 'Infisical · account@ggbss.or.kr' \
+  --vault BSS --fields label=ggbss_client_secret --reveal)"
+[ -n "$CLIENT_ID" ] && [ -n "$CLIENT_SECRET" ] || { echo "자격증명을 읽지 못했다"; exit 1; }
 
-tmp="$(mktemp -t relayer-env)"
-trap 'rm -f "$tmp"' EXIT
-
-# `infisical run` 이 값을 자식 환경에만 넣는다. 자식이 필요한 세 개만 파일로 적는다.
-infisical run --env=prod --path=/RELAYER2 --silent -- sh -c '
-  for k in DATABASE_URL PII_ENC_KEY SESSION_SECRET; do
-    eval "v=\$$k"
-    [ -n "$v" ] && printf "%s=%s\n" "$k" "$v"
-  done
-' > "$tmp"
-
-count="$(wc -l < "$tmp" | tr -d ' ')"
-[ "$count" = "3" ] || { echo "받은 값이 3개가 아니다: ${count}개"; exit 1; }
-
-printf 'PORT=%s\n' "${PORT:-8790}" >> "$tmp"
-mv "$tmp" .env
-chmod 600 .env
-trap - EXIT
-
-echo ".env 작성: $(cut -d= -f1 .env | tr '\n' ' ')"
+CLIENT_ID="$CLIENT_ID" CLIENT_SECRET="$CLIENT_SECRET" \
+PROJECT_ID="a7c44b37-a885-4c62-98cd-cbc8a9810de9" SECRET_PATH="/RELAYER2" \
+PORT="${PORT:-8790}" python3 scripts/infisical_get.py
