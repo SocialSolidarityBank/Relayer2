@@ -42,6 +42,23 @@ export function Routes() {
       .catch((e) => setMe(e instanceof Unauthorized ? null : null));
   }, []);
 
+  /**
+   * 사례 메뉴는 **마지막으로 연 사례**를 계속 가리킨다.
+   *
+   * 주소에서만 읽으면 일정 화면에서 메뉴가 사라졌다가 사례에 들어가면 다섯 개가 튀어나온다.
+   * 실무자에게는 메뉴가 불안정한 것으로 읽히고, 무엇보다 **사례로 돌아갈 길이 없다**
+   * (`PLAN.md` §3 즉석 기록 항목이 남긴 자리).
+   *
+   * 기억은 화면 안에서만 산다. 새로 고치면 지워진다 — 어느 당사자를 보고 있었는지가
+   * 기기에 남을 이유가 없다. 훅은 조건부 return 앞에 둔다.
+   */
+  const fromHash = hash.match(/^#\/cases\/(\d+)\//)?.[1];
+  const [lastCase, setLastCase] = useState<string | undefined>(fromHash);
+  useEffect(() => {
+    if (fromHash) setLastCase(fromHash);
+  }, [fromHash]);
+  const caseId = fromHash ?? lastCase;
+
   // 당사자 열람은 로그인 앞에 선다. 링크와 코드로만 열리고, 실무자 화면과 섞이지 않는다.
   const asParticipant = hash.match(/^#\/access\/([A-Za-z0-9_-]+)$/);
   if (asParticipant) return <AccessScreen token={asParticipant[1]} />;
@@ -77,7 +94,6 @@ export function Routes() {
     return null;
   })();
 
-  const caseId = hash.match(/^#\/cases\/(\d+)\//)?.[1];
 
   return (
     <>
