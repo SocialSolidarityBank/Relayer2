@@ -11,7 +11,15 @@ import {
   type ConsentStatus,
 } from './consent.ts';
 import { sql } from './db.ts';
-import { decryptPii, encryptPii, KEY_VERSION } from './pii.ts';
+import {
+  decryptJson,
+  decryptPii,
+  decryptText,
+  encryptJson,
+  encryptPii,
+  encryptText,
+  KEY_VERSION,
+} from './pii.ts';
 import { buildBriefing, type Briefing } from './domain/briefing.ts';
 import { openCards, resolveOutcomes, type OutcomeSubmission } from './domain/cards.ts';
 import { carryOverOnRecord } from './domain/goals.ts';
@@ -89,17 +97,23 @@ export async function getIntake(caseId: number): Promise<IntakeView | null> {
   const [session] = await sql<Array<{ id: number; memo: string | null; detail: Record<string, unknown> }>>`
     select id, memo, detail from sessions where case_id = ${caseId} and kind = 'intake'`;
   if (!session) {
-    return { session_id: null, memo: null, detail: {}, overall_goal: supportCase.overall_goal, cards: [] };
+    return {
+      session_id: null,
+      memo: null,
+      detail: {},
+      overall_goal: decryptText(supportCase.overall_goal),
+      cards: [],
+    };
   }
   const cards = await sql<Array<{ kind: string; text: string; locked: boolean }>>`
     select c.kind, c.text, exists (select 1 from card_outcomes o where o.card_id = c.id) as locked
     from cards c where c.source_session_id = ${session.id} order by c.id`;
   return {
     session_id: session.id,
-    memo: session.memo,
-    detail: session.detail ?? {},
-    overall_goal: supportCase.overall_goal,
-    cards,
+    memo: decryptText(session.memo),
+    detail: decryptJson(session.detail),
+    overall_goal: decryptText(supportCase.overall_goal),
+    cards: cards.map((c) => ({ ...c, text: decryptText(c.text) ?? '' })),
   };
 }
 
@@ -123,8 +137,8 @@ export async function saveIntake(
       sessionId = intake.id;
       await tx`
         update sessions set
-          memo = ${input.memo ?? null},
-          detail = ${tx.json(input.detail ?? {})}
+          memo = ${encryptText(input.memo)},
+          detail = ${tx.json(encryptJson(input.detail))}
         where id = ${sessionId}`;
     } else {
       const [other] = await tx<{ id: number }[]>`
@@ -133,7 +147,7 @@ export async function saveIntake(
       const [created] = await tx<{ id: number }[]>`
         insert into sessions (case_id, seq, kind, status, held_at, memo, detail)
         values (${caseId}, 1, 'intake', 'done', ${input.held_at ?? new Date().toISOString()},
-                ${input.memo ?? null}, ${tx.json(input.detail ?? {})})
+                ${encryptText(input.memo)}, ${tx.json(encryptJson(input.detail))})
         returning id`;
       sessionId = created.id;
     }
@@ -175,7 +189,7 @@ export async function planSession(
     const [s] = await tx<{ id: number }[]>`
       insert into sessions (case_id, seq, kind, status, scheduled_at, method, place, plan_memo, is_closing)
       values (${caseId}, ${seq}, 'regular', 'planned', ${input.scheduled_at}, ${input.method},
-              ${input.place ?? null}, ${input.plan_memo ?? null}, ${input.is_closing ?? false})
+              ${input.place ?? null}, ${encryptText(input.plan_memo)}, ${input.is_closing ?? false})
       returning id`;
     return { session_id: s.id, seq };
   });
@@ -231,14 +245,14 @@ export async function recordSession(
     await tx`update sessions set
         status = 'done',
         held_at = ${input.held_at ?? new Date().toISOString()},
-        memo = ${input.memo},
+        memo = ${encryptText(input.memo)},
         method = ${input.method ?? target.method},
         place = ${input.place ?? null},
         detail = ${tx.json(input.detail ?? {})},
-        next_goal_text = ${input.next_goal_text ?? null},
+        next_goal_text = ${encryptText(input.next_goal_text)},
         created_by = coalesce(created_by, ${input.actorId ?? null}),
         is_closing = ${input.is_closing ?? false},
-        today_goal_text = coalesce(today_goal_text, ${carry?.text ?? null}),
+        today_goal_text = coalesce(today_goal_text, ${encryptText(carry?.text)}),
         today_goal_from_session_id = coalesce(today_goal_from_session_id, ${carry?.fromSessionId ?? null})
       where id = ${sessionId}`;
     if (carry) {
@@ -268,7 +282,7 @@ export async function recordSession(
       const full = row as OutcomeSubmission & { result: string };
       await tx`insert into card_outcomes (card_id, session_id, result, follow, reason, note)
         values (${row.card_id}, ${sessionId}, ${row.result}, ${full.follow ?? null},
-                ${full.reason ?? null}, ${full.note ?? null})`;
+                ${encryptText(full.reason)}, ${encryptText(full.note)})`;
     }
     return { session_id: sessionId, unchecked: rows.filter((r) => r.result === 'unchecked').length };
   });
@@ -303,11 +317,14 @@ export type SessionRecord = {
 
 /** 저장해 둔 회차를 다시 연다. 고쳐 쓰기 화면의 재료다. */
 export async function getSessionRecord(sessionId: number): Promise<SessionRecord | null> {
-  const [target] = await sql<Session[]>`select * from sessions where id = ${sessionId}`;
-  if (!target) return null;
-  const loaded = await loadCase(target.case_id);
+  const [found] = await sql<Session[]>`select case_id from sessions where id = ${sessionId}`;
+  if (!found) return null;
+  const loaded = await loadCase(found.case_id);
   if (!loaded) return null;
   const { supportCase, sessions, cards, outcomes } = loaded;
+  // 자유 글은 loadCase 가 이미 평문으로 돌려놨다. 여기서 다시 select 하면 암호문을 화면에 보낸다.
+  const target = sessions.find((s) => s.id === sessionId);
+  if (!target) return null;
 
   const mine = outcomes.filter((o) => o.session_id === sessionId);
   const latestMine = (cardId: number) =>
@@ -357,12 +374,13 @@ export async function getSessionRecord(sessionId: number): Promise<SessionRecord
 async function setOverallGoal(tx: typeof sql, caseId: number, text: string | null): Promise<void> {
   const [current] = await tx<{ overall_goal: string | null }[]>`
     select overall_goal from support_cases where id = ${caseId}`;
-  if (current?.overall_goal === text) return;
+  // 같은지 견주려면 평문끼리 견줘야 한다 — 암호문은 같은 글이라도 매번 다르다(IV 가 다르다).
+  if (decryptText(current?.overall_goal ?? null) === text) return;
   await tx`update support_cases set
-      overall_goal = ${text},
+      overall_goal = ${encryptText(text)},
       overall_goal_source = ${text ? 'agreed' : null}
     where id = ${caseId}`;
-  await tx`insert into goal_revisions (case_id, text) values (${caseId}, ${text})`;
+  await tx`insert into goal_revisions (case_id, text) values (${caseId}, ${encryptText(text)})`;
 }
 
 async function insertCards(
@@ -372,9 +390,10 @@ async function insertCards(
   cards: NewCardInput[],
 ): Promise<void> {
   for (const card of cards) {
+    // 카드 본문은 사람이 쓴 문장이다. 평문으로 앉히지 않는다(P1).
     await tx`insert into cards (case_id, kind, text, area, risk_type, quote, source_session_id, source_section)
-      values (${caseId}, ${card.kind}, ${card.text}, ${card.area ?? null}, ${card.risk_type ?? null},
-              ${card.quote ?? null}, ${sessionId}, ${card.section})`;
+      values (${caseId}, ${card.kind}, ${encryptText(card.text)}, ${card.area ?? null}, ${card.risk_type ?? null},
+              ${encryptText(card.quote)}, ${sessionId}, ${card.section})`;
   }
 }
 
@@ -389,7 +408,26 @@ async function loadCase(caseId: number) {
   const cards = await sql<Card[]>`select * from cards where case_id = ${caseId} order by id`;
   const outcomes = await sql<CardOutcome[]>`
     select o.* from card_outcomes o join cards c on c.id = o.card_id where c.case_id = ${caseId}`;
-  return { supportCase, pseudonym: participant.pseudonym, vault, sessions, cards, outcomes };
+  // 자유 글은 여기 한 곳에서 평문으로 되돌린다. 아래 도메인 함수와 화면은 평문만 본다.
+  return {
+    supportCase: { ...supportCase, overall_goal: decryptText(supportCase.overall_goal) },
+    pseudonym: participant.pseudonym,
+    vault,
+    sessions: sessions.map((s) => ({
+      ...s,
+      memo: decryptText(s.memo),
+      plan_memo: decryptText(s.plan_memo),
+      today_goal_text: decryptText(s.today_goal_text),
+      next_goal_text: decryptText(s.next_goal_text),
+      detail: decryptJson(s.detail),
+    })),
+    cards: cards.map((c) => ({ ...c, text: decryptText(c.text) ?? '', quote: decryptText(c.quote) })),
+    outcomes: outcomes.map((o) => ({
+      ...o,
+      reason: decryptText(o.reason),
+      note: decryptText(o.note),
+    })),
+  };
 }
 
 export async function getCase(caseId: number) {
@@ -494,8 +532,9 @@ export async function getCaseDetail(caseId: number): Promise<CaseDetail | null> 
     select enc_name, enc_phone, enc_email from participant_pii
     where participant_id = ${supportCase.participant_id}`;
 
-  const revisions = await sql<Array<{ text: string | null; created_at: string }>>`
+  const revisionRows = await sql<Array<{ text: string | null; created_at: string }>>`
     select text, created_at from goal_revisions where case_id = ${caseId} order by created_at`;
+  const revisions = revisionRows.map((r) => ({ ...r, text: decryptText(r.text) }));
 
   // 상담 종결은 회차가 아니다. 회차별 요약에서 마지막 상담과 나란히 별도 항목으로 보인다(SPEC §4-3).
   const [closure] = await sql<Array<{ closed_at: string; close_reason: string; unfinished_note: string | null; last_session_id: number | null }>>`
@@ -528,8 +567,8 @@ export async function getCaseDetail(caseId: number): Promise<CaseDetail | null> 
     closure: closure
       ? {
           closed_at: closure.closed_at,
-          close_reason: closure.close_reason,
-          unfinished_note: closure.unfinished_note,
+          close_reason: decryptText(closure.close_reason) ?? '',
+          unfinished_note: decryptText(closure.unfinished_note),
           last_session_seq: sessions.find((s) => s.id === closure.last_session_id)?.seq ?? null,
         }
       : null,
@@ -550,8 +589,8 @@ export async function closeCase(
       select id from sessions where case_id = ${caseId} and status = 'done' order by seq desc limit 1`;
     const [row] = await tx<Array<{ closed_at: string }>>`
       insert into case_closures (case_id, last_session_id, close_reason, unfinished_note, created_by)
-      values (${caseId}, ${last?.id ?? null}, ${input.close_reason},
-              ${input.unfinished_note ?? null}, ${input.actorId ?? null})
+      values (${caseId}, ${last?.id ?? null}, ${encryptText(input.close_reason)},
+              ${encryptText(input.unfinished_note)}, ${input.actorId ?? null})
       on conflict (case_id) do update set case_id = excluded.case_id
       returning closed_at`;
     await tx`update support_cases set status = 'closed' where id = ${caseId}`;
@@ -623,6 +662,7 @@ export async function listSchedules(from: string, to: string): Promise<ScheduleR
     const open = loaded ? openCards(loaded.cards, loaded.outcomes, loaded.sessions) : [];
     out.push({
       ...row,
+      plan_memo: decryptText(row.plan_memo),
       name: decryptPii(enc_name),
       open_tasks: open.filter((c) => c.kind === 'promise').length,
       open_questions: open.filter((c) => c.kind === 'question').length,

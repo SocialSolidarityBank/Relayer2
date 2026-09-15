@@ -429,3 +429,37 @@ test('PII 를 본 조회가 열람 기록에 남고, 관리자만 본다', async
   await expect(log).toContainText('이름 · 연락처 · 이메일'); // 항목 이름만, 값은 없다
   await expect(log).not.toContainText('010-');
 });
+
+// P1 자유 글 암호화. 화면은 평문을 보지만 DB 에는 암호문이 앉는다.
+// (DB 확인은 api/test/pii.test.ts 와 scripts/check-encryption.sh 가 맡는다. 여기서는 왕복만 본다.)
+test('자유 글을 저장하고 다시 열면 그대로 읽힌다', async ({ page }) => {
+  const name = `E2E 암호화${Date.now()}`;
+  const memo = '건강·채무 이야기가 섞인 상담 내용';
+
+  await page.goto('/');
+  await page.locator('#email').fill('test2');
+  await page.locator('#password').fill('test2');
+  await page.getByRole('button', { name: '로그인' }).click();
+
+  await page.goto('/#/participants/new');
+  await page.locator('#name').fill(name);
+  await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
+  await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
+  await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
+  await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
+
+  await expect(page.getByRole('heading', { name: '상담 일정 등록' })).toBeVisible();
+  await page.getByRole('link', { name: '상담 기록하기' }).click();
+  await page.locator('#held-at').fill('2026-10-05T10:00');
+  await page.locator('#memo').fill(memo);
+  await page.getByRole('button', { name: '저장' }).click();
+  await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
+
+  // 회차별 요약의 원문 보기에 그대로 뜬다
+  await page.getByRole('link', { name: '당사자 정보' }).click();
+  const summary = page
+    .locator('section.wire-card')
+    .filter({ has: page.getByRole('heading', { name: '회차별 요약' }) });
+  await summary.locator('.wire-item', { hasText: '2회차' }).getByRole('button', { name: '원문 보기' }).click();
+  await expect(summary).toContainText(memo);
+});

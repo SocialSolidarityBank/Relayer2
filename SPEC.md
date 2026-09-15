@@ -303,3 +303,26 @@ audit_log(id, actor_id, action, participant_id, case_id, fields[], at)
 - 동의·철회도 남긴다(`consent.record`) — 누가 언제 받았는지가 곧 증거다.
 - append-only(행 단위 트리거). 감사 쓰기가 실패해도 화면 응답은 막지 않되 **서버 로그에 남긴다** — 조용히 사라지면 감사가 아니다.
 - 조회는 **관리자만**(`403`). 실무자 화면에는 메뉴가 없다.
+
+---
+
+## 12. 자유 글 암호화 (P1, 2026-09-15)
+
+금고(이름·연락처·이메일)와 **같은 열쇠·같은 포맷**(AES-256-GCM, `v1.iv.tag.body`)으로 사람이 쓴 문장도 암호문으로 앉힌다. 상담 내용에는 건강·채무·주거가 섞인다.
+
+| 암호화하는 것 | |
+|---|---|
+| `sessions` | `memo` · `plan_memo` · `today_goal_text` · `next_goal_text` · `detail`(인테이크 답 통째로) |
+| `cards` | `text` · `quote` |
+| `card_outcomes` | `reason` · `note` |
+| `support_cases` | `overall_goal` |
+| `goal_revisions` | `text` |
+| `case_closures` | `close_reason` · `unfinished_note` |
+
+**암호화하지 않는 것**: 분류·상태·시각·영역 코드·회차 번호·가명. 이것들로는 사람을 알아볼 수 없고, 이게 암호화되면 목록·계산·통계가 전부 막힌다.
+
+- **경계는 둘뿐이다.** 쓰기는 `service.ts` 의 insert·update, 읽기는 `loadCase()` 한 곳. 도메인 함수와 화면은 평문만 본다.
+- 인테이크 답(jsonb)은 `{ "enc": "v1...." }` 한 칸에 통째로 담는다 — 컬럼을 늘리지 않는다.
+- **P1 이전 평문 행은 그대로 읽힌다**(`decryptText` 가 암호문이 아니면 되돌려준다). 쓰기는 언제나 암호화하므로 고쳐 쓰는 순간 암호문이 된다.
+- 같은 글도 매번 다른 암호문이다(IV). 그래서 **값 비교는 평문끼리** 해야 한다 — 전체 목표가 바뀌었는지 보는 곳이 그 예다.
+- 검사: `./scripts/check-encryption.sh` 가 평문 한 줄이라도 남아 있으면 실패한다.
