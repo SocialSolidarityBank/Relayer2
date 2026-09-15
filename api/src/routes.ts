@@ -125,6 +125,11 @@ app.patch('/sessions/:id', async (c) => {
   return c.json(await service.recordSession(Number(c.req.param('id')), { ...body, actorId: c.get('actor').id }));
 });
 
+app.get('/cases/:id/intake', async (c) => {
+  const found = await service.getIntake(Number(c.req.param('id')));
+  return found ? c.json(found) : c.json({ error: '사례를 찾지 못했어요.' }, 404);
+});
+
 app.get('/cases/:id/detail', async (c) => {
   const detail = await service.getCaseDetail(Number(c.req.param('id')));
   return detail ? c.json(detail) : c.json({ error: '사례를 찾지 못했어요.' }, 404);

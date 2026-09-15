@@ -166,6 +166,16 @@ export type IntakeInput = {
   cards?: Array<{ kind: string; text: string; section: string }>;
 };
 
+export type IntakeView = {
+  session_id: number | null;
+  memo: string | null;
+  detail: Record<string, unknown>;
+  overall_goal: string | null;
+  cards: Array<{ kind: string; text: string; locked: boolean }>;
+};
+
+export const getIntake = (caseId: number) => json<IntakeView>(`/cases/${caseId}/intake`);
+
 export const saveIntake = (caseId: number, body: IntakeInput) =>
   json<{ session_id: number }>(`/cases/${caseId}/intake`, { method: 'PUT', body: JSON.stringify(body) });
 

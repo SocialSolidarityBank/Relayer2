@@ -2,7 +2,7 @@
 // I-05: 고른 영역의 세부 질문을 실제로 펼친다. 제목·배지만 보여주면 미완이다.
 // I-09: 전체 상담 목표는 사례의 overall_goal 을 쓴다. 비워둘 수 있다.
 import { useEffect, useState } from 'react';
-import { getCase, saveIntake, type CaseView } from '../api.ts';
+import { getCase, getIntake, saveIntake, type CaseView } from '../api.ts';
 import {
   intakeSectionLabel,
   NOT_APPLICABLE_OPTION,
@@ -129,19 +129,29 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
   const [tasks, setTasks] = useState<Line[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 이미 쓴 인테이크가 있으면 그것을 열어 고친다. 첫 회차는 하나뿐이다.
+  const [written, setWritten] = useState(false);
+  const [locked, setLocked] = useState<string[]>([]);
 
   useEffect(() => {
-    void getCase(caseId).then((v) => {
+    void (async () => {
+      const [v, intake] = await Promise.all([getCase(caseId), getIntake(caseId)]);
       setView(v);
-      setOverallGoal(v.case.overall_goal ?? '');
-    });
+      setOverallGoal(intake.overall_goal ?? v.case.overall_goal ?? '');
+      setWritten(intake.session_id !== null);
+      setAnswers((intake.detail ?? {}) as Answers);
+      setTasks(intake.cards.filter((c) => c.kind === 'promise').map((c) => ({ text: c.text })));
+      setQuestions(intake.cards.filter((c) => c.kind === 'question').map((c) => ({ text: c.text })));
+      setLocked(intake.cards.filter((c) => c.locked).map((c) => c.text));
+    })();
   }, [caseId]);
 
   if (!view) return <p className="empty">불러오는 중이에요.</p>;
-  if (view.sessions.length > 0)
+  // 인테이크를 건너뛰고 다른 회차부터 기록한 사례는 여기서 새로 쓰지 못한다.
+  if (!written && view.sessions.length > 0)
     return (
       <p className="empty">
-        이 사례에는 이미 회차가 있어요. 인테이크는 첫 회차예요.{' '}
+        이 사례에는 이미 다른 회차가 있어요. 인테이크는 첫 회차예요.{' '}
         <a href={`#/cases/${caseId}/briefing`}>15초 다시보기</a>로 가세요.
       </p>
     );
@@ -197,7 +207,8 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
           ...tasks.map((t) => ({ kind: 'promise', text: t.text, section: 'promise' })),
         ],
       });
-      window.location.hash = `#/cases/${caseId}/schedule`;
+      // 처음 쓴 것이면 일정 잡기로, 고쳐 쓴 것이면 보던 자리(15초 다시보기)로 돌아간다.
+      window.location.hash = written ? `#/cases/${caseId}/briefing` : `#/cases/${caseId}/schedule`;
     } catch (e) {
       setError(e instanceof Error ? e.message : '저장하지 못했어요.');
     } finally {
@@ -309,7 +320,7 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
         <FormActions>
           {error && <ErrorText>{error}</ErrorText>}
           <Button variant="primary" disabled={saving} onClick={() => void save()}>
-            {saving ? '저장 중…' : '저장하고 상담 일정 잡기'}
+            {saving ? '저장 중…' : written ? '고쳐 쓰기' : '저장하고 상담 일정 잡기'}
           </Button>
         </FormActions>
       </div>

@@ -250,3 +250,45 @@ test('당사자 계정은 로그인되지 않고 이유를 말한다', async ({ 
   await expect(page.getByText('당사자는 로그인하지 않아요', { exact: false })).toBeVisible();
   await expect(page.getByRole('heading', { name: '일정', exact: true })).toHaveCount(0);
 });
+
+// 인테이크는 한 번 쓰고 끝이 아니다. 다시 열어 고칠 수 있어야 한다(2026-09-15 Q).
+test('인테이크를 다시 열어 고쳐 쓴다', async ({ page }) => {
+  const name = `E2E 인테이크수정${Date.now()}`;
+
+  await page.goto('/');
+  await page.locator('#email').fill('test2');
+  await page.locator('#password').fill('test2');
+  await page.getByRole('button', { name: '로그인' }).click();
+
+  await page.goto('/#/participants/new');
+  await page.locator('#name').fill(name);
+  await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
+  await expect(page.getByRole('heading', { name: '인테이크 작성하기' })).toBeVisible();
+  await page.locator('#overall-goal').fill('처음 적은 목표');
+  await page.getByRole('textbox', { name: '수행할 과제' }).fill('처음 적은 과제');
+  await page.locator('section.wire-card').filter({ has: page.getByRole('heading', { name: '수행할 과제' }) })
+    .getByRole('button', { name: '추가' }).click();
+  await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
+  await expect(page.getByRole('heading', { name: '상담 일정 등록' })).toBeVisible();
+
+  // 다시 열면 적어 둔 것이 그대로 있다
+  await page.getByRole('link', { name: '인테이크 작성하기' }).click();
+  await expect(page.getByRole('heading', { name: '인테이크 작성하기' })).toBeVisible();
+  await expect(page.locator('#overall-goal')).toHaveValue('처음 적은 목표');
+  await expect(page.locator('section.wire-card').filter({ has: page.getByRole('heading', { name: '수행할 과제' }) }))
+    .toContainText('처음 적은 과제');
+
+  // 고쳐 쓰면 새 회차를 만들지 않고 그 자리를 고친다
+  await page.locator('#overall-goal').fill('고쳐 적은 목표');
+  await page.getByRole('button', { name: '고쳐 쓰기' }).click();
+  await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
+  await expect(page.locator('.wire-container')).toContainText('고쳐 적은 목표');
+
+  // 회차가 늘지 않았다 — 고쳐 쓰기는 새 회차를 만들지 않는다
+  await page.getByRole('link', { name: '당사자 정보' }).click();
+  const sessions = page
+    .locator('section.wire-card')
+    .filter({ has: page.getByRole('heading', { name: '회차별 요약' }) });
+  await expect(sessions).toContainText('1회차');
+  await expect(sessions).not.toContainText('2회차');
+});

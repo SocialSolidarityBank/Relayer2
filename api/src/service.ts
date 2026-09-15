@@ -51,25 +51,86 @@ export async function createCase(input: {
   });
 }
 
-/** 인테이크 작성하기. 전체 상담 목표는 비워둘 수 있다. */
+export type IntakeView = {
+  session_id: number | null;
+  memo: string | null;
+  detail: Record<string, unknown>;
+  overall_goal: string | null;
+  /** 이미 다른 회차에서 결과가 찍힌 카드. 고칠 때 지우지 않는다. */
+  cards: Array<{ kind: string; text: string; locked: boolean }>;
+};
+
+/** 저장해 둔 인테이크를 다시 연다. 아직 없으면 빈 것을 낸다. */
+export async function getIntake(caseId: number): Promise<IntakeView | null> {
+  const [supportCase] = await sql<SupportCase[]>`select * from support_cases where id = ${caseId}`;
+  if (!supportCase) return null;
+  const [session] = await sql<Array<{ id: number; memo: string | null; detail: Record<string, unknown> }>>`
+    select id, memo, detail from sessions where case_id = ${caseId} and kind = 'intake'`;
+  if (!session) {
+    return { session_id: null, memo: null, detail: {}, overall_goal: supportCase.overall_goal, cards: [] };
+  }
+  const cards = await sql<Array<{ kind: string; text: string; locked: boolean }>>`
+    select c.kind, c.text, exists (select 1 from card_outcomes o where o.card_id = c.id) as locked
+    from cards c where c.source_session_id = ${session.id} order by c.id`;
+  return {
+    session_id: session.id,
+    memo: session.memo,
+    detail: session.detail ?? {},
+    overall_goal: supportCase.overall_goal,
+    cards,
+  };
+}
+
+/**
+ * 인테이크 작성하기. 전체 상담 목표는 비워둘 수 있다.
+ * 이미 쓴 인테이크가 있으면 **고쳐 쓴다** — 첫 회차는 하나뿐이라 새로 만들지 않는다.
+ * 다른 회차에서 결과가 찍힌 카드(확인함·못 함 따위)는 지우지 않는다. 그 이력까지 사라진다.
+ */
 export async function saveIntake(
   caseId: number,
   input: { held_at?: string; memo?: string; overall_goal?: string | null; detail?: Record<string, unknown>; cards?: NewCardInput[] },
 ): Promise<{ session_id: number }> {
   return await sql.begin(async (tx) => {
-    const [existing] = await tx<{ id: number }[]>`
-      select id from sessions where case_id = ${caseId} limit 1`;
-    if (existing) throw new Error('이미 회차가 있어요. 인테이크는 첫 회차예요.');
-    const [session] = await tx<{ id: number }[]>`
-      insert into sessions (case_id, seq, kind, status, held_at, memo, detail)
-      values (${caseId}, 1, 'intake', 'done', ${input.held_at ?? new Date().toISOString()},
-              ${input.memo ?? null}, ${tx.json(input.detail ?? {})})
-      returning id`;
+    const [intake] = await tx<{ id: number }[]>`
+      select id from sessions where case_id = ${caseId} and kind = 'intake'`;
+
+    let sessionId: number;
+    if (intake) {
+      sessionId = intake.id;
+      await tx`
+        update sessions set
+          memo = ${input.memo ?? null},
+          detail = ${tx.json(input.detail ?? {})}
+        where id = ${sessionId}`;
+    } else {
+      const [other] = await tx<{ id: number }[]>`
+        select id from sessions where case_id = ${caseId} limit 1`;
+      if (other) throw new Error('이미 다른 회차가 있어요. 인테이크는 첫 회차예요.');
+      const [created] = await tx<{ id: number }[]>`
+        insert into sessions (case_id, seq, kind, status, held_at, memo, detail)
+        values (${caseId}, 1, 'intake', 'done', ${input.held_at ?? new Date().toISOString()},
+                ${input.memo ?? null}, ${tx.json(input.detail ?? {})})
+        returning id`;
+      sessionId = created.id;
+    }
+
     if (input.overall_goal !== undefined) {
       await setOverallGoal(tx as unknown as typeof sql, caseId, input.overall_goal);
     }
-    await insertCards(tx as unknown as typeof sql, caseId, session.id, input.cards ?? []);
-    return { session_id: session.id };
+
+    // 결과가 찍힌 카드는 남기고, 나머지는 지운 뒤 지금 화면의 목록을 다시 넣는다.
+    const locked = await tx<Array<{ kind: string; text: string }>>`
+      select c.kind, c.text from cards c
+      where c.source_session_id = ${sessionId}
+        and exists (select 1 from card_outcomes o where o.card_id = c.id)`;
+    await tx`
+      delete from cards c
+      where c.source_session_id = ${sessionId}
+        and not exists (select 1 from card_outcomes o where o.card_id = c.id)`;
+    const keep = new Set(locked.map((c) => `${c.kind}\u0000${c.text}`));
+    const fresh = (input.cards ?? []).filter((c) => !keep.has(`${c.kind}\u0000${c.text}`));
+    await insertCards(tx as unknown as typeof sql, caseId, sessionId, fresh);
+    return { session_id: sessionId };
   });
 }
 
