@@ -3,7 +3,15 @@
 // AI가 관여하는 항목(위험 신호·직전 회차 요약)은 비어도 남기고 상태를 쓴다.
 import { useEffect, useState } from 'react';
 import { getBriefing, type Briefing, type BriefingItem } from '../api.ts';
-import { Button, Card, Empty, Item, PageHeader } from '../ui.tsx';
+import { Button, Card, DataRows, Empty, FormActions, Item, PageHeader } from '../ui.tsx';
+
+/** 상담 방식은 저장 키가 영문이다. 화면 이름은 정본(GLOSSARY §6-3)을 따른다. */
+const METHOD_LABEL: Record<string, string> = {
+  in_person: '대면',
+  visit: '방문',
+  phone: '전화',
+  video: '화상',
+};
 
 const AI_OFF_LABEL: Record<string, string> = {
   ai_disabled: 'AI 확인 안 함',
@@ -51,14 +59,24 @@ export function BriefingScreen({ caseId, hideHeader }: { caseId: number; hideHea
           <p className="panel-meta">{AI_OFF_LABEL[briefing.risk_signals.status.reason ?? 'ai_disabled']}</p>
         </section>
 
-        {/* 2. 당사자 카드 */}
-        <Card
-          title={card.name ?? card.pseudonym}
-          hint={`${card.program_name} · ${card.session_seq}회차${
-            card.sessions_planned ? ` / 총 ${card.sessions_planned}회차` : ''
-          }${when ? ` · ${when}` : ''}`}
-        >
-          <div className="wire-form-actions">
+        {/* 2. 당사자 카드 — 정본이 요구하는 넷을 다 세운다(SPEC §3-2):
+            이름 · 사업 · 지금 회차/총 회차 · **오늘 일정과 방법**.
+            방법이 빠져 있었고, 한 줄 메타에 몰아넣어 15초 안에 읽히지 않았다. 표로 편다. */}
+        <Card title={card.name ?? card.pseudonym}>
+          <DataRows
+            rows={[
+              ['참여 사업', card.program_name],
+              [
+                '회차',
+                `${card.session_seq ?? '-'}회차${
+                  card.sessions_planned ? ` / 총 ${card.sessions_planned}회차` : ''
+                }`,
+              ],
+              ['오늘 일정', when ?? '잡힌 일정 없음'],
+              ['상담 방식', card.method ? (METHOD_LABEL[card.method] ?? card.method) : '미정'],
+            ]}
+          />
+          <FormActions>
             <Button
               variant="primary"
               onClick={() => {
@@ -67,7 +85,7 @@ export function BriefingScreen({ caseId, hideHeader }: { caseId: number; hideHea
             >
               상담 기록하기
             </Button>
-          </div>
+          </FormActions>
         </Card>
 
         {/* 3~6 은 읽는 카드다. 넓은 화면에서 두 칸으로 앉아 15초 안에 눈에 들어오게 한다. */}

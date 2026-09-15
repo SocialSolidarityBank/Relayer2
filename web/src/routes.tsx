@@ -105,9 +105,10 @@ export function Routes() {
         {me.role === 'admin' && <a href="#/audit">열람 기록</a>}
         {caseId && (
           <>
+            {/* 15초 다시보기는 메뉴가 아니다. 당사자 정보 안의 탭으로 본다(GLOSSARY §6-4).
+                당사자를 고르는 것이 먼저이고, 그 사람의 화면은 그 안에서 열린다. */}
             <a href={`#/cases/${caseId}/info`}>당사자 정보</a>
             <a href={`#/cases/${caseId}/intake`}>인테이크 작성하기</a>
-            <a href={`#/cases/${caseId}/briefing`}>15초 다시보기</a>
             <a href={`#/cases/${caseId}/record`}>상담 기록하기</a>
             <a href={`#/cases/${caseId}/schedule`}>상담 일정 등록</a>
           </>
