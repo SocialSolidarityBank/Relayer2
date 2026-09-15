@@ -1,7 +1,7 @@
 // 당사자 정보 — 탭 4(GLOSSARY §6-4): 회차별 요약 · 15초 다시보기 · 목표 · 정보.
 // 당사자 카드와 할 일 전체는 두지 않는다(요구 25·28). 종결 버튼은 `정보` 탭에 있다.
 import { useEffect, useState } from 'react';
-import { getCaseDetail, type CaseDetail } from '../api.ts';
+import { getCaseDetail, getConsents, recordConsent, type CaseDetail, type ConsentView } from '../api.ts';
 import { Badge, Button, Card, DataRows, Empty, FormActions, Item, PageHeader } from '../ui.tsx';
 import { BriefingScreen } from './briefing.tsx';
 
@@ -111,6 +111,60 @@ function Goals({ detail }: { detail: CaseDetail }) {
   );
 }
 
+/** 동의 — 영역마다 현재 상태와 그 자리에서 받기·철회. 사건은 쌓이기만 한다. */
+function Consents({ caseId }: { caseId: number }) {
+  const [rows, setRows] = useState<ConsentView | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void getConsents(caseId).then(setRows);
+  }, [caseId]);
+
+  const decide = async (domain: ConsentView[number]['domain'], decision: 'grant' | 'withdraw') => {
+    setBusy(true);
+    try {
+      setRows(await recordConsent(caseId, { domain, decision }));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const STATUS: Record<string, string> = {
+    granted: '동의함',
+    not_granted: '동의 없음',
+    unconfirmed: '확인 필요',
+  };
+
+  return (
+    <Card title="동의" hint="지운 적 없는 사건을 접어 낸 현재 상태예요. 철회해도 지난 기록은 남아요.">
+      {rows === null ? (
+        <Empty>불러오는 중이에요.</Empty>
+      ) : (
+        rows.map((row) => (
+          <div className="wire-repeat-card" key={row.domain}>
+            <Item
+              title={`${row.label} · ${STATUS[row.status] ?? row.status}`}
+              desc={row.copy}
+              action={
+                row.status === 'granted' ? (
+                  <Button disabled={busy} onClick={() => void decide(row.domain, 'withdraw')}>
+                    철회
+                  </Button>
+                ) : (
+                  <Button disabled={busy} onClick={() => void decide(row.domain, 'grant')}>
+                    동의 받기
+                  </Button>
+                )
+              }
+            />
+            {row.decided_at && <p className="panel-meta">{dateLabel(row.decided_at)}</p>}
+          </div>
+        ))
+      )}
+    </Card>
+  );
+}
+
 /** 정보 — 기본 정보와 상담 종결 버튼. */
 function Info({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
   const rows: Array<[string, string]> = [
@@ -126,6 +180,8 @@ function Info({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
       <Card title="기본 정보" hint="이름·연락처·이메일은 금고에서 꺼내 보여 줘요. 상담 기록에는 남지 않아요.">
         <DataRows rows={rows} />
       </Card>
+      <Consents caseId={caseId} />
+
       <Card title="상담 종결">
         {detail.closure ? (
           <Empty>{`${dateLabel(detail.closure.closed_at)}에 종결했어요. · ${detail.closure.close_reason}`}</Empty>

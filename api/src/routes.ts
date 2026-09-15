@@ -2,6 +2,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { actorFromCookie, clearCookie, issueCookie, login, type Actor } from './auth.ts';
+import { CONSENT_DECISIONS, CONSENT_DOMAINS } from './consent.ts';
 import { LIFE_AREAS } from './domain/types.ts';
 import * as service from './service.ts';
 
@@ -26,6 +27,12 @@ const outcomeInput = z.object({
 });
 
 export const app = new Hono<{ Variables: { actor: Actor } }>();
+
+// 동의 게이트에 걸린 저장은 409 다. 잘못 쓴 요청(400)도 서버 잘못(500)도 아니다.
+app.onError((err, c) => {
+  if (err instanceof service.ConsentRequired) return c.json({ error: err.message }, 409);
+  throw err;
+});
 
 app.get('/health', (c) => c.json({ ok: true }));
 
@@ -68,9 +75,17 @@ app.post('/cases', async (c) => {
       address: z.string().optional(),
       program_name: z.string().min(1),
       sessions_planned: z.number().int().positive().optional(),
+      consents: z
+        .array(z.object({ domain: z.enum(CONSENT_DOMAINS), decision: z.enum(CONSENT_DECISIONS) }))
+        .optional(),
     })
     .parse(await c.req.json());
-  return c.json(await service.createCase(body), 201);
+  // 개인정보 수집·이용 동의 없이는 사례를 열지 않는다(P1 게이트).
+  const personal = body.consents?.find((x) => x.domain === 'personal_data_collection_use');
+  if (personal?.decision !== 'grant') {
+    return c.json({ error: '개인정보 수집·이용 동의를 받아야 당사자를 등록할 수 있어요.' }, 400);
+  }
+  return c.json(await service.createCase({ ...body, actorId: c.get('actor').id }), 201);
 });
 
 app.put('/cases/:id/intake', async (c) => {
@@ -129,6 +144,23 @@ app.patch('/sessions/:id', async (c) => {
     })
     .parse(await c.req.json());
   return c.json(await service.recordSession(Number(c.req.param('id')), { ...body, actorId: c.get('actor').id }));
+});
+
+const consentInput = z.object({
+  domain: z.enum(CONSENT_DOMAINS),
+  decision: z.enum(CONSENT_DECISIONS),
+});
+
+app.get('/cases/:id/consents', async (c) => {
+  const found = await service.getConsents(Number(c.req.param('id')));
+  return found ? c.json(found) : c.json({ error: '사례를 찾지 못했어요.' }, 404);
+});
+
+app.post('/cases/:id/consents', async (c) => {
+  const body = consentInput.parse(await c.req.json());
+  return c.json(
+    await service.recordConsent(Number(c.req.param('id')), { ...body, actorId: c.get('actor').id }),
+  );
 });
 
 app.get('/cases/:id/intake', async (c) => {

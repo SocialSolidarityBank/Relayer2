@@ -257,3 +257,34 @@ case_closures(id, case_id UNIQUE, last_session_id, closed_at, close_reason,
 | PII 경계 | 단위: 금고 암호문만, API 응답·로그·자유 글에 평문 없음 |
 | 범위 | 단위: AI·STT 자격증명과 네트워크 없이 전체 흐름 통과, 관련 UI 미노출 |
 | 표시명 | 단위: 화면 제목·메뉴·진입 버튼이 `GLOSSARY.md` §2 표와 일치, 삭제 목록(§8) 문자열 부재 |
+
+---
+
+## 10. 동의 (P1, 2026-09-15)
+
+정본은 CCC `docs/specs/S7-consent-six-domains.md`(2026-09-03 확정)다. 릴레이어 P1 은 여섯 영역 중 **둘**만 쓴다 — 녹음·STT·LLM·음성 보유기간은 P3·P4 의 몫이다. 식별자·문안·해시 규칙은 정본 그대로라 영역을 늘려도 해시가 호환된다.
+
+| 영역 | 화면 이름 |
+|---|---|
+| `personal_data_collection_use` | 개인정보 수집·이용 |
+| `sensitive_information_processing` | 민감정보 처리 |
+
+```
+consent_events(id, participant_id, case_id, domain, decision, purpose,
+               copy_version, copy_hash, effective_at, recorded_by, recorded_at)
+```
+
+- **현재 상태를 저장하지 않는다.** 사건을 접어 계산한다 — 마지막 사건이 `grant` 이고 **지금 문안 해시와 같을 때만** `동의함`이다. 문안이 바뀌면 지난 동의는 자동 승격되지 않고 `확인 필요`로 떨어진다.
+- 사건은 append-only(행 단위 트리거). **철회도 새 사건**이며 지난 사건을 지우지 않는다.
+- `copy_hash` 는 정본 §2.1 의 원문(domain·label·copy·provider 3칸·purpose·retentionDuration)을 NFC 정규화해 SHA-256 한 소문자 hex 64자다. 릴레이어는 외부 수신자가 없어 provider 세 칸이 `<null>` 이다.
+- 사건 종류는 `grant`·`withdraw`·`decline` 셋이다. 정본의 `correct`(감사용 정정)는 쓰지 않는다 — 고칠 일은 올바른 사건을 새로 쌓는다.
+- **빈 값을 동의로 읽지 않는다.** 등록 화면에서 고르지 않은 영역은 `decline` 사건으로 남는다.
+
+### 10-1. 게이트
+
+| 막는 것 | 필요한 동의 | 응답 |
+|---|---|---|
+| 당사자 등록(사례 열기) | 개인정보 수집·이용 | `400` |
+| 인테이크·회차 기록 저장 | 민감정보 처리 | `409` |
+
+상담 자유 글에는 건강·채무·주거가 섞인다. 동의 없이 저장하지 않는다. 철회하면 **그때부터** 저장이 막히고 **이미 저장한 기록은 그대로 남는다** — 철회는 지움이 아니다(파기는 별건이며 보유기간 정책의 몫이다).

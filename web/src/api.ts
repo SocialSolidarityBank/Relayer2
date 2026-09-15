@@ -152,7 +152,25 @@ export type RecordInput = {
   outcomes?: OutcomeInput[];
 };
 
+export const CONSENT_DOMAINS = ['personal_data_collection_use', 'sensitive_information_processing'] as const;
+export type ConsentDomain = (typeof CONSENT_DOMAINS)[number];
+export type ConsentDecision = 'grant' | 'withdraw' | 'decline';
+
+export type ConsentView = Array<{
+  domain: ConsentDomain;
+  label: string;
+  copy: string;
+  status: 'granted' | 'not_granted' | 'unconfirmed';
+  decided_at: string | null;
+}>;
+
+export const getConsents = (caseId: number) => json<ConsentView>(`/cases/${caseId}/consents`);
+
+export const recordConsent = (caseId: number, body: { domain: ConsentDomain; decision: ConsentDecision }) =>
+  json<ConsentView>(`/cases/${caseId}/consents`, { method: 'POST', body: JSON.stringify(body) });
+
 export type NewCaseInput = {
+  consents?: Array<{ domain: ConsentDomain; decision: ConsentDecision }>;
   name: string;
   phone?: string;
   email?: string;

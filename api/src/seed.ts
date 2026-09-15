@@ -24,6 +24,11 @@ for (const u of TEST_USERS) {
 }
 
 const created = await createCase({
+  // 합성 자료라도 게이트는 같은 길을 지난다(P1).
+  consents: [
+    { domain: 'personal_data_collection_use', decision: 'grant' },
+    { domain: 'sensitive_information_processing', decision: 'grant' },
+  ],
   name: '김민희',
   phone: '010-0000-0000',
   email: 'minhee@example.com',

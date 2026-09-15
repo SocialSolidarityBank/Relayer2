@@ -1,4 +1,15 @@
 // DB 접근은 여기 하나로 모은다. 쓰기는 전부 트랜잭션 하나 안에서 끝낸다.
+import {
+  CONSENT_COPY,
+  CONSENT_DOMAINS,
+  copyHash,
+  foldConsent,
+  COPY_VERSION,
+  type ConsentDecision,
+  type ConsentDomain,
+  type ConsentEventRow,
+  type ConsentStatus,
+} from './consent.ts';
 import { sql } from './db.ts';
 import { decryptPii, encryptPii, KEY_VERSION } from './pii.ts';
 import { buildBriefing, type Briefing } from './domain/briefing.ts';
@@ -35,6 +46,9 @@ export async function createCase(input: {
   program_name: string;
   sessions_planned?: number;
   assigned_user_id?: number;
+  /** 등록 화면에서 받은 동의. 영역마다 동의·거부를 그 자리에서 사건으로 남긴다(P1). */
+  consents?: Array<{ domain: ConsentDomain; decision: ConsentDecision }>;
+  actorId?: number;
 }): Promise<{ case_id: number; participant_id: number; pseudonym: string }> {
   return await sql.begin(async (tx) => {
     const pseudonym = await nextPseudonym(tx as unknown as typeof sql);
@@ -47,6 +61,14 @@ export async function createCase(input: {
       insert into support_cases (participant_id, program_name, sessions_planned, assigned_user_id)
       values (${participant.id}, ${input.program_name}, ${input.sessions_planned ?? null}, ${input.assigned_user_id ?? null})
       returning id`;
+    for (const consent of input.consents ?? []) {
+      await tx`
+        insert into consent_events
+          (participant_id, case_id, domain, decision, purpose, copy_version, copy_hash, effective_at, recorded_by)
+        values (${participant.id}, ${c.id}, ${consent.domain}, ${consent.decision},
+                ${CONSENT_COPY[consent.domain].purpose}, ${COPY_VERSION}, ${copyHash(consent.domain)},
+                ${new Date().toISOString()}, ${input.actorId ?? null})`;
+    }
     return { case_id: c.id, participant_id: participant.id, pseudonym };
   });
 }
@@ -90,6 +112,8 @@ export async function saveIntake(
   caseId: number,
   input: { held_at?: string; memo?: string; overall_goal?: string | null; detail?: Record<string, unknown>; cards?: NewCardInput[] },
 ): Promise<{ session_id: number }> {
+  // 상담 자유 글에는 건강·채무 같은 민감정보가 섞인다. 동의 없이 저장하지 않는다(P1).
+  await assertConsent(caseId, 'sensitive_information_processing');
   return await sql.begin(async (tx) => {
     const [intake] = await tx<{ id: number }[]>`
       select id from sessions where case_id = ${caseId} and kind = 'intake'`;
@@ -180,6 +204,8 @@ export async function recordSession(
     is_closing?: boolean;
   },
 ): Promise<{ session_id: number; unchecked: number }> {
+  const [owner] = await sql<Array<{ case_id: number }>>`select case_id from sessions where id = ${sessionId}`;
+  if (owner) await assertConsent(owner.case_id, 'sensitive_information_processing');
   return await sql.begin(async (tx) => {
     const [target] = await tx<Session[]>`select * from sessions where id = ${sessionId} for update`;
     if (!target) throw new Error('session not found');
@@ -377,6 +403,61 @@ export async function getCase(caseId: number) {
     open_cards: openCards(cards, outcomes, sessions),
   };
 }
+
+export type ConsentView = Array<{
+  domain: ConsentDomain;
+  label: string;
+  copy: string;
+  status: ConsentStatus;
+  decided_at: string | null;
+}>;
+
+/** 사례의 동의 현재 상태. 저장된 값이 아니라 사건을 접어 낸다. */
+export async function getConsents(caseId: number): Promise<ConsentView | null> {
+  const [supportCase] = await sql<SupportCase[]>`select participant_id from support_cases where id = ${caseId}`;
+  if (!supportCase) return null;
+  const events = await sql<ConsentEventRow[]>`
+    select id, domain, decision, copy_version, copy_hash, effective_at
+    from consent_events where participant_id = ${supportCase.participant_id} order by id`;
+  return CONSENT_DOMAINS.map((domain) => {
+    const mine = events.filter((e) => e.domain === domain);
+    return {
+      domain,
+      label: CONSENT_COPY[domain].label,
+      copy: CONSENT_COPY[domain].copy,
+      status: foldConsent(domain, events),
+      decided_at: mine.at(-1)?.effective_at ?? null,
+    };
+  });
+}
+
+/** 동의 사건을 쌓는다. 지우거나 고치지 않는다 — 철회도 새 사건이다. */
+export async function recordConsent(
+  caseId: number,
+  input: { domain: ConsentDomain; decision: ConsentDecision; actorId?: number },
+): Promise<ConsentView> {
+  const [supportCase] = await sql<SupportCase[]>`select participant_id from support_cases where id = ${caseId}`;
+  if (!supportCase) throw new Error('사례를 찾지 못했어요.');
+  await sql`
+    insert into consent_events
+      (participant_id, case_id, domain, decision, purpose, copy_version, copy_hash, effective_at, recorded_by)
+    values (${supportCase.participant_id}, ${caseId}, ${input.domain}, ${input.decision},
+            ${CONSENT_COPY[input.domain].purpose}, ${COPY_VERSION}, ${copyHash(input.domain)},
+            ${new Date().toISOString()}, ${input.actorId ?? null})`;
+  return (await getConsents(caseId)) ?? [];
+}
+
+/** 동의 게이트. 이 영역이 `granted` 가 아니면 저장을 막는다(P1). */
+export async function assertConsent(caseId: number, domain: ConsentDomain): Promise<void> {
+  const consents = await getConsents(caseId);
+  const found = consents?.find((c) => c.domain === domain);
+  if (found?.status === 'granted') return;
+  throw new ConsentRequired(
+    `${CONSENT_COPY[domain].label} 동의가 없어요. 당사자 정보에서 동의를 받아야 저장할 수 있어요.`,
+  );
+}
+
+export class ConsentRequired extends Error {}
 
 export type CaseDetail = {
   case: SupportCase;

@@ -23,6 +23,8 @@ test('등록부터 15초 다시보기까지 한 바퀴', async ({ page }) => {
   await expect(page.getByRole('heading', { name: '일정', exact: true })).toBeVisible();
   await page.goto('/#/participants/new');
   await page.locator('#name').fill(NAME);
+  await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
+  await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
 
   // ── 인테이크 작성하기 ───────────────────────────────────────
@@ -127,6 +129,8 @@ test('예정 회차가 없어도 상담 기록하기에서 일시를 적고 기�
 
   await page.goto('/#/participants/new');
   await page.locator('#name').fill(name);
+  await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
+  await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
   await expect(page.getByRole('heading', { name: '인테이크 작성하기' })).toBeVisible();
   await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
@@ -162,6 +166,8 @@ test('상담 종결은 회차를 만들지 않고 미완료 과제를 그대로 
 
   await page.goto('/#/participants/new');
   await page.locator('#name').fill(name);
+  await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
+  await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
   await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
 
@@ -219,6 +225,8 @@ test('종결 상담으로 저장하면 종결 화면으로 이어진다', async 
 
   await page.goto('/#/participants/new');
   await page.locator('#name').fill(name);
+  await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
+  await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
   await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
 
@@ -265,6 +273,8 @@ test('인테이크를 다시 열어 고쳐 쓴다', async ({ page }) => {
 
   await page.goto('/#/participants/new');
   await page.locator('#name').fill(name);
+  await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
+  await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
   await expect(page.getByRole('heading', { name: '인테이크 작성하기' })).toBeVisible();
   await page.locator('#overall-goal').fill('처음 적은 목표');
@@ -309,6 +319,8 @@ test('회차를 고쳐 쓰고, 적어만 둔 줄도 저장된다', async ({ page
 
   await page.goto('/#/participants/new');
   await page.locator('#name').fill(name);
+  await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
+  await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
   // 인테이크에서 `추가`를 누르지 않고 적어만 둔다
   await page.getByRole('textbox', { name: '수행할 과제' }).fill(task);
@@ -349,4 +361,41 @@ test('회차를 고쳐 쓰고, 적어만 둔 줄도 저장된다', async ({ page
   await page.getByRole('link', { name: '당사자 정보' }).click();
   await expect(summary).toContainText('2회차');
   await expect(summary).not.toContainText('3회차');
+});
+
+// P1 동의 게이트. 민감정보 처리 동의 없이는 상담 자유 글을 저장하지 않는다.
+test('민감정보 동의가 없으면 기록을 저장하지 못하고, 받으면 저장된다', async ({ page }) => {
+  const name = `E2E 동의${Date.now()}`;
+
+  await page.goto('/');
+  await page.locator('#email').fill('test2');
+  await page.locator('#password').fill('test2');
+  await page.getByRole('button', { name: '로그인' }).click();
+
+  // 필수 동의만 켜고 민감정보는 끈 채 등록한다
+  await page.goto('/#/participants/new');
+  await page.locator('#name').fill(name);
+  await expect(page.getByRole('button', { name: '등록하고 인테이크 쓰기' })).toBeDisabled();
+  await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
+  await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
+
+  // 인테이크 저장이 막힌다
+  await expect(page.getByRole('heading', { name: '인테이크 작성하기' })).toBeVisible();
+  await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
+  await expect(page.getByText('민감정보 처리 동의가 없어요', { exact: false })).toBeVisible();
+
+  // 당사자 정보 › 정보 탭에서 동의를 받는다
+  await page.getByRole('link', { name: '당사자 정보' }).click();
+  await page.getByRole('tab', { name: '정보' }).click();
+  const consent = page
+    .locator('section.wire-card')
+    .filter({ has: page.getByRole('heading', { name: '동의' }) });
+  await expect(consent).toContainText('민감정보 처리 · 동의 없음');
+  await consent.locator('.wire-repeat-card', { hasText: '민감정보 처리' }).getByRole('button', { name: '동의 받기' }).click();
+  await expect(consent).toContainText('민감정보 처리 · 동의함');
+
+  // 이제 저장된다
+  await page.getByRole('link', { name: '인테이크 작성하기' }).click();
+  await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
+  await expect(page.getByRole('heading', { name: '상담 일정 등록' })).toBeVisible();
 });
