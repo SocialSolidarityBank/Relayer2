@@ -22,6 +22,7 @@ import {
   KEY_VERSION,
 } from './pii.ts';
 import { buildBriefing, type Briefing } from './domain/briefing.ts';
+import { buildMismatches, type MismatchView } from './domain/mismatch-view.ts';
 import { openCards, resolveOutcomes, type OutcomeSubmission } from './domain/cards.ts';
 import { carryOverOnRecord } from './domain/goals.ts';
 import { buildSessionLine } from './domain/session-line.ts';
@@ -683,5 +684,29 @@ export async function getBriefing(caseId: number): Promise<Briefing | null> {
     sessions: loaded.sessions,
     cards: loaded.cards,
     outcomes: loaded.outcomes,
+  });
+}
+
+/**
+ * 회차의 불일치 둘(요구 23). 전사문과 수기 기록, 그리고 지난 회차와 이번 회차.
+ * **판정하지 않는다** — 달라졌다는 사실만 낸다. 어느 쪽이 맞는지는 사람이 안다.
+ */
+export async function getMismatches(sessionId: number): Promise<MismatchView> {
+  const [session] = await sql<Session[]>`select * from sessions where id = ${sessionId}`;
+  if (!session) return { voice_vs_written: [], across_sessions: [] };
+
+  const [prev] = await sql<Array<{ seq: number; memo: string | null }>>`
+    select seq, memo from sessions
+    where case_id = ${session.case_id} and seq < ${session.seq} and memo is not null
+    order by seq desc limit 1`;
+
+  const [tr] = await sql<Array<{ text: string }>>`
+    select text from transcripts where session_id = ${sessionId} order by id desc limit 1`;
+
+  return buildMismatches({
+    written: decryptText(session.memo),
+    transcript: tr ? decryptText(tr.text) : null,
+    previous: prev ? { seq: prev.seq, text: decryptText(prev.memo) ?? '' } : null,
+    current: { seq: session.seq },
   });
 }

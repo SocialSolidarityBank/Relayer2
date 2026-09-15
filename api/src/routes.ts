@@ -310,6 +310,14 @@ app.post('/sessions/:id/recordings', async (c) => {
   );
 });
 
+/**
+ * 회차의 불일치 둘. 한 목록에 섞지 않는다(요구 23).
+ * 판정하지 않는다 — 달라졌다는 사실만 낸다. 고치는 것은 사람이다.
+ */
+app.get('/sessions/:id/mismatches', async (c) =>
+  c.json(await service.getMismatches(Number(c.req.param('id')))),
+);
+
 app.get('/sessions/:id/transcript', async (c) => {
   const found = await latestTranscript(Number(c.req.param('id')));
   return c.json(found ?? { status: 'none' });
