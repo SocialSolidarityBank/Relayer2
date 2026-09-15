@@ -85,13 +85,23 @@ export const STEP1_GROUPS: readonly IntakeQuestionGroup[] = [
         key: 'referral_path',
         label: '상담 신청·유입 경로',
         kind: 'select',
-        options: ['본인 신청', '가족·지인 소개', '기관 의뢰', '온라인·홍보물', '기존 이용자 재상담', '기타', NO_RESPONSE_OPTION],
+        // 정본은 `가족·지인 소개`와 `기존 이용자 재상담`을 더 두지만 뺐다.
+        // 재상담은 어디로 들어왔는지가 아니라 **관계 상태**라 이 질문의 답이 아니다.
+        options: ['본인 신청', '기관 추천', '홈페이지·SNS', '오프라인 홍보', '기타', NO_RESPONSE_OPTION],
       },
       {
-        key: 'contact_time',
-        label: '주요 연락 가능 시간',
+        // 정본은 `평일 오전/오후/저녁 · 주말` 한 줄이라 **주말 시간대를 적을 수 없다**.
+        // 요일과 시간대를 갈라 두 축으로 받는다. 둘 다 여러 개 고를 수 있다.
+        key: 'contact_days',
+        label: '연락 가능 요일',
         kind: 'multi',
-        options: ['평일 오전', '평일 오후', '평일 저녁', '주말', '시간 협의 필요', NO_RESPONSE_OPTION],
+        options: ['평일', '주말·공휴일', NO_RESPONSE_OPTION],
+      },
+      {
+        key: 'contact_hours',
+        label: '연락 가능 시간대',
+        kind: 'multi',
+        options: ['오전', '오후', '저녁', NO_RESPONSE_OPTION],
       },
       {
         key: 'contact_caution',
@@ -345,7 +355,10 @@ export const STEP4_GROUPS: readonly IntakeQuestionGroup[] = [
     questions: [
       {
         key: 'participation_barrier',
-        label: '참여 방해요인',
+        // 2026-09-16 Q 확정: 정본(CCC PRD 4-1)의 `참여 방해요인` 에서 벗어난 첫 이름이다.
+        // `방해`는 당사자를 탓하는 말로 읽히고 `제약`은 상황을 가리킨다.
+        // 저장 키는 그대로 둔다 — 라벨이 바뀌어도 기록은 이어져야 한다.
+        label: '참여 제약사항',
         kind: 'multi',
         // `복수 요인`을 뺐다 — 한 가지만 고르게 해 놓고 둘 이상일 때 쓰라던 우회 선택지다.
         options: [
