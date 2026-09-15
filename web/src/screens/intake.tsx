@@ -329,7 +329,9 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
         <FormActions>
           {error && <ErrorText>{error}</ErrorText>}
           <Button variant="primary" disabled={saving} onClick={() => void save()}>
-            {saving ? '저장 중…' : written ? '고쳐 쓰기' : '저장하고 상담 일정 잡기'}
+            {/* 이미 쓴 인테이크를 다시 열었을 때도 버튼은 `저장`이다.
+                들어올 때 누른 버튼(`고쳐 쓰기`)과 이름이 같으면 같은 일을 또 하는 줄 안다. */}
+            {saving ? '저장 중…' : written ? '저장' : '저장하고 상담 일정 잡기'}
           </Button>
         </FormActions>
       </div>

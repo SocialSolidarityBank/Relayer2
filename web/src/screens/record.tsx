@@ -200,6 +200,12 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
   const openTasks = briefing.open_tasks?.items ?? [];
   const openQuestions = briefing.today_questions ?? [];
 
+  // 레일에 살아 있는 과제를 오른쪽에 또 적었나. 띄어쓰기만 다른 것도 같은 것으로 본다.
+  const flatten = (s: string) => s.replace(/\s+/g, '');
+  const duplicateTasks = withDraft(tasks, taskDraft)
+    .map((t) => t.text.trim())
+    .filter((text) => text && openTasks.some((o) => flatten(o.text) === flatten(text)));
+
   return (
     <>
       <PageHeader
@@ -356,6 +362,16 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
               onDraft={setTaskDraft}
               onChange={setTasks}
             />
+            {/*
+              `진행 전`·`진행 중`은 그 자체로 "계속 간다"는 뜻이다. 그런데 같은 약속을 또 적는 사람이 있다
+              (2026-09-15 예행연습에서 실제로 났다). 그러면 다음 다시보기의 확인할 과제에 같은 문구가 두 줄로 쌓인다.
+              막지는 않는다 — 정말 따로 세고 싶을 수도 있다. 다만 겹친다는 사실은 알려 준다.
+            */}
+            {duplicateTasks.length > 0 && (
+              <p className="panel-meta">
+                왼쪽 확인할 과제에 이미 있어요: {duplicateTasks.join(' · ')}. 결과만 매기면 다음에도 올라와요.
+              </p>
+            )}
           </Card>
 
           <Card title="3. 다음에 물어볼 것" hint="다음 상담의 오늘 물어볼 것으로 올라가요.">
@@ -421,7 +437,9 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
               disabled={!memo.trim() || (!session && !heldAt) || saving}
               onClick={() => void save()}
             >
-              {saving ? '저장 중…' : isClosing ? '저장하고 종결로' : editing ? '고쳐 쓰기' : '저장'}
+              {/* 고쳐 쓰기 화면에서도 저장 버튼은 `저장`이다. 들어올 때 누른 버튼과 이름이 같으면
+                  같은 일을 또 하는 줄 안다(2026-09-15 예행연습). 화면 제목이 이미 고쳐 쓰기라고 말한다. */}
+              {saving ? '저장 중…' : isClosing ? '저장하고 종결로' : '저장'}
             </Button>
           </FormActions>
         </main>

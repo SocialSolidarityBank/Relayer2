@@ -293,7 +293,7 @@ test('인테이크를 다시 열어 고쳐 쓴다', async ({ page }) => {
 
   // 고쳐 쓰면 새 회차를 만들지 않고 그 자리를 고친다
   await page.locator('#overall-goal').fill('고쳐 적은 목표');
-  await page.getByRole('button', { name: '고쳐 쓰기' }).click();
+  await page.getByRole('button', { name: '저장' }).click();
   await page.waitForURL(/\/briefing$/);
   await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
   await expect(page.locator('.wire-container')).toContainText('고쳐 적은 목표');
@@ -354,7 +354,7 @@ test('회차를 고쳐 쓰고, 적어만 둔 줄도 저장된다', async ({ page
 
   await page.locator('#memo').fill('고쳐 적은 상담 내용');
   await page.getByRole('radio', { name: '완료' }).check();
-  await page.getByRole('button', { name: '고쳐 쓰기' }).click();
+  await page.getByRole('button', { name: '저장' }).click();
   await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
 
   // 완료로 바꿨으니 확인할 과제에서 빠지고, 회차는 늘지 않는다
