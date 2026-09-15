@@ -2,6 +2,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { actorFromCookie, clearCookie, issueCookie, login, type Actor } from './auth.ts';
+import { AiUnavailable, approveDraft, draftSession, latestDraft } from './ai.ts';
 import { audit, listAudit } from './audit.ts';
 import { accessState, issueAccess, openAccess, revokeAccess } from './participant-access.ts';
 import { CONSENT_DECISIONS, CONSENT_DOMAINS } from './consent.ts';
@@ -33,6 +34,8 @@ export const app = new Hono<{ Variables: { actor: Actor } }>();
 // 동의 게이트에 걸린 저장은 409 다. 잘못 쓴 요청(400)도 서버 잘못(500)도 아니다.
 app.onError((err, c) => {
   if (err instanceof service.ConsentRequired) return c.json({ error: err.message }, 409);
+  // AI 는 없어도 제품이 돌아간다. 없는 것을 있는 것처럼 답하지 않는다.
+  if (err instanceof AiUnavailable) return c.json({ error: err.message }, 503);
   throw err;
 });
 
@@ -250,6 +253,26 @@ app.post('/participants/:id/access', async (c) => {
 app.delete('/participants/:id/access', async (c) => {
   await revokeAccess(Number(c.req.param('id')));
   return c.json({ ok: true });
+});
+
+app.get('/sessions/:id/draft', async (c) => {
+  const found = await latestDraft(Number(c.req.param('id')));
+  return c.json(found ?? { status: 'none' });
+});
+
+app.post('/sessions/:id/draft', async (c) =>
+  c.json(await draftSession(Number(c.req.param('id')), c.get('actor').id)),
+);
+
+app.post('/sessions/:id/draft/approve', async (c) => {
+  const body = z
+    .object({
+      summary: z.string().optional(),
+      tasks: z.array(z.string()).optional(),
+      questions: z.array(z.string()).optional(),
+    })
+    .parse(await c.req.json().catch(() => ({})));
+  return c.json(await approveDraft(Number(c.req.param('id')), c.get('actor').id, body));
 });
 
 app.get('/audit', async (c) => {

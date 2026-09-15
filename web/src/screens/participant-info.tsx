@@ -50,6 +50,11 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
                   >
                     {openIds.includes(s.id) ? '원문 닫기' : '원문 보기'}
                   </Button>
+                  <Button
+                    onClick={() => (window.location.hash = `#/cases/${caseId}/sessions/${s.id}/review`)}
+                  >
+                    AI 정리
+                  </Button>
                   {s.kind === 'intake' ? (
                     <Button onClick={() => (window.location.hash = `#/cases/${caseId}/intake`)}>
                       고쳐 쓰기

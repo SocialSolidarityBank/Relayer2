@@ -524,3 +524,42 @@ test('당사자는 링크와 코드로 자기 일정만 본다', async ({ page, 
   await expect(guestPage.locator('.wire-container')).not.toContainText('상담 기록');
   await guest.close();
 });
+
+// P3 AI 경로. **동의 없이는 호출 자체를 하지 않는다.** 화면에서 그 사실이 보여야 한다.
+// (실제 모델 호출은 키가 있어야 하므로 여기서는 게이트와 화면까지만 본다.)
+test('외부 LLM 동의가 없으면 AI 정리를 하지 않는다', async ({ page }) => {
+  const name = `E2E AI${Date.now()}`;
+
+  await page.goto('/');
+  await page.locator('#email').fill('test2');
+  await page.locator('#password').fill('test2');
+  await page.getByRole('button', { name: '로그인' }).click();
+
+  await page.goto('/#/participants/new');
+  await page.locator('#name').fill(name);
+  await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
+  await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
+  await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
+  await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
+
+  // 예정 없이 2회차를 기록한다
+  await expect(page.getByRole('heading', { name: '상담 일정 등록' })).toBeVisible();
+  await page.getByRole('link', { name: '상담 기록하기' }).click();
+  await page.locator('#held-at').fill('2026-10-05T10:00');
+  await page.locator('#memo').fill('연체 2건 확인. 서류는 다음 주에 떼기로 함.');
+  await page.getByRole('button', { name: '저장' }).click();
+  await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
+
+  // 회차별 요약 → AI 정리
+  await page.getByRole('link', { name: '당사자 정보' }).click();
+  await page.waitForURL(/\/info$/);
+  const summary = page
+    .locator('section.wire-card')
+    .filter({ has: page.getByRole('heading', { name: '회차별 요약' }) });
+  await summary.locator('.wire-item', { hasText: '2회차' }).getByRole('button', { name: 'AI 정리' }).click();
+  await page.waitForURL(/\/review$/);
+
+  // 동의가 없으니 정리가 막힌다
+  await page.getByRole('button', { name: 'AI로 정리하기' }).click();
+  await expect(page.getByText('외부 LLM·국외 처리 동의가 없어요', { exact: false })).toBeVisible();
+});

@@ -9,7 +9,10 @@ export type AuditAction =
   | 'schedule.list'
   | 'consent.record'
   /** 당사자 본인이 링크+코드로 자기 것을 연 것. 실무자 열람과 구분한다. */
-  | 'participant.view';
+  | 'participant.view'
+  /** 가림 처리한 자료를 외부 LLM 에 보낸 것과, 사람이 초안을 승인한 것. */
+  | 'ai.draft'
+  | 'ai.approve';
 
 export type AuditEntry = {
   /** 0 이면 당사자 본인이다(로그인 사용자가 아니다). */

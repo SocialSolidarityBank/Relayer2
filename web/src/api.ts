@@ -193,6 +193,30 @@ export const issueAccess = (participantId: number) =>
 export const revokeAccess = (participantId: number) =>
   json<{ ok: true }>(`/participants/${participantId}/access`, { method: 'DELETE' });
 
+export type Draft = {
+  id: number;
+  session_id: number;
+  status: 'draft' | 'approved';
+  summary: string;
+  tasks: string[];
+  questions: string[];
+  mask_hits: Record<string, number>;
+  model: string | null;
+  created_at: string;
+};
+
+export const getDraft = async (sessionId: number): Promise<Draft | 'none'> => {
+  const found = await json<Draft | { status: 'none' }>(`/sessions/${sessionId}/draft`);
+  return found.status === 'none' ? 'none' : (found as Draft);
+};
+
+export const makeDraft = (sessionId: number) => json<Draft>(`/sessions/${sessionId}/draft`, { method: 'POST' });
+
+export const approveDraft = (
+  sessionId: number,
+  body: { summary?: string; tasks?: string[]; questions?: string[] },
+) => json<Draft>(`/sessions/${sessionId}/draft/approve`, { method: 'POST', body: JSON.stringify(body) });
+
 export type AuditRow = {
   id: number;
   at: string;

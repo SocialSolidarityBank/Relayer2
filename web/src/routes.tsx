@@ -13,6 +13,7 @@ import { ParticipantNewScreen } from './screens/participant-new.tsx';
 import { ParticipantInfoScreen } from './screens/participant-info.tsx';
 import { ParticipantsScreen } from './screens/participants.tsx';
 import { RecordScreen } from './screens/record.tsx';
+import { ReviewScreen } from './screens/review.tsx';
 import { ScheduleNewScreen } from './screens/schedule-new.tsx';
 
 const HOME = '#/schedule';
@@ -49,6 +50,9 @@ export function Routes() {
     // 저장해 둔 회차 고쳐 쓰기. 기록 화면을 그대로 쓰되 대상 회차를 준다.
     const editing = hash.match(/^#\/cases\/(\d+)\/sessions\/(\d+)\/edit$/);
     if (editing) return <RecordScreen caseId={Number(editing[1])} sessionId={Number(editing[2])} />;
+
+    const reviewing = hash.match(/^#\/cases\/(\d+)\/sessions\/(\d+)\/review$/);
+    if (reviewing) return <ReviewScreen caseId={Number(reviewing[1])} sessionId={Number(reviewing[2])} />;
 
     const byCase = hash.match(/^#\/cases\/(\d+)\/(briefing|record|schedule|intake|info|close)$/);
     if (byCase) {
