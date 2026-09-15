@@ -47,6 +47,48 @@ docker run -p 8787:8787 \
 3. 공개 주소가 생기면 `docs/beta-scenario.md` §0-B 의 접속 안내를 그 주소로 바꾼다.
 4. 번호표(`docs/qa-steps.js`)와 계수기(`docs/measure.js`)는 그대로 쓴다 — 콘솔에 붙여 넣는 조각이라 배포와 무관하다.
 
-## 아직 안 정한 것
+## D2 배포처 (2026-09-15 확정)
 
-**D2 배포처.** 합성 데이터라 국내 리전 요건이 아직 안 걸린다. 실데이터로 넘어갈 때 국내 리전과 백업 위치를 함께 정한다.
+**앱은 맥미니, DB 는 Supabase Pro(서울 리전).** 추가 비용 0원이고 실데이터로 넘어갈 때 업체를 갈아타지 않아도 된다.
+
+왜 이렇게 골랐는지:
+
+| 후보 | 왜 아닌가 |
+|---|---|
+| Vercel Hobby | **약관이 막는다.** 2026-06-01 개정 약관이 Hobby 를 개인·비상업 용도로 제한하고 금지 목록에 `내부 업무 도구`가 있다. 한도는 남아도 예고 없이 정지될 수 있다 |
+| Vercel Pro | 월 $20. 맥미니로 되는 일에 쓸 이유가 없다 |
+| Fly + Managed Postgres | DB 최저 월 $38. 합성 데이터 시험에 과하다 |
+| Fly + 자체 Postgres | 월 $3. 맥미니가 없을 때의 차선 |
+| Supabase 무료 | **7일 무활동이면 일시정지**된다. 실무자가 며칠 안 들어오면 멈춘다 (Pro 는 안 멈춘다) |
+
+### 띄우기
+
+```bash
+./scripts/serve-public.sh --tunnel    # 화면 빌드 → 마이그레이션 → 앱 → 임시 공개 주소
+```
+
+`--tunnel` 은 `trycloudflare` 임시 주소다(무료·로그인 불필요, 창을 닫으면 사라진다). 관문 2 처럼 **며칠 열어 둘 때는 이름 있는 터널**을 쓴다:
+
+```bash
+cloudflared tunnel login                       # 브라우저에서 Cloudflare 계정 선택 (1회)
+cloudflared tunnel create relayer
+cloudflared tunnel route dns relayer relayer.<도메인>
+cloudflared tunnel run --url http://127.0.0.1:8787 relayer
+```
+
+상시로 돌리려면 `cloudflared service install` 로 맥미니 로그인 항목에 올린다.
+
+### Supabase 를 DB 로 쓸 때
+
+`.env` 의 `DATABASE_URL` 만 바꾸면 된다. TLS 와 prepared statement 설정은 주소를 보고 자동으로 정한다(`api/src/db.ts`).
+
+- **세션 풀러(5432)** 를 쓴다 — 앱이 상시 프로세스라 prepared statement 를 살리는 쪽이 빠르다.
+- 트랜잭션 풀러(6543)를 쓰면 `prepare` 가 자동으로 꺼진다.
+- 접속 주소는 `.env` 에만 둔다. 저장소·백업·로그 어디에도 적지 않는다.
+
+```bash
+node api/src/migrate.ts   # 표 만들기
+node api/src/seed.ts      # 시험 계정 test1~3 + 합성 사례
+```
+
+**서울 리전(ap-northeast-2)** 을 고른다. 지금은 합성 데이터라 요건이 아니지만, 실데이터로 넘어갈 때 옮기지 않으려면 처음부터 서울에 둔다.
