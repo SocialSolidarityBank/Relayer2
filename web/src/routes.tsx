@@ -2,6 +2,7 @@
 // 로그인하지 않았으면 어떤 화면도 열지 않는다.
 import { useEffect, useState } from 'react';
 import { getMe, logout, Unauthorized, type Me } from './api.ts';
+import { AuditScreen } from './screens/audit.tsx';
 import { BriefingScreen } from './screens/briefing.tsx';
 import { CloseScreen } from './screens/close.tsx';
 import { HomeScreen } from './screens/home.tsx';
@@ -37,6 +38,7 @@ export function Routes() {
   const screen = (() => {
     if (hash === HOME) return <HomeScreen />;
     if (hash === '#/participants') return <ParticipantsScreen />;
+    if (hash === '#/audit') return <AuditScreen />;
     if (hash === '#/participants/new') return <ParticipantNewScreen />;
 
     // 저장해 둔 회차 고쳐 쓰기. 기록 화면을 그대로 쓰되 대상 회차를 준다.
@@ -66,6 +68,8 @@ export function Routes() {
         <a href={HOME}>일정</a>
         <a href="#/participants">당사자 목록</a>
         <a href="#/participants/new">당사자 등록</a>
+        {/* 열람 기록은 관리자만. 실무자 화면에 없는 것이 맞다(GLOSSARY §6-7). */}
+        {me.role === 'admin' && <a href="#/audit">열람 기록</a>}
         {caseId && (
           <>
             <a href={`#/cases/${caseId}/info`}>당사자 정보</a>

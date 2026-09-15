@@ -399,3 +399,33 @@ test('민감정보 동의가 없으면 기록을 저장하지 못하고, 받으�
   await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
   await expect(page.getByRole('heading', { name: '상담 일정 등록' })).toBeVisible();
 });
+
+// P1 열람 기록. PII 를 실은 화면 조회 1건 = 감사 1행, 항목 이름만 남는다.
+test('PII 를 본 조회가 열람 기록에 남고, 관리자만 본다', async ({ page }) => {
+  // 실무자가 당사자 정보를 본다
+  await page.goto('/');
+  await page.locator('#email').fill('test2');
+  await page.locator('#password').fill('test2');
+  await page.getByRole('button', { name: '로그인' }).click();
+  await expect(page.getByRole('heading', { name: '일정', exact: true })).toBeVisible();
+  await page.goto('/#/cases/1/info');
+  await expect(page.getByRole('tab', { name: '정보' })).toBeVisible();
+
+  // 실무자 화면에는 열람 기록 메뉴가 없다
+  await expect(page.getByRole('link', { name: '열람 기록' })).toHaveCount(0);
+  await page.goto('/#/audit');
+  await expect(page.getByText('관리자만 볼 수 있어요', { exact: false })).toBeVisible();
+
+  // 관리자로 바꿔 본다
+  await page.getByRole('button', { name: '로그아웃' }).click();
+  await page.locator('#email').fill('test1');
+  await page.locator('#password').fill('test1');
+  await page.getByRole('button', { name: '로그인' }).click();
+  await page.getByRole('link', { name: '열람 기록' }).click();
+
+  const log = page.locator('section.wire-card', { hasText: '최근 200건' });
+  await expect(log).toContainText('시험 실무자');
+  await expect(log).toContainText('당사자 정보 조회');
+  await expect(log).toContainText('이름 · 연락처 · 이메일'); // 항목 이름만, 값은 없다
+  await expect(log).not.toContainText('010-');
+});

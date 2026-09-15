@@ -2,6 +2,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { actorFromCookie, clearCookie, issueCookie, login, type Actor } from './auth.ts';
+import { audit, listAudit } from './audit.ts';
 import { CONSENT_DECISIONS, CONSENT_DOMAINS } from './consent.ts';
 import { LIFE_AREAS } from './domain/types.ts';
 import * as service from './service.ts';
@@ -158,9 +159,16 @@ app.get('/cases/:id/consents', async (c) => {
 
 app.post('/cases/:id/consents', async (c) => {
   const body = consentInput.parse(await c.req.json());
-  return c.json(
-    await service.recordConsent(Number(c.req.param('id')), { ...body, actorId: c.get('actor').id }),
-  );
+  const caseId = Number(c.req.param('id'));
+  const view = await service.recordConsent(caseId, { ...body, actorId: c.get('actor').id });
+  // 동의·철회는 열람이 아니지만 남긴다 — 누가 언제 받았는지가 곧 증거다.
+  await audit({
+    actorId: c.get('actor').id,
+    action: 'consent.record',
+    caseId,
+    fields: [`${body.domain}:${body.decision}`],
+  });
+  return c.json(view);
 });
 
 app.get('/cases/:id/intake', async (c) => {
@@ -170,7 +178,23 @@ app.get('/cases/:id/intake', async (c) => {
 
 app.get('/cases/:id/detail', async (c) => {
   const detail = await service.getCaseDetail(Number(c.req.param('id')));
-  return detail ? c.json(detail) : c.json({ error: '사례를 찾지 못했어요.' }, 404);
+  if (!detail) return c.json({ error: '사례를 찾지 못했어요.' }, 404);
+  // 당사자 정보는 금고에서 이름·연락처·이메일을 꺼내 싣는다. 실은 항목만 적는다.
+  const fields = (['name', 'phone', 'email'] as const).filter((k) => detail.participant[k]);
+  await audit({
+    actorId: c.get('actor').id,
+    action: 'case.detail',
+    participantId: detail.case.participant_id,
+    caseId: detail.case.id,
+    fields: [...fields],
+  });
+  return c.json(detail);
+});
+
+app.get('/audit', async (c) => {
+  // 열람 기록은 관리자만 본다(GLOSSARY §6-7 설정 › 열람 기록).
+  if (c.get('actor').role !== 'admin') return c.json({ error: '관리자만 볼 수 있어요.' }, 403);
+  return c.json(await listAudit());
 });
 
 app.post('/cases/:id/close', async (c) => {
@@ -182,16 +206,32 @@ app.post('/cases/:id/close', async (c) => {
   );
 });
 
-app.get('/participants', async (c) => c.json(await service.listParticipants()));
+app.get('/participants', async (c) => {
+  const rows = await service.listParticipants();
+  // 목록에 실은 PII 는 이름뿐이다. 실은 사람 수가 아니라 조회 1건으로 남긴다.
+  if (rows.some((r) => r.name)) {
+    await audit({ actorId: c.get('actor').id, action: 'participants.list', fields: ['name'] });
+  }
+  return c.json(rows);
+});
 
 app.get('/schedules', async (c) => {
   const now = new Date();
   const from = c.req.query('from') ?? new Date(now.getTime() - 86_400_000).toISOString();
   const to = c.req.query('to') ?? new Date(now.getTime() + 30 * 86_400_000).toISOString();
-  return c.json(await service.listSchedules(from, to));
+  const rows = await service.listSchedules(from, to);
+  if (rows.some((r) => r.name)) {
+    await audit({ actorId: c.get('actor').id, action: 'schedule.list', fields: ['name'] });
+  }
+  return c.json(rows);
 });
 
 app.get('/cases/:id/briefing', async (c) => {
-  const found = await service.getBriefing(Number(c.req.param('id')));
-  return found ? c.json(found) : c.json({ error: 'not found' }, 404);
+  const caseId = Number(c.req.param('id'));
+  const found = await service.getBriefing(caseId);
+  if (!found) return c.json({ error: 'not found' }, 404);
+  if (found.participant_card.name) {
+    await audit({ actorId: c.get('actor').id, action: 'case.briefing', caseId, fields: ['name'] });
+  }
+  return c.json(found);
 });

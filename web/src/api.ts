@@ -164,6 +164,18 @@ export type ConsentView = Array<{
   decided_at: string | null;
 }>;
 
+export type AuditRow = {
+  id: number;
+  at: string;
+  action: string;
+  fields: string[];
+  actor_name: string | null;
+  pseudonym: string | null;
+  case_id: number | null;
+};
+
+export const listAudit = () => json<AuditRow[]>('/audit');
+
 export const getConsents = (caseId: number) => json<ConsentView>(`/cases/${caseId}/consents`);
 
 export const recordConsent = (caseId: number, body: { domain: ConsentDomain; decision: ConsentDecision }) =>
