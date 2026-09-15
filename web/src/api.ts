@@ -198,6 +198,7 @@ export type Draft = {
   session_id: number;
   status: 'draft' | 'approved';
   summary: string;
+  changes: string[];
   tasks: string[];
   questions: string[];
   mask_hits: Record<string, number>;
@@ -214,7 +215,7 @@ export const makeDraft = (sessionId: number) => json<Draft>(`/sessions/${session
 
 export const approveDraft = (
   sessionId: number,
-  body: { summary?: string; tasks?: string[]; questions?: string[] },
+  body: { summary?: string; changes?: string[]; tasks?: string[]; questions?: string[] },
 ) => json<Draft>(`/sessions/${sessionId}/draft/approve`, { method: 'POST', body: JSON.stringify(body) });
 
 export type AuditRow = {

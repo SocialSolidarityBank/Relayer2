@@ -29,6 +29,8 @@ const MASK_LABEL: Record<string, string> = {
 export function ReviewScreen({ caseId, sessionId }: { caseId: number; sessionId: number }) {
   const [draft, setDraft] = useState<Draft | 'none' | null>(null);
   const [summary, setSummary] = useState('');
+  const [changes, setChanges] = useState<Line[]>([]);
+  const [changeDraft, setChangeDraft] = useState<Line>({ text: '' });
   const [tasks, setTasks] = useState<Line[]>([]);
   const [taskDraft, setTaskDraft] = useState<Line>({ text: '' });
   const [questions, setQuestions] = useState<Line[]>([]);
@@ -40,6 +42,7 @@ export function ReviewScreen({ caseId, sessionId }: { caseId: number; sessionId:
     setDraft(next);
     if (next === 'none') return;
     setSummary(next.summary);
+    setChanges(next.changes.map((text) => ({ text })));
     setTasks(next.tasks.map((text) => ({ text })));
     setQuestions(next.questions.map((text) => ({ text })));
   };
@@ -118,6 +121,18 @@ export function ReviewScreen({ caseId, sessionId }: { caseId: number; sessionId:
               </Field>
             </Card>
 
+            <Card title="달라진 것" hint="지난 회차와 견줘 바뀐 것만이에요.">
+              <LineList
+                id="draft-change"
+                label="달라진 것"
+                placeholder="예: 연체 3건 → 4건"
+                lines={changes}
+                draft={changeDraft}
+                onDraft={setChangeDraft}
+                onChange={setChanges}
+              />
+            </Card>
+
             <Card title="수행할 과제" hint="승인하면 다음 상담의 확인할 과제로 올라가요.">
               <LineList
                 id="draft-task"
@@ -154,6 +169,7 @@ export function ReviewScreen({ caseId, sessionId }: { caseId: number; sessionId:
                   void run(() =>
                     approveDraft(sessionId, {
                       summary: summary.trim(),
+                      changes: withDraft(changes, changeDraft).map((c) => c.text),
                       tasks: withDraft(tasks, taskDraft).map((t) => t.text),
                       questions: withDraft(questions, questionDraft).map((q) => q.text),
                     }),
