@@ -83,6 +83,9 @@ ssh mini 'cd ~/services/relayer2 && git pull && pnpm --dir web build && launchct
 새 기기를 붙일 때는 `./scripts/pull-secrets.sh` 로 Infisical 에서 `.env` 를 받는다.
 키를 사람 손으로 옮기지 않는다.
 
+**백업**: 맥미니 launchd `or.bss.relayer-backup` 이 매일 04:10 에 `./scripts/backup.sh` 를 돌린다.
+최근 14개를 `~/services/relayer2/backups/` 에 둔다. 복구 연습은 맥북에서 `./scripts/restore-drill.sh`.
+
 **Cloudflare Tunnel 을 못 쓴 이유**: `Account@bss.or.kr` 계정에 **등록된 영역(도메인)이 하나도 없다**
 (Workers·D1 만 쓴다). named tunnel 의 `relayer.<도메인>` DNS 라우팅은 영역이 있어야 한다.
 도메인을 Cloudflare 에 올리면 그때 옮길 수 있고, 그전까지 Funnel 이 같은 일을 공짜로 한다.

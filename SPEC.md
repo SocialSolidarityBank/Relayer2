@@ -342,3 +342,18 @@ audit_log(id, actor_id, action, participant_id, case_id, fields[], at)
 - 실데이터 전환 때 정할 것(코드 밖): 보관 주기와 보존 기간, 백업 저장 위치(국내 리전·D2), 복구 연습 주기.
 
 **2026-09-15 첫 연습 결과**: 표 7개 행 수 일치, 자유 글 복호화 성공, 통과.
+
+### 13-1. 운영 배선 (2026-09-15)
+
+| | |
+|---|---|
+| 뜨는 곳 | 맥미니 launchd `or.bss.relayer-backup`, 매일 04:10 |
+| 대상 | `.env` 의 `DATABASE_URL`(Supabase `relayer2` 서울) |
+| 보관 | `~/services/relayer2/backups/` 최근 14개(`BACKUP_KEEP`) |
+| 복구 연습 | 맥북에서 `./scripts/restore-drill.sh` — 로컬 docker Postgres 로 되살린다 |
+
+Supabase Pro 의 자동 백업(일 1회)과 **겹쳐 둔다**. 그쪽은 대시보드에서만 되살릴 수 있어
+우리가 "되살아났다"를 증명할 수 없다. 논리 덤프는 우리가 직접 연습에 쓴다.
+
+`pg_dump` 는 Homebrew `libpq` 를 쓴다(`brew install libpq`). PATH 에 없으면
+`/opt/homebrew/opt/libpq/bin` 을 본다.
