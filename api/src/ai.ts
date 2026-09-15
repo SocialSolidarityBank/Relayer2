@@ -91,6 +91,9 @@ async function callOpenAi(prompt: string): Promise<Shape> {
     headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
     body: JSON.stringify({
       model: MODEL,
+      // 추론을 길게 돌릴 일이 아니다. 적힌 말을 정리할 뿐이다.
+      // 실측(2026-09-15): minimal 5.5초 · low 8.2초 · medium 16.7초. 실무자가 기다릴 시간이 아니다.
+      reasoning: { effort: 'minimal' },
       input: [
         { role: 'system', content: SYSTEM },
         { role: 'user', content: prompt },
