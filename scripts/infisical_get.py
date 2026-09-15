@@ -19,7 +19,7 @@ WANT = ("DATABASE_URL", "PII_ENC_KEY", "SESSION_SECRET")
 # 없으면 그냥 건너뛴다 — **AI 가 없어도 제품은 돈다.**
 # 왼쪽이 Infisical 의 이름, 오른쪽이 앱이 읽는 이름이다.
 OPTIONAL = {
-    "RELAYER2_OPENAI_API_KEY": "OPENAI_API_KEY",
+    "RELAYER_OPENAI_API_KEY": "OPENAI_API_KEY",
     "GEMINI_API_KEY": "GEMINI_API_KEY",
     "AI_PROVIDER": "AI_PROVIDER",
     "AI_MODEL": "AI_MODEL",

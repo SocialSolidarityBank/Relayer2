@@ -52,7 +52,7 @@ PY
 # 제공자별 키 이름과 유효성 확인 URL. 키 이름은 Infisical 쪽 이름이다.
 probe_cmd='
   case "$P" in
-    openai) k="${RELAYER2_OPENAI_API_KEY:-}"; [ -z "$k" ] && { echo 키없음; exit 0; }
+    openai) k="${RELAYER_OPENAI_API_KEY:-}"; [ -z "$k" ] && { echo 키없음; exit 0; }
       curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $k" https://api.openai.com/v1/models ;;
     gemini) k="${GEMINI_API_KEY:-}"; [ -z "$k" ] && { echo 키없음; exit 0; }
       curl -s -o /dev/null -w "%{http_code}" -H "x-goog-api-key: $k" https://generativelanguage.googleapis.com/v1beta/models ;;
@@ -76,7 +76,7 @@ case "$target" in openai|gemini) ;; *) echo "openai 또는 gemini 만 됩니다.
 code="$(with_secrets "P=$target; $probe_cmd")"
 [ "$code" = "200" ] || { echo "$target 키가 쓸 수 없습니다 (HTTP $code). 바꾸지 않았어요." >&2; exit 1; }
 
-src=$([ "$target" = openai ] && echo RELAYER2_OPENAI_API_KEY || echo GEMINI_API_KEY)
+src=$([ "$target" = openai ] && echo RELAYER_OPENAI_API_KEY || echo GEMINI_API_KEY)
 dst=$([ "$target" = openai ] && echo OPENAI_API_KEY || echo GEMINI_API_KEY)
 
 tmp="$(mktemp)"; trap 'rm -f "$tmp"' EXIT

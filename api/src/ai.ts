@@ -101,10 +101,15 @@ async function callOpenAi(prompt: string): Promise<Shape> {
 
   if (!res.ok) throw new AiUnavailable(`AI 응답이 오지 않았어요 (${res.status}).`);
   const payload = (await res.json()) as {
-    output?: Array<{ content?: Array<{ text?: string }> }>;
+    output?: Array<{ type?: string; content?: Array<{ type?: string; text?: string }> }>;
     output_text?: string;
   };
-  const text = payload.output_text ?? payload.output?.[0]?.content?.[0]?.text;
+  // `output` 의 첫 항목은 추론(reasoning)이라 글이 없다. 말(message) 항목을 찾아야 한다.
+  const text =
+    payload.output_text ??
+    payload.output
+      ?.find((o) => o.type === 'message')
+      ?.content?.find((c) => c.type === 'output_text')?.text;
   if (!text) throw new AiUnavailable('AI 응답을 읽지 못했어요.');
   return JSON.parse(text) as Shape;
 }

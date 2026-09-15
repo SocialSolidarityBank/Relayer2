@@ -37,7 +37,7 @@ OpenAI 키 하나가 죽으면서 두 제품이 같이 멈췄다.
 
 | 이름 | 무엇 | 없으면 |
 |---|---|---|
-| `RELAYER2_OPENAI_API_KEY` | OpenAI 서비스 계정 키 (`sk-svcacct-…`) | AI 정리 요청이 503 |
+| `RELAYER_OPENAI_API_KEY` | OpenAI 서비스 계정 키 (`sk-svcacct-…`) | AI 정리 요청이 503 |
 | `GEMINI_API_KEY` | Google Gemini 키 (예비 제공자) | 위와 같음 |
 | `AI_PROVIDER` | `openai` 또는 `gemini` | 기본 `openai` |
 | `AI_MODEL` | 모델 이름. 비워 두면 알아서 고른다 | 기본값 사용 |
@@ -53,7 +53,7 @@ OpenAI 키 하나가 죽으면서 두 제품이 같이 멈췄다.
 2. 프로젝트 **`ggbss-agent`** 열기
 3. 왼쪽 **Secrets** → 위쪽 환경에서 **`prod`** 선택
 4. 폴더 목록에서 **`RELAYER2`** 클릭 (주소창 끝이 `secretPath=%2FRELAYER2` 가 된다)
-5. **Add Secret** → 이름 `RELAYER2_OPENAI_API_KEY`, 값에 키 붙여넣기 → 저장
+5. **Add Secret** → 이름 `RELAYER_OPENAI_API_KEY`, 값에 키 붙여넣기 → 저장
 
 > 이름을 **정확히** 그대로 쓴다. 배포 스크립트가 이 이름을 찾는다
 > (`scripts/infisical_get.py` 의 `OPTIONAL`). 앱 안에서는 `OPENAI_API_KEY` 로 바뀌어 들어간다.
@@ -131,22 +131,10 @@ print(json.loads(base64.urlsafe_b64decode(s))['identityName'])"
 GET https://app.infisical.com/api/v1/workspace   (Bearer <access token>)
 ```
 
-### 새 자격을 만들게 되면 이렇게 남긴다
+### 프로젝트 ID 를 쓰는 곳
 
-1Password **BSS 금고**에 **새 항목**으로 만든다. 기존 항목에 필드를 덧붙이지 않는다 —
-프로젝트가 다른 자격이 한 항목에 섞이면 반드시 헷갈린다(실제로 겪었다).
-
-```
-제목: Infisical · <프로젝트 이름> (machine identity)
-  client_id
-  client_secret
-  machine_id
-  project_id
-  env      = prod
-  path     = /RELAYER2
-```
-
-만든 뒤 **이 문서의 3·5절을 고친다.** 코드에서 프로젝트 ID 를 쓰는 곳은 두 군데다.
+자격은 위 항목 하나뿐이다. 새로 만들 일은 없다. 다만 값의 위치를 옮기면
+코드 두 군데를 같이 고친다.
 
 ```
 scripts/wire-secrets.sh    INFISICAL_PROJECT_ID / INFISICAL_PATH
