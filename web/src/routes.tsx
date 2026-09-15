@@ -1,6 +1,7 @@
 // 베타 라우팅. 화면이 다섯이라 라우터 의존성을 두지 않는다.
 // 로그인하지 않았으면 어떤 화면도 열지 않는다.
 import { useEffect, useState } from 'react';
+import { applyTheme, followSystemTheme, initialTheme, type Theme } from './theme.ts';
 import { getMe, logout, Unauthorized, type Me } from './api.ts';
 import { AccessScreen } from './screens/access.tsx';
 import { AuditScreen } from './screens/audit.tsx';
@@ -27,6 +28,13 @@ export function Routes() {
     window.addEventListener('hashchange', onChange);
     return () => window.removeEventListener('hashchange', onChange);
   }, []);
+
+  // 테마는 화면이 뜨기 전에 한 번, 그 뒤로는 고를 때마다 붙인다.
+  const [theme, setTheme] = useState<Theme>(initialTheme);
+  useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
+  useEffect(() => followSystemTheme(setTheme), []);
 
   useEffect(() => {
     void getMe()
@@ -90,6 +98,15 @@ export function Routes() {
         )}
         <span className="app-nav-me">
           {me.name}
+          {/* 다크 토큰은 이미 이식돼 있었다. 없던 것은 켜는 장치뿐이라 그것만 붙인다. */}
+          <button
+            type="button"
+            className="app-nav-logout"
+            aria-pressed={theme === 'dark'}
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          >
+            {theme === 'dark' ? '밝게' : '어둡게'}
+          </button>
           <button
             type="button"
             className="app-nav-logout"
