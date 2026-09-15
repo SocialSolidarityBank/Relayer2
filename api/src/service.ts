@@ -1,5 +1,6 @@
 // DB 접근은 여기 하나로 모은다. 쓰기는 전부 트랜잭션 하나 안에서 끝낸다.
 import {
+  activeDomains,
   CONSENT_COPY,
   CONSENT_DOMAINS,
   copyHash,
@@ -457,7 +458,8 @@ export async function getConsents(caseId: number): Promise<ConsentView | null> {
   const events = await sql<ConsentEventRow[]>`
     select id, domain, decision, copy_version, copy_hash, effective_at
     from consent_events where participant_id = ${supportCase.participant_id} order by id`;
-  return CONSENT_DOMAINS.map((domain) => {
+  // 기능이 꺼진 영역은 목록에 두지 않는다 — 받을 이유가 없는 동의를 화면에 띄우지 않는다.
+  return activeDomains().map((domain) => {
     const mine = events.filter((e) => e.domain === domain);
     return {
       domain,
