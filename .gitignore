@@ -4,3 +4,4 @@ node_modules/
 web/test-results/
 web/playwright-report/
 backups/
+web/dist/

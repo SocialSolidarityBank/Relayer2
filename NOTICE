@@ -1,0 +1,22 @@
+릴레이어 (Relayer)
+Copyright 2026 사회연대은행 (Social Solidarity Bank)
+
+이 배포물은 Apache License, Version 2.0 을 따른다. 전문은 LICENSE 에 있다.
+
+## 가져온 것
+
+이 저장소의 아래 부분은 같은 단체의 CCC Open Pilot(Apache-2.0)에서 이식했다.
+
+| 이식물 | 출처 |
+|---|---|
+| `web/src/styles/tokens.css` · `wire.css` · `shell.css` | `apps/web/app/components/wire/wire-styles.ts`, `apps/web/app/layout.tsx` |
+| `web/src/ui.tsx` 의 `Chevron` | `apps/web/app/components/wire/chevron.tsx` |
+| `web/src/intake-questions.ts` | `apps/web/app/.../records/intake/intake-questions.ts` (정본: `PRD/intake-questionnaire-v1.md`) |
+| `api/src/consent.ts` 의 식별자·문안·해시 규칙 | `docs/specs/S7-consent-six-domains.md` |
+
+클래스 이름과 문안은 일부러 바꾸지 않았다. 바꾸면 이식이 아니라 구조 변경이 된다.
+
+## 자료
+
+이 저장소에는 실제 당사자 자료가 없다. 시험 계정과 예시는 전부 합성이며,
+실데이터 사용은 별도 결정(`PLAN.md` P1·D2)을 거친다.
