@@ -8,6 +8,12 @@ import { sql } from './db.ts';
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), '../../migrations');
 
 async function pending(): Promise<string[]> {
+  // 전용 스키마를 쓰면 먼저 만든다. 없으면 public 그대로다.
+  const schema = process.env.PGSCHEMA;
+  if (schema) {
+    await sql.unsafe(`create schema if not exists "${schema}"`);
+    await sql.unsafe(`set search_path to "${schema}", public`);
+  }
   await sql`create table if not exists schema_migrations (
     version text primary key,
     applied_at timestamptz not null default now()

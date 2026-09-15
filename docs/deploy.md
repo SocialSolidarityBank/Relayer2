@@ -78,6 +78,18 @@ cloudflared tunnel run --url http://127.0.0.1:8787 relayer
 
 상시로 돌리려면 `cloudflared service install` 로 맥미니 로그인 항목에 올린다.
 
+### 실제 배선 (2026-09-15)
+
+| | |
+|---|---|
+| Supabase 프로젝트 | `Relayer` (`wtbdqyedyimivdbgljcs`, ap-northeast-2, Pro) |
+| 스키마 | **`relayer`** — 이 프로젝트에는 CCC 스키마가 이미 있고 `audit_log`·`consent_events` 이름이 겹친다. 표 이름을 바꾸는 대신 스키마를 갈랐다(`PGSCHEMA`) |
+| 시크릿 | Infisical `ggbss` 프로젝트 · `prod` · **`/RELAYER2`** 에 `DATABASE_URL`·`PII_ENC_KEY`·`SESSION_SECRET` |
+| 배선 스크립트 | `./scripts/wire-secrets.sh <비밀번호파일>` — 값을 찍지 않고 `.env` 와 Infisical 에 넣는다 |
+
+Infisical 쓰기는 read 전용 project token 이 아니라 Machine Identity(`ggbss_client_ID`/`_secret`)로 한다.
+CLI `secrets set` 은 값을 `argv` 에 실어 `ps` 에 보이므로 `scripts/infisical_put.py` 가 HTTP 로 올린다.
+
 ### Supabase 를 DB 로 쓸 때
 
 `.env` 의 `DATABASE_URL` 만 바꾸면 된다. TLS 와 prepared statement 설정은 주소를 보고 자동으로 정한다(`api/src/db.ts`).

@@ -12,7 +12,15 @@ export const DATABASE_URL =
 const isManaged = /supabase\.(co|com)|sslmode=require/.test(DATABASE_URL);
 const isTransactionPooler = /:6543\b/.test(DATABASE_URL);
 
+/**
+ * 한 Postgres 를 다른 서비스와 나눠 쓸 때를 위한 전용 스키마.
+ * 2026-09-15: Supabase `Relayer` 프로젝트에 CCC 스키마가 이미 있어 `audit_log`·`consent_events`
+ * 이름이 겹쳤다. 표 이름을 바꾸는 대신 스키마를 가른다.
+ */
+const SCHEMA = process.env.PGSCHEMA;
+
 export const sql = postgres(DATABASE_URL, {
+  connection: SCHEMA ? { search_path: `${SCHEMA},public` } : undefined,
   ssl: isManaged ? 'require' : undefined,
   prepare: !isTransactionPooler,
   onnotice: () => {},
