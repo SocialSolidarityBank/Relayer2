@@ -227,7 +227,7 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
       />
 
       <div className="wire-container">
-        {STEP1_GROUPS.map(renderGroup)}
+        <div className="card-grid two-col">{STEP1_GROUPS.map(renderGroup)}</div>
 
         <Card title={intakeSectionLabel(areaGroup.title)} hint="고른 영역만 아래에 세부 질문이 열려요.">
           {areaGroup.questions.map((q) => (
@@ -282,8 +282,10 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
           </Card>
         )}
 
-        {STEP3_GROUPS.map(renderGroup)}
-        {STEP4_GROUPS.map(renderGroup)}
+        <div className="card-grid two-col">
+          {STEP3_GROUPS.map(renderGroup)}
+          {STEP4_GROUPS.map(renderGroup)}
+        </div>
 
         <Card title="전체 상담 목표">
           <FormField

@@ -70,6 +70,8 @@ export function BriefingScreen({ caseId, hideHeader }: { caseId: number; hideHea
           </div>
         </Card>
 
+        {/* 3~6 은 읽는 카드다. 넓은 화면에서 두 칸으로 앉아 15초 안에 눈에 들어오게 한다. */}
+        <div className="briefing-cards-grid two-col">
         {/* 3. 목표 — 비면 뺀다 */}
         {briefing.goals && (
           <Card title="목표">
@@ -133,6 +135,7 @@ export function BriefingScreen({ caseId, hideHeader }: { caseId: number; hideHea
             )}
           </Card>
         )}
+        </div>
       </div>
     </>
   );
