@@ -4,6 +4,7 @@
 //
 // 승인 전에는 어떤 것도 회차 기록이 되지 않는다. 승인은 사람만 한다(GLOSSARY §6-5).
 import { assertConsent } from './service.ts';
+import { AI_PROVIDERS, type AiProviderId } from './consent.ts';
 import { audit } from './audit.ts';
 import { sql } from './db.ts';
 import { maskAll } from './domain/masking.ts';
@@ -14,7 +15,7 @@ import type { Card, Session } from './domain/types.ts';
  * 제공자는 기관이 고른다. 바꾸면 동의 문안 해시가 달라져 기존 동의가 `확인 필요`로 떨어진다 —
  * 그게 맞는 동작이다. 누구에게 보내는지가 곧 동의의 내용이다.
  */
-const PROVIDER = (process.env.AI_PROVIDER ?? 'openai') as 'openai' | 'gemini';
+const PROVIDER = (process.env.AI_PROVIDER ?? 'openai') as AiProviderId;
 // gemini-2.5-flash 는 신규 사용자에게 닫혔다(2026-09-15 실측 404). 별칭을 쓴다.
 const MODEL = process.env.AI_MODEL ?? (PROVIDER === 'gemini' ? 'gemini-flash-latest' : 'gpt-5-mini');
 
@@ -158,12 +159,18 @@ export async function draftSession(sessionId: number, actorId: number): Promise<
             ${sql.json(shape.questions)}, ${sql.json(hits)}, ${MODEL}, ${actorId})
     returning id, created_at`;
 
-  // 무엇을 몇 건 가려 보냈는지 남긴다. 보낸 원문은 남기지 않는다.
+  // 무엇을 몇 건 가려 **어디로** 보냈는지 남긴다. 보낸 원문은 남기지 않는다.
+  // 수신자는 국외 이전 기록의 본체다. 빠지면 "누구에게 넘어갔나"에 답할 수 없다.
   await audit({
     actorId,
     action: 'ai.draft',
     caseId: session.case_id,
-    fields: Object.entries(hits).map(([kind, n]) => `masked:${kind}=${n}`),
+    fields: [
+      `recipient=${AI_PROVIDERS[PROVIDER].legalRecipient}`,
+      `country=${AI_PROVIDERS[PROVIDER].country}`,
+      `model=${MODEL}`,
+      ...Object.entries(hits).map(([kind, n]) => `masked:${kind}=${n}`),
+    ],
   });
 
   return {
@@ -206,6 +213,7 @@ export async function approveDraft(
   actorId: number,
   edited?: { summary?: string; tasks?: string[]; questions?: string[] },
 ): Promise<Draft> {
+  const [session] = await sql<Session[]>`select case_id from sessions where id = ${sessionId}`;
   const current = await latestDraft(sessionId);
   if (!current) throw new Error('승인할 초안이 없어요.');
 
@@ -219,7 +227,12 @@ export async function approveDraft(
             ${sql.json(current.mask_hits)}, ${current.model}, ${current.created_by ?? actorId}, ${actorId})
     returning id, created_at`;
 
-  await audit({ actorId, action: 'ai.approve', fields: [`draft=${current.id}`] });
+  await audit({
+    actorId,
+    action: 'ai.approve',
+    caseId: session?.case_id,
+    fields: [`draft=${current.id}`, edited ? 'edited=yes' : 'edited=no'],
+  });
 
   return { ...current, id: row.id, status: 'approved', summary, tasks, questions, created_at: row.created_at };
 }

@@ -144,3 +144,45 @@ node api/src/seed.ts      # 시험 계정 test1~3 + 합성 사례
 ```
 
 **서울 리전(ap-northeast-2)** 을 고른다. 지금은 합성 데이터라 요건이 아니지만, 실데이터로 넘어갈 때 옮기지 않으려면 처음부터 서울에 둔다.
+
+## AI 제공자와 키 (P3)
+
+자격은 **Machine Identity `ggbss-agent`** 하나만 쓴다(universal-auth, 1Password BSS 금고
+`Infisical · account@ggbss.or.kr` 의 `ggbss_client_ID`/`ggbss_client_secret`).
+
+조직에 이름이 비슷한 머신 ID 가 넷 있다. **헷갈리지 말 것.**
+
+| 이름 | 성격 | 우리 것 |
+|---|---|---|
+| `agent` | 조직 전역 · 회사 내부용 | ✗ |
+| `hermes-bss` | 조직 전역 | ✗ |
+| `bss-agent` | hermes-bss 프로젝트 전용 | ✗ |
+| **`ggbss-agent`** | ggbss-agent 프로젝트 전용 · Admin | **✅** |
+
+어느 자격인지 확인하려면 universal-auth 로그인 토큰의 JWT payload 를 디코드해
+`identityName` 을 본다. 값을 노출하지 않고 주체를 특정할 수 있다.
+
+`ggbss_project_access_token` 은 서비스 토큰이라 스코프가 루트 `/` 뿐이라
+`/RELAYER2` 를 읽지 못한다(2026-09-15 실측). 쓰지 않는다.
+
+### 키 위치
+
+```
+ggbss-agent · prod · /RELAYER2
+  DATABASE_URL  PII_ENC_KEY  SESSION_SECRET      ← 없으면 배포 중단
+  RELAYER2_OPENAI_API_KEY  GEMINI_API_KEY        ← 있으면 쓰고 없으면 건너뜀
+  AI_PROVIDER  AI_MODEL
+```
+
+**AI 키는 선택이다.** 없으면 `scripts/pull-secrets.sh` 가 그냥 건너뛰고,
+AI 정리 요청만 503 으로 실패한다. 제품의 나머지는 그대로 돈다.
+
+### 제공자 바꾸기
+
+```bash
+./scripts/ai-provider.sh            # 지금 상태 (유효성은 HTTP 상태코드로만)
+./scripts/ai-provider.sh openai     # 바꾸기
+```
+
+바꾼 뒤 **외부 LLM·국외 처리 동의를 다시 받아야 한다.** 수신자가 동의 문안 해시에 묶여 있어
+바뀌는 순간 기존 동의가 `확인 필요`로 떨어지고 초안 요청이 409 로 막힌다(설계대로다).
