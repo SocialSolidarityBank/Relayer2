@@ -152,3 +152,30 @@ scripts/ai-provider.sh     PROJECT_ID / SECRET_PATH
 - CLI `infisical secrets set` 으로 값 올리기
   — 값이 `argv` 에 실려 `ps` 에 보인다. `scripts/infisical_put.py` 가 HTTP 로 올린다
 - 릴레이어 자격을 CCC 와 공유하기 (반대 방향도)
+
+---
+
+## 7. 로테이션이 일어났을 때
+
+2026-09-15 에 CCC 쪽이 공용 자격을 갈고 Infisical 폴더 이름을 대문자로 바꿨다.
+**릴레이어2는 아무것도 끊기지 않았다.** 우리가 읽는 자리가 그쪽과 겹치지 않기 때문이다.
+
+확인하는 법은 간단하다. 우리가 실제로 읽는 이름을 코드에서 세어 보면 된다.
+
+```bash
+for n in CLOUDFLARE_WORKERS_API_TOKEN CCC_LINEAR_API_KEY AZURE_SPEECH_KEY RELAYER_PII_ENC_KEY; do
+  printf '%-32s ' "$n"
+  grep -rl "$n" --include="*.ts" --include="*.sh" --include="*.py" . 2>/dev/null | grep -v node_modules | wc -l
+done
+```
+
+전부 `0` 이면 무관하다. 이름이 비슷해도 **프로젝트가 다르면 남의 것**이다 —
+`RELAYER_PII_ENC_KEY` 는 RELAYER 프로젝트 것이고, 우리 것은 `/RELAYER2` 폴더의
+접두 없는 `PII_ENC_KEY` 다.
+
+값이 바뀌었는지는 지문으로 본다. 값을 보지 않고도 같은지 다른지 알 수 있다.
+
+```bash
+# 이름과 sha256 앞 8자만 낸다. 값은 메모리 밖으로 나가지 않는다.
+./scripts/ai-provider.sh          # 제공자 키 상태(HTTP 상태코드만)
+```
