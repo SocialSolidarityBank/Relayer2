@@ -18,7 +18,7 @@ umask 077
 pw_file="${1:?비밀번호 파일 경로가 필요하다}"
 [ -s "$pw_file" ] || { echo "비밀번호 파일이 비었다"; exit 1; }
 
-PROJECT_REF="wtbdqyedyimivdbgljcs"
+PROJECT_REF="${SUPABASE_REF:-sqpzuqnfhrpaivzsgvxh}"  # relayer2 전용 프로젝트(2026-09-15)
 POOLER_HOST="aws-0-ap-northeast-2.pooler.supabase.com"
 INFISICAL_PATH="/RELAYER2"
 INFISICAL_PROJECT_ID="a7c44b37-a885-4c62-98cd-cbc8a9810de9"

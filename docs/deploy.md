@@ -82,10 +82,18 @@ cloudflared tunnel run --url http://127.0.0.1:8787 relayer
 
 | | |
 |---|---|
-| Supabase 프로젝트 | `Relayer` (`wtbdqyedyimivdbgljcs`, ap-northeast-2, Pro) |
-| 스키마 | **`relayer`** — 이 프로젝트에는 CCC 스키마가 이미 있고 `audit_log`·`consent_events` 이름이 겹친다. 표 이름을 바꾸는 대신 스키마를 갈랐다(`PGSCHEMA`) |
+| Supabase 프로젝트 | **`relayer2`** (`sqpzuqnfhrpaivzsgvxh`, ap-northeast-2, Pro 조직) — `./scripts/create-supabase-project.sh` 로 만들었다 |
+| 스키마 | `public` (전용 프로젝트라 가를 이유가 없다) |
 | 시크릿 | Infisical `ggbss` 프로젝트 · `prod` · **`/RELAYER2`** 에 `DATABASE_URL`·`PII_ENC_KEY`·`SESSION_SECRET` |
 | 배선 스크립트 | `./scripts/wire-secrets.sh <비밀번호파일>` — 값을 찍지 않고 `.env` 와 Infisical 에 넣는다 |
+
+> **왜 전용 프로젝트인가**: 처음에는 기존 `Relayer`(`wtbdqyedyimivdbgljcs`)에 붙였는데 그 프로젝트에는
+> **CCC 스키마가 이미 들어 있었다** — `audit_log`·`consent_events` 이름이 그대로 겹친다.
+> 스키마를 갈라 피할 수도 있지만 마이그레이션·백업·권한이 서로 걸린다. 2026-09-15 Q 지시로 분리했고,
+> 그 프로젝트에 만들었던 `relayer` 스키마는 지웠다(확인: 남은 스키마 0).
+>
+> **남은 일**: 그 프로젝트의 DB 비밀번호를 접속 주소를 얻으려고 재설정했다. CCC 쪽에서 그 DB 를
+> 쓰고 있었다면 저장된 접속 문자열을 새 값으로 바꿔야 한다(Infisical `prod:/CCC` 에는 DB 시크릿이 없었다).
 
 Infisical 쓰기는 read 전용 project token 이 아니라 Machine Identity(`ggbss_client_ID`/`_secret`)로 한다.
 CLI `secrets set` 은 값을 `argv` 에 실어 `ps` 에 보이므로 `scripts/infisical_put.py` 가 HTTP 로 올린다.
