@@ -10,7 +10,10 @@ export type OutcomeSubmission = {
   note?: string | null;
 };
 
-/** 회차 순서상 마지막 결과. 회차 seq 가 큰 쪽이 최신이다. */
+/**
+ * 회차 순서상 마지막 결과. 회차 seq 가 큰 쪽이 최신이고,
+ * 같은 회차 안에 여러 행이 쌓였으면(고쳐 쓴 경우) **나중에 쓴 행**이 유효하다.
+ */
 export function latestOutcome(
   card: Card,
   outcomes: CardOutcome[],
@@ -18,11 +21,13 @@ export function latestOutcome(
 ): CardOutcome | undefined {
   let best: CardOutcome | undefined;
   let bestSeq = -1;
+  let bestId = -1;
   for (const o of outcomes) {
     if (o.card_id !== card.id) continue;
     const seq = seqBySession[o.session_id] ?? -1;
-    if (seq >= bestSeq) {
+    if (seq > bestSeq || (seq === bestSeq && o.id > bestId)) {
       bestSeq = seq;
+      bestId = o.id;
       best = o;
     }
   }

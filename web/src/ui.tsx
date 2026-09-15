@@ -150,6 +150,10 @@ export function Choice({
 
 export type Line = { text: string; area?: string };
 
+/** 적어만 두고 `추가`를 누르지 않은 줄도 저장에 포함한다(2026-09-15 Q: 추가는 저장이 아니다). */
+export const withDraft = (lines: Line[], draft: Line): Line[] =>
+  draft.text.trim() ? [...lines, { ...draft, text: draft.text.trim() }] : lines;
+
 /** 한 줄씩 적어 쌓는 입력. 인테이크와 상담 기록하기가 같은 부품을 쓴다. */
 export function LineList({
   id,
@@ -157,6 +161,8 @@ export function LineList({
   placeholder,
   withArea,
   lines,
+  draft,
+  onDraft,
   onChange,
 }: {
   /** id 는 공백 없는 슬러그다. 라벨을 그대로 쓰면 유효하지 않은 id 가 된다. */
@@ -165,14 +171,18 @@ export function LineList({
   placeholder: string;
   withArea?: boolean;
   lines: Line[];
+  /** 아직 `추가`를 누르지 않은 한 줄. 부모가 들고 있다가 저장할 때 함께 넣는다. */
+  draft: Line;
+  onDraft: (next: Line) => void;
   onChange: (next: Line[]) => void;
 }) {
-  const [draft, setDraft] = useState('');
-  const [area, setArea] = useState<string>(LIFE_AREAS[0].key);
+  const area = draft.area ?? LIFE_AREAS[0].key;
+  const setArea = (key: string) => onDraft({ ...draft, area: key });
+  const setDraft = (text: string) => onDraft({ ...draft, text });
   const add = () => {
-    if (!draft.trim()) return;
-    onChange([...lines, withArea ? { text: draft.trim(), area } : { text: draft.trim() }]);
-    setDraft('');
+    if (!draft.text.trim()) return;
+    onChange([...lines, withArea ? { text: draft.text.trim(), area } : { text: draft.text.trim() }]);
+    onDraft({ text: '', area });
   };
   return (
     <>
@@ -197,7 +207,7 @@ export function LineList({
               type="text"
               aria-label={label}
               placeholder={placeholder}
-              value={draft}
+              value={draft.text}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {

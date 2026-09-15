@@ -108,6 +108,11 @@ app.get('/cases/:id', async (c) => {
   return found ? c.json(found) : c.json({ error: 'not found' }, 404);
 });
 
+app.get('/sessions/:id', async (c) => {
+  const found = await service.getSessionRecord(Number(c.req.param('id')));
+  return found ? c.json(found) : c.json({ error: '회차를 찾지 못했어요.' }, 404);
+});
+
 app.patch('/sessions/:id', async (c) => {
   const body = z
     .object({

@@ -39,6 +39,10 @@ export function Routes() {
     if (hash === '#/participants') return <ParticipantsScreen />;
     if (hash === '#/participants/new') return <ParticipantNewScreen />;
 
+    // 저장해 둔 회차 고쳐 쓰기. 기록 화면을 그대로 쓰되 대상 회차를 준다.
+    const editing = hash.match(/^#\/cases\/(\d+)\/sessions\/(\d+)\/edit$/);
+    if (editing) return <RecordScreen caseId={Number(editing[1])} sessionId={Number(editing[2])} />;
+
     const byCase = hash.match(/^#\/cases\/(\d+)\/(briefing|record|schedule|intake|info|close)$/);
     if (byCase) {
       const caseId = Number(byCase[1]);

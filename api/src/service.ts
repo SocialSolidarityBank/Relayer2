@@ -187,6 +187,19 @@ export async function recordSession(
     const outcomes = await tx<CardOutcome[]>`
       select o.* from card_outcomes o join cards c on c.id = o.card_id where c.case_id = ${target.case_id}`;
 
+    // 이미 저장한 회차를 고쳐 쓰는 경우, 이 회차가 남긴 결과는 빼고 "이 회차 전에 열려 있던 카드"를
+    // 다시 센다. 그러지 않으면 지난번에 완료로 닫은 카드가 목록에서 빠져 미확인이 남지 않는다.
+    const wasDone = target.status === 'done';
+    const outcomesBefore = wasDone ? outcomes.filter((o) => o.session_id !== sessionId) : outcomes;
+
+    // 고쳐 쓰기: 이 회차가 만든 카드 중 **결과가 붙지 않은 것**만 갈아 끼운다(인테이크와 같은 규칙).
+    if (wasDone) {
+      await tx`
+        delete from cards c
+        where c.source_session_id = ${sessionId}
+          and not exists (select 1 from card_outcomes o where o.card_id = c.id)`;
+    }
+
     const carry = carryOverOnRecord(target, sessions);
     await tx`update sessions set
         status = 'done',
@@ -208,9 +221,21 @@ export async function recordSession(
       await setOverallGoal(tx as unknown as typeof sql, target.case_id, input.overall_goal);
     }
 
-    await insertCards(tx as unknown as typeof sql, target.case_id, sessionId, input.cards ?? []);
+    const keptIds = new Set(
+      (await tx<Array<{ id: number }>>`select id from cards where source_session_id = ${sessionId}`).map((c) => c.id),
+    );
+    const kept = cards.filter((c) => keptIds.has(c.id));
+    const fresh = (input.cards ?? []).filter(
+      (c) => !kept.some((k) => k.kind === c.kind && k.text === c.text),
+    );
+    await insertCards(tx as unknown as typeof sql, target.case_id, sessionId, fresh);
 
-    const rows = resolveOutcomes(openCards(cards, outcomes, sessions), input.outcomes ?? []);
+    const openBefore = openCards(
+      cards.filter((c) => c.source_session_id !== sessionId || keptIds.has(c.id)),
+      outcomesBefore,
+      sessions,
+    );
+    const rows = resolveOutcomes(openBefore, input.outcomes ?? []);
     for (const row of rows) {
       const full = row as OutcomeSubmission & { result: string };
       await tx`insert into card_outcomes (card_id, session_id, result, follow, reason, note)
@@ -219,6 +244,85 @@ export async function recordSession(
     }
     return { session_id: sessionId, unchecked: rows.filter((r) => r.result === 'unchecked').length };
   });
+}
+
+export type SessionRecord = {
+  session_id: number;
+  case_id: number;
+  seq: number;
+  status: string;
+  kind: string;
+  held_at: string | null;
+  method: string | null;
+  place: string | null;
+  memo: string | null;
+  next_goal_text: string | null;
+  overall_goal: string | null;
+  is_closing: boolean;
+  /** 이 회차가 만든 카드. 결과가 붙은 것은 지울 수 없다. */
+  cards: Array<{ kind: string; text: string; area: string | null; locked: boolean }>;
+  /** 이 회차에 올라와 있던 카드와 이 회차가 매긴 결과(고쳐 쓸 때 그대로 다시 보여 준다). */
+  open_cards: Array<{
+    card_id: number;
+    kind: string;
+    text: string;
+    source_session_seq: number | null;
+    result: string | null;
+    follow: string | null;
+    reason: string | null;
+  }>;
+};
+
+/** 저장해 둔 회차를 다시 연다. 고쳐 쓰기 화면의 재료다. */
+export async function getSessionRecord(sessionId: number): Promise<SessionRecord | null> {
+  const [target] = await sql<Session[]>`select * from sessions where id = ${sessionId}`;
+  if (!target) return null;
+  const loaded = await loadCase(target.case_id);
+  if (!loaded) return null;
+  const { supportCase, sessions, cards, outcomes } = loaded;
+
+  const mine = outcomes.filter((o) => o.session_id === sessionId);
+  const latestMine = (cardId: number) =>
+    mine.filter((o) => o.card_id === cardId).sort((a, b) => a.id - b.id).at(-1);
+
+  // 이 회차 전에 열려 있던 카드 = 고쳐 쓸 때 레일에 다시 세울 것.
+  const before = openCards(cards, outcomes.filter((o) => o.session_id !== sessionId), sessions);
+  const seqById = new Map(sessions.map((s) => [s.id, s.seq]));
+
+  return {
+    session_id: target.id,
+    case_id: target.case_id,
+    seq: target.seq,
+    status: target.status,
+    kind: target.kind,
+    held_at: target.held_at,
+    method: target.method,
+    place: target.place,
+    memo: target.memo,
+    next_goal_text: target.next_goal_text,
+    overall_goal: supportCase.overall_goal,
+    is_closing: target.is_closing ?? false,
+    cards: cards
+      .filter((c) => c.source_session_id === sessionId)
+      .map((c) => ({
+        kind: c.kind,
+        text: c.text,
+        area: c.area,
+        locked: outcomes.some((o) => o.card_id === c.id),
+      })),
+    open_cards: before.map((c) => {
+      const got = latestMine(c.id);
+      return {
+        card_id: c.id,
+        kind: c.kind,
+        text: c.text,
+        source_session_seq: seqById.get(c.source_session_id) ?? null,
+        result: got?.result ?? null,
+        follow: got?.follow ?? null,
+        reason: got?.reason ?? null,
+      };
+    }),
+  };
 }
 
 /** 전체 상담 목표 수정. 이전 문구를 이력으로 남긴다(append-only). */

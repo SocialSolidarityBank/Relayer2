@@ -15,7 +15,7 @@ const dateLabel = (iso: string | null): string => {
 };
 
 /** 회차별 요약 — 회차 목록과 원문. 상담 종결은 회차가 아니므로 번호 없이 따로 붙는다(SPEC §4-3). */
-function Sessions({ detail }: { detail: CaseDetail }) {
+function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
   const [openIds, setOpenIds] = useState<number[]>([]);
   const done = detail.sessions.filter((s) => s.status === 'done');
 
@@ -30,15 +30,28 @@ function Sessions({ detail }: { detail: CaseDetail }) {
               title={`${s.seq}회차 · ${dateLabel(s.held_at)}${s.kind === 'intake' ? ' · 인테이크' : ''}`}
               desc={s.line}
               action={
-                <Button
-                  onClick={() =>
-                    setOpenIds((prev) =>
-                      prev.includes(s.id) ? prev.filter((id) => id !== s.id) : [...prev, s.id],
-                    )
-                  }
-                >
-                  {openIds.includes(s.id) ? '원문 닫기' : '원문 보기'}
-                </Button>
+                <>
+                  <Button
+                    onClick={() =>
+                      setOpenIds((prev) =>
+                        prev.includes(s.id) ? prev.filter((id) => id !== s.id) : [...prev, s.id],
+                      )
+                    }
+                  >
+                    {openIds.includes(s.id) ? '원문 닫기' : '원문 보기'}
+                  </Button>
+                  {s.kind === 'intake' ? (
+                    <Button onClick={() => (window.location.hash = `#/cases/${caseId}/intake`)}>
+                      고쳐 쓰기
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={() => (window.location.hash = `#/cases/${caseId}/sessions/${s.id}/edit`)}
+                    >
+                      고쳐 쓰기
+                    </Button>
+                  )}
+                </>
               }
             />
             {openIds.includes(s.id) && <p className="info-original">{s.memo ?? '수기 기록이 없어요.'}</p>}
@@ -169,7 +182,7 @@ export function ParticipantInfoScreen({ caseId }: { caseId: number }) {
           ))}
         </div>
 
-        {tab === '회차별 요약' && <Sessions detail={detail} />}
+        {tab === '회차별 요약' && <Sessions detail={detail} caseId={caseId} />}
         {tab === '목표' && <Goals detail={detail} />}
         {tab === '정보' && <Info detail={detail} caseId={caseId} />}
       </div>

@@ -199,6 +199,33 @@ export const planSession = (caseId: number, body: NewSessionInput) =>
     body: JSON.stringify(body),
   });
 
+export type SessionRecord = {
+  session_id: number;
+  case_id: number;
+  seq: number;
+  status: string;
+  kind: string;
+  held_at: string | null;
+  method: string | null;
+  place: string | null;
+  memo: string | null;
+  next_goal_text: string | null;
+  overall_goal: string | null;
+  is_closing: boolean;
+  cards: Array<{ kind: string; text: string; area: string | null; locked: boolean }>;
+  open_cards: Array<{
+    card_id: number;
+    kind: string;
+    text: string;
+    source_session_seq: number | null;
+    result: string | null;
+    follow: string | null;
+    reason: string | null;
+  }>;
+};
+
+export const getSessionRecord = (sessionId: number) => json<SessionRecord>(`/sessions/${sessionId}`);
+
 export const recordSession = (sessionId: number, body: RecordInput) =>
   json<{ session_id: number; unchecked: number }>(`/sessions/${sessionId}`, {
     method: 'PATCH',

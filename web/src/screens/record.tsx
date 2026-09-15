@@ -5,12 +5,14 @@ import { useEffect, useState } from 'react';
 import {
   getBriefing,
   getCase,
+  getSessionRecord,
   planSession,
   recordSession,
   type Briefing,
   type CaseView,
   type NewSessionInput,
   type OutcomeInput,
+  type SessionRecord,
 } from '../api.ts';
 import {
   Button,
@@ -24,18 +26,39 @@ import {
   Item,
   LineList,
   PageHeader,
+  withDraft,
   type Line,
 } from '../ui.tsx';
 import { METHODS } from '../vocab.ts';
 
 /** `datetime-local` 이 바로 먹는 지역시각 문자열. 지금 시각을 분 단위로 자른다. */
 function localNow(): string {
-  const d = new Date();
+  return toLocalInput(new Date().toISOString());
+}
+
+function toLocalInput(iso: string): string {
+  const d = new Date(iso);
   d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
   return d.toISOString().slice(0, 16);
 }
 
-export function RecordScreen({ caseId }: { caseId: number }) {
+/** 과제 결과 3종(2026-09-15 Q). 화면 말과 저장값을 한 곳에서 잇는다. */
+const TASK_RESULTS: ReadonlyArray<{ label: string; value: OutcomeInput }> = [
+  { label: '진행 전', value: { card_id: 0, result: 'not_done', follow: 'continue' } },
+  { label: '진행 중', value: { card_id: 0, result: 'in_progress' } },
+  { label: '완료', value: { card_id: 0, result: 'done' } },
+];
+
+const taskResultLabel = (o: OutcomeInput | undefined): string | null => {
+  if (!o) return null;
+  if (o.follow === 'stop') return '그만둠';
+  if (o.result === 'done') return '완료';
+  if (o.result === 'in_progress') return '진행 중';
+  if (o.result === 'not_done') return '진행 전';
+  return null;
+};
+
+export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number; sessionId?: number }) {
   const [briefing, setBriefing] = useState<Briefing | null>(null);
   const [view, setView] = useState<CaseView | null>(null);
   const [memo, setMemo] = useState('');
@@ -52,27 +75,69 @@ export function RecordScreen({ caseId }: { caseId: number }) {
   // 종결 상담(요구 5). 일정에서 미리 골랐으면 이어받고, 여기서 바꿀 수도 있다.
   const [isClosing, setIsClosing] = useState(false);
   const [outcomes, setOutcomes] = useState<Record<number, OutcomeInput>>({});
+  const [taskDraft, setTaskDraft] = useState<Line>({ text: '' });
+  const [questionDraft, setQuestionDraft] = useState<Line>({ text: '' });
+  const [changeDraft, setChangeDraft] = useState<Line>({ text: '' });
+  // 저장해 둔 회차를 고쳐 쓰는 중이면 그 회차. 새로 쓰는 중이면 null.
+  const [editing, setEditing] = useState<SessionRecord | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     void (async () => {
-      const [b, v] = await Promise.all([getBriefing(caseId), getCase(caseId)]);
+      const [b, v, rec] = await Promise.all([
+        getBriefing(caseId),
+        getCase(caseId),
+        editingId ? getSessionRecord(editingId) : Promise.resolve(null),
+      ]);
       setBriefing(b);
       setView(v);
-      setOverallGoal(v.case.overall_goal ?? '');
+      setOverallGoal(rec?.overall_goal ?? v.case.overall_goal ?? '');
+
+      if (rec) {
+        setEditing(rec);
+        setMemo(rec.memo ?? '');
+        setPlace(rec.place ?? '');
+        setHeldAt(rec.held_at ? toLocalInput(rec.held_at) : localNow());
+        setMethod((rec.method as NewSessionInput['method']) ?? 'in_person');
+        setIsClosing(rec.is_closing);
+        setNextGoal(rec.next_goal_text ?? '');
+        setTasks(rec.cards.filter((c) => c.kind === 'promise').map((c) => ({ text: c.text })));
+        setQuestions(rec.cards.filter((c) => c.kind === 'question').map((c) => ({ text: c.text })));
+        setChanges(
+          rec.cards.filter((c) => c.kind === 'fact').map((c) => ({ text: c.text, area: c.area ?? undefined })),
+        );
+        setOpinion(rec.cards.find((c) => c.kind === 'judgment')?.text ?? '');
+        // 지난번에 매긴 결과를 그대로 다시 세운다. 안 그러면 고쳐 쓰기가 전부 미확인으로 덮는다.
+        const prior: Record<number, OutcomeInput> = {};
+        for (const c of rec.open_cards) {
+          if (!c.result || c.result === 'unchecked') continue;
+          prior[c.card_id] = {
+            card_id: c.card_id,
+            result: c.result as OutcomeInput['result'],
+            follow: (c.follow as OutcomeInput['follow']) ?? undefined,
+            reason: c.reason ?? undefined,
+          };
+        }
+        setOutcomes(prior);
+        return;
+      }
+
       // 기록 대상은 다가오는 예정 회차다. 상담 일정 등록이 곧 그 회차를 만든다.
       const planned = v.sessions.filter((s) => s.status === 'planned').sort((a, b2) => a.seq - b2.seq)[0];
       setPlace(planned?.place ?? '');
       setIsClosing(planned?.is_closing ?? false);
     })();
-  }, [caseId]);
+  }, [caseId, editingId]);
 
   if (!briefing || !view) return <p className="empty">불러오는 중이에요.</p>;
+  if (editingId && !editing) return <p className="empty">불러오는 중이에요.</p>;
 
   // 예정 회차가 있으면 그것을 기록한다. 없으면 여기서 일시·상담 방식을 적고 회차를 만든다.
   // 일정을 미리 잡지 않고 만난 상담(갑작스러운 방문·전화)이 기록되지 못하면 안 된다.
-  const session = view.sessions.filter((s) => s.status === 'planned').sort((a, b2) => a.seq - b2.seq)[0];
+  const session = editing
+    ? { id: editing.session_id, seq: editing.seq, method: editing.method, place: editing.place }
+    : view.sessions.filter((s) => s.status === 'planned').sort((a, b2) => a.seq - b2.seq)[0];
   const seq = session?.seq ?? Math.max(0, ...view.sessions.map((s) => s.seq)) + 1;
   const inPerson = (session?.method ?? method) === 'in_person';
 
@@ -89,7 +154,7 @@ export function RecordScreen({ caseId }: { caseId: number }) {
     setError(null);
     try {
       // 예정 회차가 없으면 지금 적은 일시로 회차를 먼저 연다.
-      const sessionId =
+      const targetId =
         session?.id ??
         (
           await planSession(caseId, {
@@ -100,7 +165,7 @@ export function RecordScreen({ caseId }: { caseId: number }) {
           })
         ).session_id;
 
-      await recordSession(sessionId, {
+      await recordSession(targetId, {
         held_at: new Date(heldAt).toISOString(),
         is_closing: isClosing,
         memo,
@@ -108,9 +173,15 @@ export function RecordScreen({ caseId }: { caseId: number }) {
         next_goal_text: nextGoal.trim() || null,
         overall_goal: overallGoal.trim() || null,
         cards: [
-          ...tasks.map((t) => ({ kind: 'promise', text: t.text, section: 'promise' })),
-          ...questions.map((q) => ({ kind: 'question', text: q.text, section: 'question' })),
-          ...changes.map((c) => ({ kind: 'fact', text: c.text, section: 'change', area: c.area })),
+          // `추가`를 누르지 않고 적어만 둔 줄도 함께 저장한다.
+          ...withDraft(tasks, taskDraft).map((t) => ({ kind: 'promise', text: t.text, section: 'promise' })),
+          ...withDraft(questions, questionDraft).map((q) => ({ kind: 'question', text: q.text, section: 'question' })),
+          ...withDraft(changes, changeDraft).map((c) => ({
+            kind: 'fact',
+            text: c.text,
+            section: 'change',
+            area: c.area,
+          })),
           ...(opinion.trim() ? [{ kind: 'judgment', text: opinion.trim(), section: 'judgment' }] : []),
         ],
         outcomes: Object.values(outcomes),
@@ -129,7 +200,7 @@ export function RecordScreen({ caseId }: { caseId: number }) {
   return (
     <>
       <PageHeader
-        title="상담 기록하기"
+        title={editing ? '상담 기록 고쳐 쓰기' : '상담 기록하기'}
         meta={`${briefing.participant_card.name ?? briefing.participant_card.pseudonym} · ${
           briefing.participant_card.program_name
         } · ${seq}회차`}
@@ -147,46 +218,39 @@ export function RecordScreen({ caseId }: { caseId: number }) {
                     title={t.text}
                     desc={`${t.source_session_seq}회차${t.last_result === 'unchecked' ? ' · 지난 회차 미확인' : ''}`}
                   />
+                  {/* 결과는 셋이다(2026-09-15 Q). 그만두는 것은 상태가 아니라 과제를 접는 일이라 따로 둔다. */}
                   <ChoiceGroup legend="결과">
-                    {(
-                      [
-                        ['done', '했음'],
-                        ['in_progress', '진행 중'],
-                      ] as const
-                    ).map(([result, label]) => (
+                    {TASK_RESULTS.map(({ label, value }) => (
                       <Choice
-                        key={result}
+                        key={label}
                         type="radio"
                         name={`outcome-${t.card_id}`}
                         label={label}
-                        checked={outcomes[t.card_id]?.result === result}
-                        onChange={() => setOutcome(t.card_id, { card_id: t.card_id, result })}
+                        checked={taskResultLabel(outcomes[t.card_id]) === label}
+                        onChange={() => setOutcome(t.card_id, { ...value, card_id: t.card_id })}
                       />
                     ))}
-                    <Choice
-                      type="radio"
-                      name={`outcome-${t.card_id}`}
-                      label="못 함 · 계속"
-                      checked={outcomes[t.card_id]?.result === 'not_done' && outcomes[t.card_id]?.follow === 'continue'}
-                      onChange={() => setOutcome(t.card_id, { card_id: t.card_id, result: 'not_done', follow: 'continue' })}
-                    />
-                    <Choice
-                      type="radio"
-                      name={`outcome-${t.card_id}`}
-                      label="못 함 · 그만둠"
-                      checked={outcomes[t.card_id]?.follow === 'stop'}
-                      onChange={() => {
-                        const reason = window.prompt('그만두는 이유를 적어 주세요.');
-                        if (reason?.trim())
-                          setOutcome(t.card_id, {
-                            card_id: t.card_id,
-                            result: 'not_done',
-                            follow: 'stop',
-                            reason: reason.trim(),
-                          });
-                      }}
-                    />
                   </ChoiceGroup>
+                  <Choice
+                    type="checkbox"
+                    label="이 과제 그만두기"
+                    hint="더 안 하기로 했을 때만. 다음 상담에 올라오지 않아요."
+                    checked={outcomes[t.card_id]?.follow === 'stop'}
+                    onChange={() => {
+                      if (outcomes[t.card_id]?.follow === 'stop') {
+                        setOutcome(t.card_id, null);
+                        return;
+                      }
+                      const reason = window.prompt('그만두는 이유를 적어 주세요.');
+                      if (reason?.trim())
+                        setOutcome(t.card_id, {
+                          card_id: t.card_id,
+                          result: 'not_done',
+                          follow: 'stop',
+                          reason: reason.trim(),
+                        });
+                    }}
+                  />
                 </div>
               ))
             )}
@@ -216,6 +280,16 @@ export function RecordScreen({ caseId }: { caseId: number }) {
                 </div>
               ))
             )}
+          </Card>
+          {/* 종결 상담은 구획 하나를 차지할 일이 아니다. 레일 아래 체크 하나로 둔다(2026-09-15 Q). */}
+          <Card title="종결 상담">
+            <Choice
+              type="checkbox"
+              label="이번이 마지막 상담이에요"
+              hint="저장하면 상담 종결 화면으로 이어져요. 저장에 실패하면 사례를 닫지 않아요."
+              checked={isClosing}
+              onChange={() => setIsClosing((v) => !v)}
+            />
           </Card>
         </aside>
 
@@ -264,11 +338,27 @@ export function RecordScreen({ caseId }: { caseId: number }) {
           </Card>
 
           <Card title="2. 수행할 과제" hint="다음 상담의 확인할 과제로 올라가요.">
-            <LineList id="task" label="수행할 과제" placeholder="예: 채무 내역서 준비하기" lines={tasks} onChange={setTasks} />
+            <LineList
+              id="task"
+              label="수행할 과제"
+              placeholder="예: 채무 내역서 준비하기"
+              lines={tasks}
+              draft={taskDraft}
+              onDraft={setTaskDraft}
+              onChange={setTasks}
+            />
           </Card>
 
           <Card title="3. 다음에 물어볼 것" hint="다음 상담의 오늘 물어볼 것으로 올라가요.">
-            <LineList id="question" label="다음에 물어볼 것" placeholder="예: 가족 지원 여부" lines={questions} onChange={setQuestions} />
+            <LineList
+              id="question"
+              label="다음에 물어볼 것"
+              placeholder="예: 가족 지원 여부"
+              lines={questions}
+              draft={questionDraft}
+              onDraft={setQuestionDraft}
+              onChange={setQuestions}
+            />
           </Card>
 
           <Card title="4. 달라진 것" hint="비워 두면 이번 회차 미확인으로 남아요. 변화 없음이 아니에요.">
@@ -278,6 +368,8 @@ export function RecordScreen({ caseId }: { caseId: number }) {
               placeholder="예: 월세 계약을 6개월 연장함"
               withArea
               lines={changes}
+              draft={changeDraft}
+              onDraft={setChangeDraft}
               onChange={setChanges}
             />
           </Card>
@@ -313,16 +405,6 @@ export function RecordScreen({ caseId }: { caseId: number }) {
             </Field>
           </Card>
 
-          <Card title="종결 상담">
-            <Choice
-              type="checkbox"
-              label="이번이 마지막 상담이에요"
-              hint="저장하면 상담 종결 화면으로 이어져요. 저장에 실패하면 사례를 닫지 않아요."
-              checked={isClosing}
-              onChange={() => setIsClosing((v) => !v)}
-            />
-          </Card>
-
           <FormActions>
             {error && <ErrorText>{error}</ErrorText>}
             <Button
@@ -330,7 +412,7 @@ export function RecordScreen({ caseId }: { caseId: number }) {
               disabled={!memo.trim() || (!session && !heldAt) || saving}
               onClick={() => void save()}
             >
-              {saving ? '저장 중…' : isClosing ? '저장하고 종결로' : '저장'}
+              {saving ? '저장 중…' : isClosing ? '저장하고 종결로' : editing ? '고쳐 쓰기' : '저장'}
             </Button>
           </FormActions>
         </main>

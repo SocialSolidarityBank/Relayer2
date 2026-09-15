@@ -292,3 +292,58 @@ test('인테이크를 다시 열어 고쳐 쓴다', async ({ page }) => {
   await expect(sessions).toContainText('1회차');
   await expect(sessions).not.toContainText('2회차');
 });
+
+// 저장한 회차도 고쳐 쓸 수 있어야 한다(2026-09-15 Q). 결과 어휘는 진행 전·진행 중·완료 셋이다.
+// `추가`를 누르지 않고 적어만 둔 줄도 저장된다 — 추가는 항목을 하나 더 만드는 일이지 저장이 아니다.
+test('회차를 고쳐 쓰고, 적어만 둔 줄도 저장된다', async ({ page }) => {
+  const name = `E2E 회차수정${Date.now()}`;
+  const task = '서류 떼어 오기';
+
+  await page.goto('/');
+  await page.locator('#email').fill('test2');
+  await page.locator('#password').fill('test2');
+  await page.getByRole('button', { name: '로그인' }).click();
+
+  await page.goto('/#/participants/new');
+  await page.locator('#name').fill(name);
+  await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
+  // 인테이크에서 `추가`를 누르지 않고 적어만 둔다
+  await page.getByRole('textbox', { name: '수행할 과제' }).fill(task);
+  await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
+
+  // 2회차를 예정 없이 기록한다. 과제는 진행 전으로.
+  await expect(page.getByRole('heading', { name: '상담 일정 등록' })).toBeVisible();
+  await page.getByRole('link', { name: '상담 기록하기' }).click();
+  const rail = page
+    .locator('section.wire-card')
+    .filter({ has: page.getByRole('heading', { name: '확인할 과제' }) });
+  await expect(rail).toContainText(task); // 적어만 둔 줄이 저장돼 올라왔다
+  await page.locator('#held-at').fill('2026-10-01T10:00');
+  await page.locator('#memo').fill('처음 적은 상담 내용');
+  await rail.getByRole('radio', { name: '진행 전' }).check();
+  await page.getByRole('button', { name: '저장' }).click();
+  await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
+
+  // 당사자 정보 › 회차별 요약에서 그 회차를 고쳐 쓴다
+  await page.getByRole('link', { name: '당사자 정보' }).click();
+  const summary = page
+    .locator('section.wire-card')
+    .filter({ has: page.getByRole('heading', { name: '회차별 요약' }) });
+  await summary.locator('.wire-item', { hasText: '2회차' }).getByRole('button', { name: '고쳐 쓰기' }).click();
+  await expect(page.getByRole('heading', { name: '상담 기록 고쳐 쓰기' })).toBeVisible();
+
+  // 지난번에 적은 것과 매긴 결과가 그대로 서 있다
+  await expect(page.locator('#memo')).toHaveValue('처음 적은 상담 내용');
+  await expect(page.getByRole('radio', { name: '진행 전' })).toBeChecked();
+
+  await page.locator('#memo').fill('고쳐 적은 상담 내용');
+  await page.getByRole('radio', { name: '완료' }).check();
+  await page.getByRole('button', { name: '고쳐 쓰기' }).click();
+  await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
+
+  // 완료로 바꿨으니 확인할 과제에서 빠지고, 회차는 늘지 않는다
+  await expect(page.locator('.wire-container')).not.toContainText(task);
+  await page.getByRole('link', { name: '당사자 정보' }).click();
+  await expect(summary).toContainText('2회차');
+  await expect(summary).not.toContainText('3회차');
+});

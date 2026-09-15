@@ -25,6 +25,7 @@ import {
   FormActions,
   LineList,
   PageHeader,
+  withDraft,
   type Line,
 } from '../ui.tsx';
 
@@ -127,6 +128,8 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
   const [questions, setQuestions] = useState<Line[]>([]);
   // 첫 상담에서도 약속은 나온다("다음까지 서류 떼어 오기"). 2026-09-15 예행연습에서 드러난 빈자리.
   const [tasks, setTasks] = useState<Line[]>([]);
+  const [taskDraft, setTaskDraft] = useState<Line>({ text: '' });
+  const [questionDraft, setQuestionDraft] = useState<Line>({ text: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // 이미 쓴 인테이크가 있으면 그것을 열어 고친다. 첫 회차는 하나뿐이다.
@@ -203,8 +206,8 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
         detail: answers,
         // I-08: 다음에 물어볼 것은 상담 기록하기와 같은 입력이며 확인할 것 카드가 된다.
         cards: [
-          ...questions.map((q) => ({ kind: 'question', text: q.text, section: 'intake' })),
-          ...tasks.map((t) => ({ kind: 'promise', text: t.text, section: 'promise' })),
+          ...withDraft(questions, questionDraft).map((q) => ({ kind: 'question', text: q.text, section: 'intake' })),
+          ...withDraft(tasks, taskDraft).map((t) => ({ kind: 'promise', text: t.text, section: 'promise' })),
         ],
       });
       // 처음 쓴 것이면 일정 잡기로, 고쳐 쓴 것이면 보던 자리(15초 다시보기)로 돌아간다.
@@ -297,12 +300,14 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
           </FormField>
         </Card>
 
-        <Card title="수행할 과제" hint="저장하면 다음 상담의 확인할 과제로 올라가요.">
+        <Card title="수행할 과제" hint="저장하면 다음 상담의 확인할 과제로 올라가요. 적어 두면 `추가`를 누르지 않아도 저장돼요.">
           <LineList
             id="intake-task"
             label="수행할 과제"
             placeholder="예: 채무 내역서 떼어 오기"
             lines={tasks}
+            draft={taskDraft}
+            onDraft={setTaskDraft}
             onChange={setTasks}
           />
         </Card>
@@ -313,6 +318,8 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
             label="다음에 물어볼 것"
             placeholder="예: 통원 주기가 어떻게 되는지"
             lines={questions}
+            draft={questionDraft}
+            onDraft={setQuestionDraft}
             onChange={setQuestions}
           />
         </Card>
