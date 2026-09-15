@@ -36,6 +36,12 @@ app.onError((err, c) => {
   if (err instanceof service.ConsentRequired) return c.json({ error: err.message }, 409);
   // AI 는 없어도 제품이 돌아간다. 없는 것을 있는 것처럼 답하지 않는다.
   if (err instanceof AiUnavailable) return c.json({ error: err.message }, 503);
+  // 입력이 스키마에 안 맞으면 **보낸 쪽 잘못**이다. 500 으로 답하면 서버가 고장난 줄 안다.
+  // 어느 자리가 틀렸는지만 알려 준다 — 보낸 값은 되돌려주지 않는다(PII 가 섞여 있다).
+  if (err instanceof z.ZodError) {
+    const where = err.issues.map((i) => i.path.join('.') || '(본문)').join(', ');
+    return c.json({ error: `요청 형식이 맞지 않아요: ${where}` }, 400);
+  }
   throw err;
 });
 

@@ -563,3 +563,28 @@ test('외부 LLM 동의가 없으면 AI 정리를 하지 않는다', async ({ pa
   await page.getByRole('button', { name: 'AI로 정리하기' }).click();
   await expect(page.getByText('외부 LLM·국외 처리 동의가 없어요', { exact: false })).toBeVisible();
 });
+
+// 잘못 쓴 요청은 **400** 이다. 500 으로 답하면 서버가 고장난 줄 안다.
+// 2026-09-15 실측: ZodError 를 잡는 곳이 없어 모든 잘못된 입력이 500 이었다.
+test('스키마에 안 맞는 요청은 400 으로 답한다', async ({ page, request }) => {
+  await page.goto('/');
+  await page.locator('#email').fill('test2');
+  await page.locator('#password').fill('test2');
+  await page.getByRole('button', { name: '로그인' }).click();
+  await expect(page.getByRole('heading', { name: '일정' })).toBeVisible();
+
+  const cookies = await page.context().cookies();
+  const cookie = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+
+  // 개발 서버는 /api 를 API 로 넘긴다(web/src/api.ts:44).
+  const res = await request.post('/api/cases', {
+    headers: { cookie, 'content-type': 'application/json' },
+    data: { name: '검증', program_name: 'x', consents: [{ domain: '없는_영역', decision: 'grant' }] },
+  });
+
+  expect(res.status()).toBe(400);
+  const body = await res.json();
+  // 어느 자리가 틀렸는지만 알려 준다. 보낸 값은 되돌려주지 않는다 — PII 가 섞여 있다.
+  expect(body.error).toContain('consents.0.domain');
+  expect(body.error).not.toContain('없는_영역');
+});
