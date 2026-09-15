@@ -7,9 +7,12 @@ export type AuditAction =
   | 'case.detail'
   | 'case.briefing'
   | 'schedule.list'
-  | 'consent.record';
+  | 'consent.record'
+  /** 당사자 본인이 링크+코드로 자기 것을 연 것. 실무자 열람과 구분한다. */
+  | 'participant.view';
 
 export type AuditEntry = {
+  /** 0 이면 당사자 본인이다(로그인 사용자가 아니다). */
   actorId: number;
   action: AuditAction;
   participantId?: number | null;
@@ -26,7 +29,7 @@ export async function audit(entry: AuditEntry): Promise<void> {
   try {
     await sql`
       insert into audit_log (actor_id, action, participant_id, case_id, fields)
-      values (${entry.actorId}, ${entry.action}, ${entry.participantId ?? null},
+      values (${entry.actorId || null}, ${entry.action}, ${entry.participantId ?? null},
               ${entry.caseId ?? null}, ${entry.fields ?? []})`;
   } catch (error) {
     console.error('audit write failed', entry.action, error);

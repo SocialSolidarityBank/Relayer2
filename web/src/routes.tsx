@@ -2,6 +2,7 @@
 // 로그인하지 않았으면 어떤 화면도 열지 않는다.
 import { useEffect, useState } from 'react';
 import { getMe, logout, Unauthorized, type Me } from './api.ts';
+import { AccessScreen } from './screens/access.tsx';
 import { AuditScreen } from './screens/audit.tsx';
 import { BriefingScreen } from './screens/briefing.tsx';
 import { CloseScreen } from './screens/close.tsx';
@@ -31,6 +32,10 @@ export function Routes() {
       .then(setMe)
       .catch((e) => setMe(e instanceof Unauthorized ? null : null));
   }, []);
+
+  // 당사자 열람은 로그인 앞에 선다. 링크와 코드로만 열리고, 실무자 화면과 섞이지 않는다.
+  const asParticipant = hash.match(/^#\/access\/([A-Za-z0-9_-]+)$/);
+  if (asParticipant) return <AccessScreen token={asParticipant[1]} />;
 
   if (me === 'loading') return <p className="empty">불러오는 중이에요.</p>;
   if (!me) return <LoginScreen onDone={() => void getMe().then(setMe)} />;

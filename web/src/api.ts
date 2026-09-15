@@ -94,6 +94,7 @@ export type ScheduleRow = {
 export type CaseDetail = {
   case: {
     id: number;
+    participant_id: number;
     program_name: string;
     status: 'open' | 'closed';
     overall_goal: string | null;
@@ -166,6 +167,31 @@ export type ConsentView = Array<{
   status: 'granted' | 'not_granted' | 'unconfirmed';
   decided_at: string | null;
 }>;
+
+export type ParticipantView = {
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  schedule: Array<{ scheduled_at: string; method: string | null; place: string | null; program_name: string }>;
+};
+
+export const openAccess = (token: string, code: string) =>
+  json<ParticipantView>('/access/open', { method: 'POST', body: JSON.stringify({ token, code }) });
+
+export type AccessState = {
+  active: boolean;
+  expires_at: string | null;
+  attempts_left: number | null;
+  last_opened_at: string | null;
+};
+
+export const getAccess = (participantId: number) => json<AccessState>(`/participants/${participantId}/access`);
+export const issueAccess = (participantId: number) =>
+  json<{ token: string; code: string; expires_at: string }>(`/participants/${participantId}/access`, {
+    method: 'POST',
+  });
+export const revokeAccess = (participantId: number) =>
+  json<{ ok: true }>(`/participants/${participantId}/access`, { method: 'DELETE' });
 
 export type AuditRow = {
   id: number;

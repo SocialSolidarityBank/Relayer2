@@ -294,6 +294,7 @@ test('인테이크를 다시 열어 고쳐 쓴다', async ({ page }) => {
   // 고쳐 쓰면 새 회차를 만들지 않고 그 자리를 고친다
   await page.locator('#overall-goal').fill('고쳐 적은 목표');
   await page.getByRole('button', { name: '고쳐 쓰기' }).click();
+  await page.waitForURL(/\/briefing$/);
   await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
   await expect(page.locator('.wire-container')).toContainText('고쳐 적은 목표');
 
@@ -462,4 +463,64 @@ test('자유 글을 저장하고 다시 열면 그대로 읽힌다', async ({ pa
     .filter({ has: page.getByRole('heading', { name: '회차별 요약' }) });
   await summary.locator('.wire-item', { hasText: '2회차' }).getByRole('button', { name: '원문 보기' }).click();
   await expect(summary).toContainText(memo);
+});
+
+// P2 당사자 열람. 당사자는 로그인하지 않고 링크+코드로 자기 정보와 일정만 본다.
+test('당사자는 링크와 코드로 자기 일정만 본다', async ({ page, context }) => {
+  const name = `E2E 열람${Date.now()}`;
+
+  await page.goto('/');
+  await page.locator('#email').fill('test2');
+  await page.locator('#password').fill('test2');
+  await page.getByRole('button', { name: '로그인' }).click();
+
+  await page.goto('/#/participants/new');
+  await page.locator('#name').fill(name);
+  await page.locator('#phone').fill('010-5555-6666');
+  await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
+  await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
+  await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
+  await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
+
+  // 앞으로의 일정 하나
+  await expect(page.getByRole('heading', { name: '상담 일정 등록' })).toBeVisible();
+  await page.locator('#at').fill('2026-12-01T10:00');
+  await page.getByRole('button', { name: '등록', exact: true }).click();
+
+  // 실무자가 열람 링크를 만든다
+  await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
+  await page.getByRole('link', { name: '당사자 정보' }).click();
+  await page.waitForURL(/\/info$/);
+  await page.getByRole('tab', { name: '정보' }).click();
+  const access = page
+    .locator('section.wire-card')
+    .filter({ has: page.getByRole('heading', { name: '당사자 열람' }) });
+  await access.getByRole('button', { name: '열람 링크 만들기' }).click();
+  await expect(access).toContainText('확인 코드');
+
+  const link = (await access.locator('.wire-data-row', { hasText: '링크' }).locator('dd').innerText()).trim();
+  const code = (await access.locator('.wire-data-row', { hasText: '확인 코드' }).locator('dd').innerText()).trim();
+  const token = link.split('/access/')[1];
+
+  // 로그인하지 않은 다른 브라우저로 연다
+  const guest = await context.browser()!.newContext();
+  const guestPage = await guest.newPage();
+  await guestPage.goto(`/#/access/${token}`);
+  await expect(guestPage.getByRole('heading', { name: '내 상담 일정' })).toBeVisible();
+
+  // 틀린 코드는 남은 횟수를 알려 준다
+  await guestPage.locator('#code').fill('000000');
+  await guestPage.getByRole('button', { name: '열기' }).click();
+  await expect(guestPage.getByText('코드가 맞지 않아요', { exact: false })).toBeVisible();
+
+  // 맞는 코드로 열면 기본 정보와 일정만 보인다
+  await guestPage.locator('#code').fill(code);
+  await guestPage.getByRole('button', { name: '열기' }).click();
+  await expect(guestPage.getByRole('heading', { name: '다가오는 상담' })).toBeVisible();
+  await expect(guestPage.locator('.wire-container')).toContainText('010-5555-6666');
+  await expect(guestPage.locator('.wire-container')).toContainText('12월');
+  // 실무자 화면과 상담 내용은 보이지 않는다
+  await expect(guestPage.getByRole('link', { name: '당사자 목록' })).toHaveCount(0);
+  await expect(guestPage.locator('.wire-container')).not.toContainText('상담 기록');
+  await guest.close();
 });

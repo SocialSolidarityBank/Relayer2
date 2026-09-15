@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { actorFromCookie, clearCookie, issueCookie, login, type Actor } from './auth.ts';
 import { audit, listAudit } from './audit.ts';
+import { accessState, issueAccess, openAccess, revokeAccess } from './participant-access.ts';
 import { CONSENT_DECISIONS, CONSENT_DOMAINS } from './consent.ts';
 import { LIFE_AREAS } from './domain/types.ts';
 import * as service from './service.ts';
@@ -37,6 +38,17 @@ app.onError((err, c) => {
 
 app.get('/health', (c) => c.json({ ok: true }));
 
+/**
+ * API 응답은 저장하지 않는다. 이름·연락처·상담 내용이 실려 나가므로
+ * 브라우저 디스크 캐시나 중간 프록시에 남으면 안 된다(P1). 화면 파일은 해당 없다.
+ */
+app.use('*', async (c, next) => {
+  await next();
+  if (!new URL(c.req.url).pathname.startsWith('/assets/')) {
+    c.header('cache-control', 'no-store');
+  }
+});
+
 app.post('/auth/login', async (c) => {
   const body = z.object({ email: z.string().min(1), password: z.string().min(1) }).parse(await c.req.json());
   const result = await login(body.email, body.password);
@@ -60,12 +72,17 @@ app.post('/auth/logout', (c) => {
  * 화면 껍데기(HTML·JS·CSS)는 로그인 전에도 받아야 로그인 화면이 뜬다.
  * 자료는 그 뒤 API 가 내고 그건 전부 막혀 있다. API 경로에는 확장자가 없다.
  */
+/** 당사자 열람은 로그인 없이 연다. 대신 링크와 코드 두 자물쇠를 통과해야 한다. */
+const isParticipantGate = (path: string): boolean => path === '/access/open';
+
 const isWebAsset = (path: string): boolean =>
   path === '/' || path.startsWith('/assets/') || /\.[a-z0-9]+$/i.test(path);
 
 // 여기부터는 로그인한 사람만. 실패는 401 하나로 답한다(무엇이 있는지 알려주지 않는다).
 app.use('*', async (c, next) => {
-  if (c.req.method === 'GET' && isWebAsset(new URL(c.req.url).pathname)) return next();
+  const path = new URL(c.req.url).pathname;
+  if (c.req.method === 'GET' && isWebAsset(path)) return next();
+  if (c.req.method === 'POST' && isParticipantGate(path)) return next();
   const actor = await actorFromCookie(c.req.header('cookie'));
   if (!actor) return c.json({ error: '로그인이 필요해요.' }, 401);
   c.set('actor', actor);
@@ -197,6 +214,42 @@ app.get('/cases/:id/detail', async (c) => {
     fields: [...fields],
   });
   return c.json(detail);
+});
+
+app.post('/access/open', async (c) => {
+  const body = z.object({ token: z.string().min(1), code: z.string().min(1) }).parse(await c.req.json());
+  const result = await openAccess(body.token, body.code);
+  if (result.ok) return c.json(result.view);
+  const message =
+    result.reason === 'wrong_code'
+      ? `코드가 맞지 않아요. ${result.attempts_left}번 더 넣을 수 있어요.`
+      : result.reason === 'expired'
+        ? '링크가 만료됐어요. 담당 실무자에게 새 링크를 받아 주세요.'
+        : result.reason === 'locked'
+          ? '여러 번 틀려서 잠겼어요. 담당 실무자에게 새 링크를 받아 주세요.'
+          : '링크가 올바르지 않아요.';
+  return c.json({ error: message }, 401);
+});
+
+app.get('/participants/:id/access', async (c) =>
+  c.json(await accessState(Number(c.req.param('id')))),
+);
+
+app.post('/participants/:id/access', async (c) => {
+  const participantId = Number(c.req.param('id'));
+  const issued = await issueAccess(participantId, c.get('actor').id);
+  await audit({
+    actorId: c.get('actor').id,
+    action: 'consent.record',
+    participantId,
+    fields: ['access:issue'],
+  });
+  return c.json(issued);
+});
+
+app.delete('/participants/:id/access', async (c) => {
+  await revokeAccess(Number(c.req.param('id')));
+  return c.json({ ok: true });
 });
 
 app.get('/audit', async (c) => {

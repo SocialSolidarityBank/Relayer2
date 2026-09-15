@@ -1,7 +1,17 @@
 // 당사자 정보 — 탭 4(GLOSSARY §6-4): 회차별 요약 · 15초 다시보기 · 목표 · 정보.
 // 당사자 카드와 할 일 전체는 두지 않는다(요구 25·28). 종결 버튼은 `정보` 탭에 있다.
 import { useEffect, useState } from 'react';
-import { getCaseDetail, getConsents, recordConsent, type CaseDetail, type ConsentView } from '../api.ts';
+import {
+  getAccess,
+  getCaseDetail,
+  getConsents,
+  issueAccess,
+  recordConsent,
+  revokeAccess,
+  type AccessState,
+  type CaseDetail,
+  type ConsentView,
+} from '../api.ts';
 import { Badge, Button, Card, DataRows, Empty, FormActions, Item, PageHeader } from '../ui.tsx';
 import { BriefingScreen } from './briefing.tsx';
 
@@ -165,6 +175,92 @@ function Consents({ caseId }: { caseId: number }) {
   );
 }
 
+/**
+ * 당사자 열람 링크(P2). 당사자는 로그인하지 않는다 — 링크와 코드를 전해 준다.
+ * **코드는 발급 직후 한 번만 보인다.** 저장해 두지 않는다(해시만 남는다).
+ */
+function Access({ participantId }: { participantId: number }) {
+  const [state, setState] = useState<AccessState | null>(null);
+  const [issued, setIssued] = useState<{ token: string; code: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void getAccess(participantId).then(setState);
+  }, [participantId]);
+
+  const link = issued ? `${window.location.origin}/#/access/${issued.token}` : null;
+
+  const issue = async () => {
+    setBusy(true);
+    try {
+      const next = await issueAccess(participantId);
+      setIssued({ token: next.token, code: next.code });
+      setState(await getAccess(participantId));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const revoke = async () => {
+    setBusy(true);
+    try {
+      await revokeAccess(participantId);
+      setIssued(null);
+      setState(await getAccess(participantId));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card
+      title="당사자 열람"
+      hint="당사자는 로그인하지 않아요. 링크와 여섯 자리 숫자를 전해 주면 자기 정보와 일정만 봐요."
+    >
+      {state === null ? (
+        <Empty>불러오는 중이에요.</Empty>
+      ) : (
+        <>
+          <Item
+            title={state.active ? '열람 링크가 살아 있어요' : '열람 링크가 없어요'}
+            desc={
+              state.active
+                ? [
+                    state.expires_at ? `${dateLabel(state.expires_at)}까지` : null,
+                    state.last_opened_at ? `마지막 열람 ${dateLabel(state.last_opened_at)}` : '아직 연 적 없음',
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')
+                : '새로 만들면 이전 링크는 잠겨요.'
+            }
+          />
+          {issued && link && (
+            <div className="wire-repeat-card">
+              <p className="panel-meta">이 화면을 닫으면 코드는 다시 볼 수 없어요. 지금 전해 주세요.</p>
+              <DataRows
+                rows={[
+                  ['링크', link],
+                  ['확인 코드', issued.code],
+                ]}
+              />
+            </div>
+          )}
+          <FormActions>
+            {state.active && (
+              <Button disabled={busy} onClick={() => void revoke()}>
+                잠그기
+              </Button>
+            )}
+            <Button variant="primary" disabled={busy} onClick={() => void issue()}>
+              {state.active ? '새로 만들기' : '열람 링크 만들기'}
+            </Button>
+          </FormActions>
+        </>
+      )}
+    </Card>
+  );
+}
+
 /** 정보 — 기본 정보와 상담 종결 버튼. */
 function Info({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
   const rows: Array<[string, string]> = [
@@ -181,6 +277,8 @@ function Info({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
         <DataRows rows={rows} />
       </Card>
       <Consents caseId={caseId} />
+
+      <Access participantId={detail.case.participant_id} />
 
       <Card title="상담 종결">
         {detail.closure ? (
