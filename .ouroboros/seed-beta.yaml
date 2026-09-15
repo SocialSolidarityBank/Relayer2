@@ -154,13 +154,13 @@ exit_conditions:
     criteria: "docs/beta-gate2.md 에 비교 대상·필수 입력 수·소요 시간·재사용 의사가 적혀 있고 입력 수와 시간이 현행 이하다"
 
 context_references:
-  - path: "/Users/seongqkim/DEVELOPER/PROJECTS/RELAYER2/SPEC.md"
+  - path: "SPEC.md"
     role: "primary"
     summary: "구현 계약. 화면 5개·카드 규칙·15초 다시보기 6구획 상태·목표 이어받기·회차 한 줄·도메인 값·결정 추적"
-  - path: "/Users/seongqkim/DEVELOPER/PROJECTS/RELAYER2/PLAN.md"
+  - path: "PLAN.md"
     role: "primary"
     summary: "단계 M0~M3와 P1~P4, 스키마 8테이블, API 6개, 확정 A1~A7·D1~D5"
-  - path: "/Users/seongqkim/DEVELOPER/PROJECTS/RELAYER2/CARRYOVER.md"
+  - path: "CARRYOVER.md"
     role: "primary"
     summary: "CCC에서 버릴 것과 살릴 것의 판정과 근거 수치"
   - path: "/Users/seongqkim/DEVELOPER/PROJECTS/CCC-new/inbox/2026-09-12/relayer-definitions-v2-2026-09-12.md"
