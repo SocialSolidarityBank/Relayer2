@@ -2,11 +2,11 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { actorFromCookie, clearCookie, issueCookie, login, type Actor } from './auth.ts';
+import { LIFE_AREAS } from './domain/types.ts';
 import * as service from './service.ts';
 
-const area = z.enum([
-  'economy', 'employment', 'housing', 'health', 'mental_health', 'family', 'care', 'legal', 'other',
-]);
+// 영역은 국가 표준 10종+기타 하나뿐이다(SPEC §8). 여기에 목록을 또 적으면 이번처럼 어긋난다.
+const area = z.enum(LIFE_AREAS);
 
 const cardInput = z.object({
   kind: z.enum(['fact', 'question', 'promise', 'judgment']),
@@ -118,6 +118,7 @@ app.patch('/sessions/:id', async (c) => {
     .object({
       held_at: z.string().optional(),
       memo: z.string().min(1), // 유일한 필수 입력
+      method: z.enum(['in_person', 'phone', 'video', 'visit']).optional(),
       place: z.string().optional(),
       detail: z.record(z.unknown()).optional(),
       next_goal_text: z.string().nullable().optional(),

@@ -169,6 +169,7 @@ export async function recordSession(
   input: {
     held_at?: string;
     memo: string;
+    method?: string | null;
     place?: string | null;
     detail?: Record<string, unknown>;
     next_goal_text?: string | null;
@@ -205,7 +206,8 @@ export async function recordSession(
         status = 'done',
         held_at = ${input.held_at ?? new Date().toISOString()},
         memo = ${input.memo},
-        place = ${input.place ?? target.place},
+        method = ${input.method ?? target.method},
+        place = ${input.place ?? null},
         detail = ${tx.json(input.detail ?? {})},
         next_goal_text = ${input.next_goal_text ?? null},
         created_by = coalesce(created_by, ${input.actorId ?? null}),

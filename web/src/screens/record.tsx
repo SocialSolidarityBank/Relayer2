@@ -127,6 +127,8 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
       const planned = v.sessions.filter((s) => s.status === 'planned').sort((a, b2) => a.seq - b2.seq)[0];
       setPlace(planned?.place ?? '');
       setIsClosing(planned?.is_closing ?? false);
+      if (planned?.method) setMethod(planned.method as NewSessionInput['method']);
+      if (planned?.scheduled_at) setHeldAt(toLocalInput(planned.scheduled_at));
     })();
   }, [caseId, editingId]);
 
@@ -139,7 +141,7 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
     ? { id: editing.session_id, seq: editing.seq, method: editing.method, place: editing.place }
     : view.sessions.filter((s) => s.status === 'planned').sort((a, b2) => a.seq - b2.seq)[0];
   const seq = session?.seq ?? Math.max(0, ...view.sessions.map((s) => s.seq)) + 1;
-  const inPerson = (session?.method ?? method) === 'in_person';
+  const inPerson = method === 'in_person';
 
   const setOutcome = (card_id: number, value: OutcomeInput | null) =>
     setOutcomes((prev) => {
@@ -167,6 +169,7 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
 
       await recordSession(targetId, {
         held_at: new Date(heldAt).toISOString(),
+        method,
         is_closing: isClosing,
         memo,
         place: inPerson && place ? place : undefined,
@@ -294,30 +297,41 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
         </aside>
 
         <main className="record-main">
-          {!session && (
-            <Card title="상담 일시와 상담 방식" hint="잡아 둔 일정이 없어요. 언제 만났는지 여기서 적으면 이 회차가 만들어져요.">
-              <Field label="상담 일시" htmlFor="held-at" required>
-                <input
-                  id="held-at"
-                  type="datetime-local"
-                  value={heldAt}
-                  onChange={(e) => setHeldAt(e.target.value)}
+          {/* 일시·방식·장소는 한 묶음이다. 장소는 대면일 때만 나오고 방식 바로 아래에 붙는다(요구 14). */}
+          <Card
+            title="상담 일시와 상담 방식"
+            hint={
+              session
+                ? '잡아 둔 일정이에요. 실제로 만난 시각이 다르면 여기서 고쳐요.'
+                : '잡아 둔 일정이 없어요. 언제 만났는지 여기서 적으면 이 회차가 만들어져요.'
+            }
+          >
+            <Field label="상담 일시" htmlFor="held-at" required>
+              <input
+                id="held-at"
+                type="datetime-local"
+                value={heldAt}
+                onChange={(e) => setHeldAt(e.target.value)}
+              />
+            </Field>
+            <ChoiceGroup legend="상담 방식">
+              {METHODS.map((m) => (
+                <Choice
+                  key={m.key}
+                  type="radio"
+                  name="method"
+                  label={m.label}
+                  checked={method === m.key}
+                  onChange={() => setMethod(m.key)}
                 />
+              ))}
+            </ChoiceGroup>
+            {inPerson && (
+              <Field label="상담 장소" htmlFor="place" hint="대면일 때만 적어요.">
+                <input id="place" type="text" value={place} onChange={(e) => setPlace(e.target.value)} />
               </Field>
-              <ChoiceGroup legend="상담 방식">
-                {METHODS.map((m) => (
-                  <Choice
-                    key={m.key}
-                    type="radio"
-                    name="method"
-                    label={m.label}
-                    checked={method === m.key}
-                    onChange={() => setMethod(m.key)}
-                  />
-                ))}
-              </ChoiceGroup>
-            </Card>
-          )}
+            )}
+          </Card>
 
           <Card title="1. 상담 내용" hint="상담 내용만 적어도 저장할 수 있어요.">
             <Field label="상담 내용" htmlFor="memo" control="textarea" required>
@@ -330,11 +344,6 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
                 placeholder="오늘 나눈 이야기를 적어 주세요."
               />
             </Field>
-            {inPerson && (
-              <Field label="상담 장소" htmlFor="place">
-                <input id="place" type="text" value={place} onChange={(e) => setPlace(e.target.value)} />
-              </Field>
-            )}
           </Card>
 
           <Card title="2. 수행할 과제" hint="다음 상담의 확인할 과제로 올라가요.">

@@ -140,6 +140,9 @@ test('예정 회차가 없어도 상담 기록하기에서 일시를 적고 기�
   await page.locator('#held-at').fill('2026-09-20T14:00');
   await page.getByRole('radio', { name: '전화' }).check();
   await page.locator('#memo').fill('예고 없이 전화가 와서 그 자리에서 상담함');
+  // 국가 표준 영역이 그대로 저장되는지. 서버가 옛 9영역 목록을 들고 있으면 여기서 500 이 난다.
+  await page.locator('#change-area').selectOption({ label: '생활환경' });
+  await page.locator('#change-input').fill('월세 계약을 6개월 연장함');
   await page.getByRole('button', { name: '저장' }).click();
 
   // 2회차로 저장되고, 다시보기가 그 회차를 가리킨다

@@ -144,6 +144,7 @@ export type RecordInput = {
   held_at?: string;
   is_closing?: boolean;
   memo: string;
+  method?: 'in_person' | 'phone' | 'video' | 'visit';
   place?: string;
   next_goal_text?: string | null;
   overall_goal?: string | null;
