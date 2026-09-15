@@ -2,6 +2,13 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { actorFromCookie, clearCookie, issueCookie, login, type Actor } from './auth.ts';
+import {
+  approveTranscript,
+  draftTranscript,
+  latestTranscript,
+  saveRecording,
+  SttUnavailable,
+} from './stt.ts';
 import { AiUnavailable, approveDraft, draftSession, latestDraft } from './ai.ts';
 import { audit, listAudit } from './audit.ts';
 import { accessState, issueAccess, openAccess, revokeAccess } from './participant-access.ts';
@@ -35,7 +42,9 @@ export const app = new Hono<{ Variables: { actor: Actor } }>();
 app.onError((err, c) => {
   if (err instanceof service.ConsentRequired) return c.json({ error: err.message }, 409);
   // AI 는 없어도 제품이 돌아간다. 없는 것을 있는 것처럼 답하지 않는다.
-  if (err instanceof AiUnavailable) return c.json({ error: err.message }, 503);
+  if (err instanceof AiUnavailable || err instanceof SttUnavailable) {
+    return c.json({ error: err.message }, 503);
+  }
   // 입력이 스키마에 안 맞으면 **보낸 쪽 잘못**이다. 500 으로 답하면 서버가 고장난 줄 안다.
   // 어느 자리가 틀렸는지만 알려 준다 — 보낸 값은 되돌려주지 않는다(PII 가 섞여 있다).
   if (err instanceof z.ZodError) {
@@ -286,6 +295,33 @@ app.post('/sessions/:id/draft/approve', async (c) => {
     })
     .parse(await c.req.json().catch(() => ({})));
   return c.json(await approveDraft(Number(c.req.param('id')), c.get('actor').id, body));
+});
+
+/**
+ * 음성 경로(P4). 녹음은 본문 그대로 받는다 — multipart 로 감싸 봐야 바이트는 같고,
+ * 파싱 단계가 하나 늘면 그만큼 실패할 자리가 는다.
+ */
+app.post('/sessions/:id/recordings', async (c) => {
+  const audio = new Uint8Array(await c.req.arrayBuffer());
+  const ms = Number(c.req.query('duration_ms'));
+  return c.json(
+    await saveRecording(Number(c.req.param('id')), audio, c.get('actor').id, Number.isFinite(ms) ? ms : undefined),
+    201,
+  );
+});
+
+app.get('/sessions/:id/transcript', async (c) => {
+  const found = await latestTranscript(Number(c.req.param('id')));
+  return c.json(found ?? { status: 'none' });
+});
+
+app.post('/recordings/:id/transcript', async (c) =>
+  c.json(await draftTranscript(Number(c.req.param('id')), c.get('actor').id)),
+);
+
+app.post('/sessions/:id/transcript/approve', async (c) => {
+  const body = z.object({ text: z.string().optional() }).parse(await c.req.json().catch(() => ({})));
+  return c.json(await approveTranscript(Number(c.req.param('id')), c.get('actor').id, body.text));
 });
 
 app.get('/audit', async (c) => {

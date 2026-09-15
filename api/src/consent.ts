@@ -118,8 +118,7 @@ export function canonicalPreimage(domain: ConsentDomain): string {
 
 /**
  * 화면에 보이는 동의 영역. **기능이 없으면 동의를 받을 이유가 없다.**
- * 녹음·STT·음성 보유기간 셋은 STT 가 붙어야 의미가 있고, 그 전에는 목록에 두지 않는다.
- * 서버는 여섯 영역을 전부 알고 있다 — 저장된 옛 사건은 기능이 꺼져도 그대로 남는다.
+ * 저장된 옛 사건은 기능이 꺼져도 그대로 남는다 — 목록에서 감출 뿐 지우지 않는다.
  */
 const VOICE_DOMAINS: ReadonlySet<string> = new Set([
   'counseling_recording',
@@ -127,10 +126,18 @@ const VOICE_DOMAINS: ReadonlySet<string> = new Set([
   'voice_original_retention_period',
 ]);
 
-export const sttEnabled = (): boolean => Boolean(process.env.AZURE_SPEECH_KEY);
+/**
+ * 음성 경로를 여는 스위치. **녹음과 전사는 다른 일이다.**
+ * 녹음은 디스크만 있으면 되고, 전사는 외부 제공자 키가 따로 필요하다.
+ * 그래서 키가 아니라 기관이 켜는 플래그로 연다 — 키가 생겼다고 녹음이 시작되면 안 된다.
+ */
+export const voiceEnabled = (): boolean => process.env.VOICE_ENABLED === '1';
+
+/** 전사까지 되는가. 켜져 있어도 키가 없으면 전사만 503 이다. */
+export const sttEnabled = (): boolean => voiceEnabled() && Boolean(process.env.AZURE_SPEECH_KEY);
 
 export const activeDomains = (): readonly ConsentDomain[] =>
-  sttEnabled() ? CONSENT_DOMAINS : CONSENT_DOMAINS.filter((d) => !VOICE_DOMAINS.has(d));
+  voiceEnabled() ? CONSENT_DOMAINS : CONSENT_DOMAINS.filter((d) => !VOICE_DOMAINS.has(d));
 
 export const copyHash = (domain: ConsentDomain): string =>
   createHash('sha256').update(canonicalPreimage(domain), 'utf8').digest('hex');

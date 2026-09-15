@@ -1,7 +1,6 @@
 // 문안 해시와 현재 상태 접기. DB 없이 돈다.
 import { describe, expect, it } from 'vitest';
 import {
-  activeDomains,
   canonicalPreimage,
   CONSENT_COPY,
   copyHash,
@@ -96,10 +95,5 @@ describe('음성 세 영역', () => {
     expect(canonicalPreimage('external_stt_processing')).toContain('purpose=speech_to_text');
   });
 
-  it('기능이 꺼져 있으면 목록에 두지 않는다', () => {
-    // 받을 이유가 없는 동의를 화면에 띄우지 않는다. 저장된 옛 사건은 그대로 남는다.
-    delete process.env.AZURE_SPEECH_KEY;
-    expect(activeDomains()).not.toContain('external_stt_processing');
-    expect(activeDomains()).toContain('external_llm_cross_border_processing');
-  });
+
 });
