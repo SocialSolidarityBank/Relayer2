@@ -56,8 +56,16 @@ app.post('/auth/logout', (c) => {
   return c.json({ ok: true });
 });
 
+/**
+ * 화면 껍데기(HTML·JS·CSS)는 로그인 전에도 받아야 로그인 화면이 뜬다.
+ * 자료는 그 뒤 API 가 내고 그건 전부 막혀 있다. API 경로에는 확장자가 없다.
+ */
+const isWebAsset = (path: string): boolean =>
+  path === '/' || path.startsWith('/assets/') || /\.[a-z0-9]+$/i.test(path);
+
 // 여기부터는 로그인한 사람만. 실패는 401 하나로 답한다(무엇이 있는지 알려주지 않는다).
 app.use('*', async (c, next) => {
+  if (c.req.method === 'GET' && isWebAsset(new URL(c.req.url).pathname)) return next();
   const actor = await actorFromCookie(c.req.header('cookie'));
   if (!actor) return c.json({ error: '로그인이 필요해요.' }, 401);
   c.set('actor', actor);

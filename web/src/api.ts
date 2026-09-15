@@ -40,8 +40,11 @@ export type CaseView = {
 /** 401 은 로그인 만료다. 화면이 각자 처리하지 않고 한 곳에서 구분한다. */
 export class Unauthorized extends Error {}
 
+/** 개발은 vite 프록시(`/api`), 배포는 한 프로세스라 같은 출처 그대로다. */
+const BASE = import.meta.env.DEV ? '/api' : '';
+
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`${BASE}${path}`, {
     ...init,
     credentials: 'same-origin',
     headers: init?.body ? { 'content-type': 'application/json' } : undefined,
