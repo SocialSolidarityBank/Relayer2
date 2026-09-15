@@ -61,6 +61,23 @@ docker run -p 8787:8787 \
 | Fly + 자체 Postgres | 월 $3. 맥미니가 없을 때의 차선 |
 | Supabase 무료 | **7일 무활동이면 일시정지**된다. 실무자가 며칠 안 들어오면 멈춘다 (Pro 는 안 멈춘다) |
 
+### 공개 주소 (2026-09-15)
+
+**https://mac-book.tail79fba7.ts.net** — Tailscale Funnel. 고정이고 HTTPS 이며 비용이 없다.
+
+```bash
+tailscale funnel --bg --https=443 8790     # 켜기
+tailscale funnel status                     # 확인
+tailscale funnel --https=443 off            # 끄기
+```
+
+**Cloudflare Tunnel 을 못 쓴 이유**: `Account@bss.or.kr` 계정에 **등록된 영역(도메인)이 하나도 없다**
+(Workers·D1 만 쓴다). named tunnel 의 `relayer.<도메인>` DNS 라우팅은 영역이 있어야 한다.
+도메인을 Cloudflare 에 올리면 그때 옮길 수 있고, 그전까지 Funnel 이 같은 일을 공짜로 한다.
+
+> Funnel 주소는 **기기 이름**을 딴다. 맥미니로 옮기면 주소도 바뀐다(`mac-mini.tail79fba7.ts.net`).
+> 지금은 맥북에서 돈다 — 상시 운영은 맥미니로 옮기는 것이 맞다.
+
 ### 띄우기
 
 ```bash
