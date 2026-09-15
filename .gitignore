@@ -1,8 +1,11 @@
 node_modules/
-.env
+.env*
+!.env.example
 .DS_Store
 web/test-results/
 web/playwright-report/
 backups/
 web/dist/
 .supabase-dbpw
+*.key
+*.pem

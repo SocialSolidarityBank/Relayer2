@@ -7,12 +7,14 @@
 # 고정 주소가 필요하면 `cloudflared tunnel login` 뒤 이름 있는 터널을 만든다(docs/deploy.md).
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# 빌드는 시크릿이 필요 없다 — .env 를 읽기 전에 돌린다.
+pnpm --dir web build
+
 set -a; . ./.env; set +a
 
 : "${PII_ENC_KEY:?PII_ENC_KEY 가 없다}"
 : "${SESSION_SECRET:?SESSION_SECRET 가 없다}"
 
-pnpm --dir web build
 node api/src/migrate.ts
 node api/src/index.ts &
 app_pid=$!
@@ -24,7 +26,8 @@ curl -fsS "http://127.0.0.1:${PORT:-8787}/health" >/dev/null && echo "앱 준비
 if [ "${1:-}" = "--tunnel" ]; then
   command -v cloudflared >/dev/null || { echo "cloudflared 가 없다: brew install cloudflared"; exit 1; }
   echo "임시 공개 주소를 만든다. 이 창을 닫으면 주소도 사라진다."
-  cloudflared tunnel --url "http://127.0.0.1:${PORT:-8787}"
+  # 터널에는 DB 자격·암호화 열쇠가 필요 없다 — 비어 있는 환경에서 띄운다.
+  env -i HOME="$HOME" PATH="$PATH" cloudflared tunnel --url "http://127.0.0.1:${PORT:-8787}"
 else
   wait $app_pid
 fi

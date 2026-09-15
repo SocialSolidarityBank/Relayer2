@@ -63,14 +63,24 @@ def main() -> None:
     if missing:
         raise SystemExit(f"없는 값: {', '.join(missing)}")
 
+    # 직전 .env 에 있던 선택 키가 이번 응답에 없으면 조용히 빠지는 게 아니라
+    # Infisical 쪽에서 개명·이동된 것이다. 이름만 비교한다 — 값은 보지 않는다.
+    env = pathlib.Path(".env")
+    prev = set()
+    if env.exists():
+        prev = {line.split("=", 1)[0] for line in env.read_text().splitlines() if "=" in line}
+    vanished = [dst for src, dst in OPTIONAL.items() if dst in prev and src not in got]
+
     lines = [f"{k}={got[k]}" for k in WANT]
     extra = [dst for src, dst in OPTIONAL.items() if src in got]
     lines += [f"{dst}={got[src]}" for src, dst in OPTIONAL.items() if src in got]
     lines.append(f"PORT={os.environ.get('PORT', '8790')}")
-    env = pathlib.Path(".env")
     env.write_text("\n".join(lines) + "\n")
     env.chmod(0o600)
     print(f".env 작성: {' '.join(WANT)} PORT" + (f" + {' '.join(extra)}" if extra else " (AI 키 없음 — AI 정리는 503)"))
+    for name in vanished:
+        print(f"경고: 직전 .env 에 있던 {name} 가 Infisical 응답에 없습니다.\n"
+              f"      이름이 바뀌었거나 다른 폴더로 옮겨졌을 수 있습니다. AI 정리는 503 이 됩니다.")
 
 
 main()

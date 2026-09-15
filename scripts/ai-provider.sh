@@ -21,11 +21,13 @@ opsvc=~/.dotfiles/scripts/opsvc
 field() { OP_BIOMETRIC_UNLOCK_ENABLED=false "$opsvc" item get 'Infisical · account@ggbss.or.kr' \
   --vault BSS --fields "label=$1" --reveal; }
 
-# 시크릿을 환경변수로 주입해 명령을 실행한다. 값은 argv 에 싣지 않는다.
+# Infisical 에서 값을 받아 파이썬 안에서 일을 끝낸다.
+# 키는 HTTP 헤더로만 나간다 — argv 에 싣거나 자식 프로세스 환경에 통째로 넘기지 않는다.
+# 인자로 받는 것은 부속 명령 이름뿐이다(값이 아니다).
 with_secrets() {
   CLIENT_ID="$(field ggbss_client_ID)" CLIENT_SECRET="$(field ggbss_client_secret)" \
   PROJECT_ID="$PROJECT_ID" SECRET_PATH="$SECRET_PATH" python3 - "$@" <<'PY'
-import json, os, subprocess, sys, urllib.parse, urllib.request
+import json, os, sys, urllib.error, urllib.parse, urllib.request
 
 API = "https://app.infisical.com/api"
 req = urllib.request.Request(
@@ -42,21 +44,36 @@ res = urllib.request.urlopen(
                            headers={"authorization": f"Bearer {token}"}), timeout=30)
 got = {s["secretKey"]: s["secretValue"] for s in json.loads(res.read()).get("secrets", [])}
 
-env = dict(os.environ)
-env.pop("CLIENT_ID", None); env.pop("CLIENT_SECRET", None)
-env.update(got)
-sys.exit(subprocess.run(["sh", "-c", sys.argv[1]], env=env).returncode)
-PY
+# 제공자별 Infisical 쪽 키 이름과 유효성 확인 URL·헤더.
+PROBE = {
+    "openai": ("RELAYER_OPENAI_API_KEY", "https://api.openai.com/v1/models",
+               lambda k: {"authorization": f"Bearer {k}"}),
+    "gemini": ("GEMINI_API_KEY", "https://generativelanguage.googleapis.com/v1beta/models",
+               lambda k: {"x-goog-api-key": k}),
 }
 
-# 제공자별 키 이름과 유효성 확인 URL. 키 이름은 Infisical 쪽 이름이다.
-probe_cmd='
-  case "$P" in
-    openai) k="${RELAYER_OPENAI_API_KEY:-}"; [ -z "$k" ] && { echo 키없음; exit 0; }
-      curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $k" https://api.openai.com/v1/models ;;
-    gemini) k="${GEMINI_API_KEY:-}"; [ -z "$k" ] && { echo 키없음; exit 0; }
-      curl -s -o /dev/null -w "%{http_code}" -H "x-goog-api-key: $k" https://generativelanguage.googleapis.com/v1beta/models ;;
-  esac'
+def probe(provider):
+    name, url, headers = PROBE[provider]
+    key = got.get(name, "")
+    if not key:
+        print("키없음")
+        return
+    try:
+        urllib.request.urlopen(urllib.request.Request(url, headers=headers(key)), timeout=15)
+        print(200)
+    except urllib.error.HTTPError as e:
+        print(e.code)          # 401·404 같은 응답도 상태코드로 돌려준다
+    except urllib.error.URLError:
+        print("연결안됨")
+
+cmd = sys.argv[1]
+if cmd == "probe":
+    probe(sys.argv[2])
+elif cmd == "line":
+    # .env 에 넣을 `이름=값` 한 줄을 stdout 으로 낸다. 셸을 거치지 않는다.
+    print(f"{sys.argv[2]}={got.get(sys.argv[3], '')}")
+PY
+}
 
 current() { grep -E '^AI_PROVIDER=' .env 2>/dev/null | cut -d= -f2 || echo openai; }
 
@@ -64,7 +81,7 @@ if [ $# -eq 0 ]; then
   echo "지금 제공자: $(current)   (Infisical: ggbss-agent · prod · $SECRET_PATH)"
   for p in openai gemini; do
     printf '  %-7s ' "$p"
-    P="$p" with_secrets "P=$p; $probe_cmd"
+    with_secrets probe "$p"
     echo
   done
   exit 0
@@ -73,7 +90,7 @@ fi
 target="$1"
 case "$target" in openai|gemini) ;; *) echo "openai 또는 gemini 만 됩니다." >&2; exit 2;; esac
 
-code="$(with_secrets "P=$target; $probe_cmd")"
+code="$(with_secrets probe "$target")"
 [ "$code" = "200" ] || { echo "$target 키가 쓸 수 없습니다 (HTTP $code). 바꾸지 않았어요." >&2; exit 1; }
 
 src=$([ "$target" = openai ] && echo RELAYER_OPENAI_API_KEY || echo GEMINI_API_KEY)
@@ -81,7 +98,7 @@ dst=$([ "$target" = openai ] && echo OPENAI_API_KEY || echo GEMINI_API_KEY)
 
 tmp="$(mktemp)"; trap 'rm -f "$tmp"' EXIT
 grep -v -E "^(AI_PROVIDER|AI_MODEL|OPENAI_API_KEY|GEMINI_API_KEY)=" .env > "$tmp" || true
-with_secrets "printf '%s=%s\n' '$dst' \"\$$src\"" >> "$tmp"
+with_secrets line "$dst" "$src" >> "$tmp"
 printf 'AI_PROVIDER=%s\n' "$target" >> "$tmp"
 mv "$tmp" .env; chmod 600 .env
 

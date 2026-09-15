@@ -18,11 +18,9 @@ node api/src/migrate.ts && node api/src/index.ts
 
 ```bash
 docker build -t relayer:0.1.0 .
-docker run -p 8787:8787 \
-  -e DATABASE_URL=postgres://… \
-  -e PII_ENC_KEY=…   \
-  -e SESSION_SECRET=… \
-  relayer:0.1.0
+# .env 는 권한 0600 으로 두고 파일로만 넘긴다.
+# `-e NAME=값` 은 값이 argv 와 셸 이력에 남으므로 쓰지 않는다.
+docker run -p 8787:8787 --env-file .env relayer:0.1.0
 ```
 
 `node:24-slim` 이다 — `.ts` 를 그대로 실행하므로 번들러가 없다. 부팅 때 마이그레이션을 맞추고 뜬다.
