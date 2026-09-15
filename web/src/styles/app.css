@@ -4,19 +4,25 @@ body { margin: 0; }
 
 .app-nav {
   display: flex;
-  gap: var(--space-4);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
   padding-bottom: var(--space-3);
   border-bottom: 1px solid var(--line);
 }
 .app-nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--pill-height);
+  white-space: nowrap;
   color: var(--sub);
   font-size: var(--text-sm);
   text-decoration: none;
 }
 .app-nav a:hover { color: var(--ink); text-decoration: underline; }
 
-.app-nav-me { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); color: var(--sub); font-size: var(--text-sm); }
-.app-nav-logout { border: 0; background: none; padding: 0; color: var(--sub); font: inherit; text-decoration: underline; cursor: pointer; }
+.app-nav-me { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); color: var(--sub); font-size: var(--text-sm); white-space: nowrap; }
+.app-nav-logout { border: 0; background: none; padding: 0; min-height: var(--pill-height); color: var(--sub); font: inherit; text-decoration: underline; cursor: pointer; }
 .app-nav-logout:hover { color: var(--ink); }
 
 .home-open { display: inline-flex; gap: var(--space-2); margin-left: var(--space-2); vertical-align: middle; }
