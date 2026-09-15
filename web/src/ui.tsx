@@ -3,6 +3,26 @@
 import { useState, type ReactNode } from 'react';
 import { LIFE_AREAS } from './areas.ts';
 
+/**
+ * 네 방향 공용 꺽쇠. 12px 슬롯 안의 한 SVG 경로를 회전해 방향만 바꾼다.
+ * 출처: CCC `apps/web/app/components/wire/chevron.tsx`(Apache-2.0). 경로와 슬롯을 그대로 쓴다.
+ */
+export function Chevron({ dir = 'down' }: { dir?: 'up' | 'down' | 'left' | 'right' }) {
+  return (
+    <svg aria-hidden="true" className="wire-chevron" data-dir={dir} focusable="false" viewBox="0 0 12 12">
+      <path
+        d="M3.3 4.65 6 7.35 8.7 4.65"
+        fill="none"
+        stroke="var(--chevron-color, var(--sub))"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.5"
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
+  );
+}
+
 export function PageHeader({ title, meta }: { title: string; meta?: ReactNode }) {
   return (
     <header className="page-header">
@@ -77,6 +97,8 @@ export function Field({
       </label>
       <div className="wire-input-box" data-control={control}>
         {children}
+        {/* select 는 네이티브 화살표를 끈다(wire.css). 꺽쇠가 없으면 입력칸으로 보인다. */}
+        {control === 'select' && <Chevron />}
       </div>
       {hint && <p className="wire-form-hint">{hint}</p>}
     </div>
@@ -186,9 +208,7 @@ export function LineList({
             />
           </div>
         </div>
-        <div className="wire-repeat-actions">
-          <Button onClick={add}>추가</Button>
-        </div>
+        <Button onClick={add}>추가</Button>
       </div>
       {lines.map((line, i) => (
         <div className="wire-repeat-card" key={`${line.text}-${i}`}>
