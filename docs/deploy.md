@@ -61,7 +61,8 @@ docker run -p 8787:8787 --env-file .env relayer:0.1.0
 
 ### 공개 주소 (2026-09-15)
 
-# https://mac-mini.tail79fba7.ts.net
+# https://relayer.kr/test          ← 참가자에게 주는 주소
+# https://mac-mini.tail79fba7.ts.net  ← 대비책. 그대로 살려 둔다
 
 맥미니에서 상시로 돈다. Tailscale Funnel 이라 고정이고 HTTPS 이며 비용이 없다.
 
@@ -147,3 +148,38 @@ node api/src/seed.ts      # 시험 계정 test1~3 + 합성 사례
 
 `docs/secrets.md` 에 있다 — 어느 프로젝트·폴더에 무엇을 넣고, 자격은 어디에 적고,
 어떻게 확인하는지. 그 문서가 정본이다.
+
+## 공개 주소 둘 (2026-09-16)
+
+| 주소 | 경로 | 비고 |
+|---|---|---|
+| `https://relayer.kr/test` | 가비아 등록 → Cloudflare DNS → Tunnel → 맥미니 `:8790` | 관문 2 측정 입구 |
+| `https://mac-mini.tail79fba7.ts.net/test` | Tailscale Funnel → 맥미니 `:8790` | **대비책. 끄지 않는다** |
+
+둘 다 같은 앱을 가리킨다. 하나가 죽어도 측정이 멈추지 않게 둘을 함께 둔다.
+
+### 구성
+
+```
+도메인 등록   가비아 (relayer.kr, 2027-09-15 만기)
+네임서버      noah.ns.cloudflare.com · perla.ns.cloudflare.com
+Cloudflare    영역 relayer.kr (Free), 계정 8855a07cd6da28d8f6120fa95081854e
+Tunnel        이름 relayer, id c2c8e5d1-7288-4264-ae36-e51dd2fbab8d
+              설정 ~/.cloudflared/config.yml (0600), 자격 같은 폴더의 .json
+launchd       or.bss.relayer-tunnel (KeepAlive). 앱은 or.bss.relayer 로 따로 돈다
+로그           ~/services/relayer2/tunnel.{out,err}.log
+```
+
+**네임서버를 바꿀 때는 소유자 본인인증이 필요하다**(가비아). 사람이 해야 하는 자리다.
+`cloudflared tunnel login` 도 브라우저 승인이 한 번 필요하고, 그 인증서는
+`~/.cloudflared/cert.pem` 에 남는다 — 이 파일과 터널 자격 `.json` 은 시크릿이다.
+
+### 손보기
+
+```bash
+ssh mini 'launchctl list | grep relayer'                        # 셋 다 떠 있어야 한다
+ssh mini 'tail -20 ~/services/relayer2/tunnel.err.log'          # 터널 로그
+ssh mini 'launchctl kickstart -k gui/$(id -u)/or.bss.relayer-tunnel'   # 터널만 재시작
+```
+
+앱과 터널은 **따로 재시작한다.** 앱을 고칠 때 터널을 내릴 이유가 없다.
