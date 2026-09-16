@@ -193,14 +193,15 @@ CCC의 `apps/web/app/components/wire/participant-card.tsx`와 `participants/page
 | `Chevron` | 12px `.wire-chevron` SVG, 획 1.5px | 방향만 회전한다. `Field control="select"`가 자동으로 붙이며 네이티브 select의 의미는 유지한다. |
 | `ChoiceGroup`, `Choice` | `fieldset.wire-fieldset`, `.wire-choice-group`, `label.wire-choice`, 네이티브 input | 단일·복수 선택을 표시한다. radio의 `name`과 label 연결을 유지한다. |
 | `LineList` | 입력칸과 버튼 한 행, 추가한 값의 `.wire-repeat-card`와 `Item` | 수행할 과제·다음에 물어볼 것 등 반복 입력을 조립한다. 추가·저장 의미는 기존 동작을 바꾸지 않는다. |
-| `Item` | `.wire-item-title`, 선택적 `.wire-item-desc`와 `.wire-item-action` | 한 항목의 제목·설명·행동을 표시한다. 행동은 항목 아래의 시작선에 둔다. |
+| `Fold` | `details.surface-card.wire-card.wire-card-details`, `summary.wire-card-summary`, `.wire-card-body` | 접었다 펴는 카드다. 접힌 줄에 제목과 한 줄 설명(말줄임)이 서고, **펼친 제목 줄 아래에는 가로선을 두지 않는다**(2026-09-17 Q). 제목과 본문은 24px 여백으로 갈린다. |
+| `Item` | `.wire-item` 안 `.wire-row-text`(제목·설명)와 선택적 `.wire-item-action` | 한 항목의 제목·설명·행동을 표시한다. **행동이 있으면 글 왼쪽·행동 오른쪽으로 서고 세로 가운데를 맞춘다**(2026-09-17 Q). 글과 행동 사이는 12px, 제목과 설명 사이는 4px, 행동 안 버튼 사이는 8px이다. 767px 이하에서는 행동이 글 아래로 내려가 12px을 띄운다. |
 | `Badge` | `.wire-badge > .wire-badge-label` | 상태·건수를 표시한다. 현재 React 계약은 기본 중립과 `mint`, `lavender`, `blue`다. |
 | `DataRows` | `dl.wire-data-rows`, 행별 `dt`·`dd` | 이름과 값의 표를 표시한다. |
 | `Empty` | `p.empty` | 불러오기나 빈 상태를 기존 문구와 함께 표시한다. |
 | `FormActions` | `.wire-form-actions` | 폼의 저장·이동 버튼을 오른쪽에 모으고 사이를 12px 띄운다. |
 | `ErrorText` | `p.wire-error[role="alert"]` | 오류를 글로 알린다. 색만으로 오류를 전달하지 않는다. |
 
-기본 카드는 `--line` 1px 아웃라인과 `--panel` 면을 쓴다. 제목 아래 구분선은 1px이며 카드 패딩을 가로질러 양쪽 테두리에 닿고, 위아래 여백은 24px이다. 반복 행은 `.wire-repeat-card`의 상하 16px·좌우 24px을 쓴다. 카드 안에 임의의 새 상자나 그림자를 추가하지 않는다.
+기본 카드는 `--line` 1px 아웃라인과 `--panel` 면을 쓴다. 제목 아래 구분선은 1px이며 카드 패딩을 가로질러 양쪽 테두리에 닿고, 위아래 여백은 24px이다. 이 선은 **제목과 본문을 가진 카드**의 것이고, 접힘 카드(`Fold`)와 제목 없는 카드에는 두지 않는다. 반복 행은 `.wire-repeat-card`의 상하 16px·좌우 24px을 쓴다. 카드 안에 임의의 새 상자나 그림자를 추가하지 않는다. **고를 대상이 여럿이면 카드를 한 장 더 씌우지 않고 각자 카드로 세운다**(2026-09-17 Q — 설정 › 시스템의 구 `무엇을 볼까요` 묶음 카드 안 상자 넷이 그 예다. 상자가 두 겹이면 정작 누를 것이 안쪽 상자다).
 
 버튼의 프라이머리는 밝은 행동 그라데이션, 세컨더리는 기존 아웃라인을 사용한다. 타입에만 남은 `neutral`·`ghost`·`danger`를 현재 화면에서 사용하는 변형으로 설명하지 않는다. 선택창의 꺽쇠를 텍스트 기호로 다시 그리지 않는다. 버튼의 native `disabled`와 포커스 처리를 유지한다. 입력칸의 포커스 링은 내부 input과 바깥 상자에 중복하지 않고 `.wire-input-box:focus-within`에서 표시한다.
 

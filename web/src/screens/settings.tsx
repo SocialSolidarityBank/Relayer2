@@ -231,17 +231,17 @@ export function SettingsScreen({
     return (
       <>
         <PageHeader title={g.title} meta={isAdmin ? '관리자' : '실무자'} />
-        <Card title="무엇을 볼까요">
-          {g.items.map((i) => (
-            <div className="wire-repeat-card" key={i.key}>
-              <Item
-                title={i.label}
-                desc={i.desc}
-                action={<Button onClick={() => (window.location.hash = `#/settings/${i.key}`)}>열기</Button>}
-              />
-            </div>
-          ))}
-        </Card>
+        {/* 묶음 카드를 걷고 항목 넷을 **각자 카드로 올린다**(2026-09-17 Q). `무엇을 볼까요`
+            한 장 안에 상자 넷을 넣으면 상자가 두 겹이고, 정작 고르는 대상은 안쪽 상자다. */}
+        {g.items.map((i) => (
+          <Card key={i.key}>
+            <Item
+              title={i.label}
+              desc={i.desc}
+              action={<Button onClick={() => (window.location.hash = `#/settings/${i.key}`)}>열기</Button>}
+            />
+          </Card>
+        ))}
       </>
     );
   }

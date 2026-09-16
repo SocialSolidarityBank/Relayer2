@@ -153,6 +153,10 @@ export function Card({
  * 접힌 상태는 제목 줄만 남은 카드이고, 펼치면 `surface-card[open]` 의 그라데이션 테두리를 받는다.
  * 접혀 있을 때는 **카드 면 전체가 누를 자리**다 — 제목 글자만 눌리면 22px 표적이 된다.
  * 그 규칙은 CSS 에 이미 있고(`wire.css:566`), 여기서는 마크업만 맞춘다.
+ *
+ * 펼친 제목 줄 아래에는 **가로선을 두지 않는다**(2026-09-17 Q). 제목과 본문은 24 여백으로
+ * 갈리고, 선은 한 카드 안에 여러 구획이 있을 때만 뜻이 있다. 이식 CSS 의 `[open]` 제목 줄
+ * 아래 선은 `app.css` 에서 끈다.
  */
 export function Fold({
   title,
@@ -177,7 +181,6 @@ export function Fold({
           <Chevron dir="down" />
         </span>
       </summary>
-      <div className="wire-card-divider" />
       <div className="wire-card-body">{children}</div>
     </details>
   );
@@ -380,11 +383,18 @@ export function LineList({
   );
 }
 
+/**
+ * 한 항목. 행동이 있으면 **글 왼쪽 · 행동 오른쪽, 세로 가운데**로 선다(2026-09-17 Q).
+ * 글 묶음은 이식한 `.wire-row-text`(행 안 글 묶음) 계약을 그대로 쓴다 — 남는 폭을 먹고
+ * 안에서 줄바꿈한다. 배치는 `app.css` 가 정하고 여기서는 묶음만 만든다.
+ */
 export function Item({ title, desc, action }: { title: ReactNode; desc?: ReactNode; action?: ReactNode }) {
   return (
     <div className="wire-item">
-      <p className="wire-item-title">{title}</p>
-      {desc && <p className="wire-item-desc">{desc}</p>}
+      <div className="wire-row-text">
+        <p className="wire-item-title">{title}</p>
+        {desc && <p className="wire-item-desc">{desc}</p>}
+      </div>
       {action && <div className="wire-item-action">{action}</div>}
     </div>
   );
