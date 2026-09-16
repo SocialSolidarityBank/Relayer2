@@ -920,14 +920,15 @@ v1 → v2 로 판이 올라, **이미 받은 동의는 전부 `확인 필요`로
 
 - WAV·MP3·M4A·FLAC·OGG·WebM 컨테이너를 최대 50MiB까지 받는다. 파일 형식과 바이트 상한을 서버에서도 검사한다.
 - 음성 원본은 `VOICE_ROOT`에 저장한다. 파일명은 서버가 생성하고 디렉터리/파일 권한은 0700/0600이다.
-- 외부 전사는 Azure Fast Transcription의 multipart API를 사용한다. 실제 전사에는 RELAYER2 전용 Speech 연결이 필요하다.
+- 외부 전사는 Azure Fast Transcription의 multipart API를 사용한다. 실제 전사에는 유효한 Speech 키와 해당 리소스의 지역 설정이 필요하다.
 - 전사문과 시간 구간은 암호화해 저장한다. 승인할 초안 ID를 확인하며, 문구를 수정한 승인본에는 이전 시간 구간을 그대로 붙이지 않는다.
 - 현재 불일치 비교는 **숫자 항목 비교**다. 일반적인 의미·누락·진술 모순을 모두 검출하는 분석으로 표시하지 않는다.
+- `네 건`·`열두 건`·`삼십오만 원` 같은 한글 수사는 숫자로 정규화해 비교하되 출처 문장은 원문을 유지한다. `내 건` 같은 동음어를 숫자로 추측하지 않는다.
 - 전사 없음·확인 전·수기 기록 없음은 비교 불가 상태다. 기록이 수정됐지만 저장되지 않았으면 이전 비교 결과를 숨긴다.
 - 음성·전사문을 정답으로 판정하지 않고 양쪽 값과 출처 문장을 보여준다.
 
 `VOICE_ENABLED=1`은 업로드 기능을 켠다. `AZURE_SPEECH_KEY`와 지역 또는 엔드포인트가 있어야 전사가 준비된다.
-전용 설정은 `docs/secrets.md`를 따른다. 다른 제품의 키를 재사용하거나 실제 사용자의 녹음을 시험 데이터로 보내지 않는다.
+설정은 `docs/secrets.md`를 따른다. 2026-09-16 Q 승인으로 기존 Speech 리소스의 KEY 2를 재사용한다. 실제 사용자의 녹음을 시험 데이터로 보내지 않는다.
 
 외부 계약 출처: [Azure Fast Transcription](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/fast-transcription-create),
 [지원 지역](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/regions?tabs=stt).

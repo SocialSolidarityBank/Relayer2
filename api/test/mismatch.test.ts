@@ -18,6 +18,30 @@ describe('숫자 사실 뽑기', () => {
 });
 
 describe('음성·수기 기록 불일치', () => {
+  it('한글로 전사된 건수를 숫자 기록과 비교하고 원문 근거를 보존한다', () => {
+    const found = voiceVsWritten('연체는 네 건입니다.', '연체 3건 확인.');
+    expect(found).toEqual([expect.objectContaining({ label: '연체 건수', left: '4', right: '3' })]);
+    expect(found[0].leftSnippet).toContain('네 건');
+  });
+
+  it('한글 숫자와 아라비아 숫자의 표기 차이는 불일치가 아니다', () => {
+    const spoken = '연체는 열두 건입니다. 월세는 삼십오만 원이고 두 달 밀렸습니다.';
+    expect(extractFacts(spoken)).toEqual(expect.arrayContaining([
+      { label: '연체 건수', value: '12' },
+      { label: '월세', value: '35' },
+      { label: '밀린 개월', value: '2' },
+    ]));
+    expect(voiceVsWritten(spoken, '연체 12건. 월세 35만 원. 2개월 밀림.')).toEqual([]);
+  });
+
+  it('숫자가 아닌 동음어를 추측해서 건수로 바꾸지 않는다', () => {
+    expect(voiceVsWritten('연체는 내 건입니다.', '연체 3건.')).toEqual([]);
+  });
+
+  it('한두 건 같은 범위를 하나의 정확한 건수로 추측하지 않는다', () => {
+    expect(extractFacts('연체는 한두 건입니다.')).toEqual([]);
+  });
+
   it('같은 이름의 수가 다르면 짚는다', () => {
     const found = voiceVsWritten('연체 4건이라고 말함.', '연체 3건 확인함.');
     expect(found).toHaveLength(1);

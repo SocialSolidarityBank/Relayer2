@@ -53,12 +53,16 @@ OpenAI 키 하나가 죽으면서 두 제품이 같이 멈췄다.
 |---|---|
 | `VOICE_ENABLED` | `1`일 때 음성 업로드 허용 |
 | `VOICE_ROOT` | 배포 교체 후에도 유지되는 기관 음성 저장 경로 |
-| `AZURE_SPEECH_KEY` | RELAYER2 전용 Azure Speech 인증 |
+| `AZURE_SPEECH_KEY` | RELAYER2가 사용하는 Azure Speech 인증 |
 | `AZURE_SPEECH_REGION` | 해당 Speech 리소스의 지역 |
 | `AZURE_SPEECH_ENDPOINT` | 리소스 전용 HTTPS 엔드포인트. 지역 대신 지정 가능 |
 
-2026-09-16 고정 이름 존재 확인에서 `VOICE_ENABLED`, Speech 키·지역·엔드포인트는 이 경로에 없었다.
-따라서 코드 구현과 실제 전사 연결 완료를 구분해야 한다. 키가 없으면 업로드·재생과 별도로 전사가 불가하다고 표시한다.
+2026-09-16 Q가 기존 키 재사용을 허용하여, `ccc-stt-koreacentral`의 **기존 KEY 2**를 이 경로에 등록했다.
+`AZURE_SPEECH_REGION=koreacentral`, `VOICE_ENABLED=1`도 등록했다. 기존 Azure 키의 재생성이나 CCC 설정 변경은 하지 않았다.
+Azure 인증 HTTP 200과 합성 한국어 음성의 Fast Transcription → 승인 → 숫자 불일치 비교를 검증했다.
+
+이 키는 기존 Speech 리소스를 공유하므로 사용량·요금·키 회전의 영향을 함께 받는다. 향후 KEY 2를 회전하면 RELAYER2도 갱신해야 한다.
+키 값은 출력하거나 별도 파일로 저장하지 않았으며, 실제 사람의 녹음은 검증에 사용하지 않았다. 운영 프로세스 반영 여부는 코드 배포와 별도로 확인한다.
 
 ---
 
