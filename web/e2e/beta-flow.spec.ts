@@ -21,6 +21,15 @@ test('등록부터 15초 다시보기까지 한 바퀴', async ({ page }) => {
   // ── 당사자 등록 ─────────────────────────────────────────────
   // 로그인하면 홈은 일정이다
   await expect(page.getByRole('heading', { name: '일정', exact: true })).toBeVisible();
+  const scheduleMenu = page.locator('.navigation-group', {
+    has: page.locator('.navigation-section-title', { hasText: '일정' }),
+  });
+  const participantMenu = page.locator('.navigation-group', {
+    has: page.locator('.navigation-section-title', { hasText: '당사자' }),
+  });
+  await expect(participantMenu.getByRole('link', { name: '상담 기록하기' })).toHaveCount(0);
+  await scheduleMenu.getByRole('link', { name: '상담 기록하기' }).click();
+  await expect(page.getByRole('heading', { name: '누구의 상담을 기록할까요' })).toBeVisible();
   await page.goto('/#/participants/new');
   await page.locator('#name').fill(NAME);
   await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
@@ -55,7 +64,7 @@ test('등록부터 15초 다시보기까지 한 바퀴', async ({ page }) => {
   await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
 
   // ── 2회차 상담 기록하기 ─────────────────────────────────────
-  await page.getByRole('button', { name: '상담 기록하기' }).click();
+  await scheduleMenu.getByRole('link', { name: '상담 기록하기' }).click();
   await expect(page.getByRole('heading', { name: '상담 기록하기' })).toBeVisible();
 
   // 인테이크에서 만든 질문이 레일에 올라와 있다.
