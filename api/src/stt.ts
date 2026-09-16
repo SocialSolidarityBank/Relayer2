@@ -31,6 +31,10 @@ import { maskAll } from './domain/masking.ts';
 import { decryptPii, decryptText, encryptText } from './pii.ts';
 import type { Session } from './domain/types.ts';
 
+/** 제공자 쪽 일시 오류. 이 상태만 다시 시도한다 — 400·401·413 은 다시 보내도 같다. */
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
 /** 정본이 `azure` 로 못박았다. 다른 곳으로 음성을 보내려면 정본을 먼저 고친다. */
 const PROVIDER = 'azure' as const;
 
@@ -366,16 +370,29 @@ async function transcribeAudio(
   );
   form.append('definition', JSON.stringify({ locales: ['ko-KR'], profanityFilterMode: 'None' }));
 
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Ocp-Apim-Subscription-Key': key, Accept: 'application/json' },
-      body: form,
-      signal: AbortSignal.timeout(120_000),
-    });
-  } catch {
-    throw new SttUnavailable('전사 제공자에 연결하지 못했어요.');
+  // 429·5xx 는 제공자 쪽 일시 상태다(2026-09-17 실측: Korea Central 이 단건 요청에도
+  // "Resource Exhausted" 429 를 냈다). Microsoft 지침대로 2·4·8·16·32초로 최대 5번 더 시도하고
+  // Retry-After 가 오면 그것을 따른다. 그래도 안 되면 failed 로 남기고 사람이 다시 누른다.
+  const RETRY_DELAYS_MS = [2_000, 4_000, 8_000, 16_000, 32_000];
+  let res: Response | null = null;
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Ocp-Apim-Subscription-Key': key, Accept: 'application/json' },
+        body: form,
+        signal: AbortSignal.timeout(120_000),
+      });
+    } catch {
+      throw new SttUnavailable('전사 제공자에 연결하지 못했어요.');
+    }
+    if (res.ok || !RETRYABLE_STATUS.has(res.status) || attempt >= RETRY_DELAYS_MS.length) break;
+    const retryAfter = Number(res.headers.get('retry-after'));
+    const delay = Number.isFinite(retryAfter) && retryAfter >= 0 && res.headers.has('retry-after')
+      ? Math.min(retryAfter * 1000, 60_000)
+      : RETRY_DELAYS_MS[attempt];
+    await res.body?.cancel().catch(() => {});
+    await sleep(delay);
   }
 
   if (!res.ok) throw new SttUnavailable(`전사가 되지 않았어요 (${res.status}).`);

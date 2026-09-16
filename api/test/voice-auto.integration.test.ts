@@ -37,19 +37,46 @@ describe.skipIf(!enabled)('auto transcription', () => {
     });
   });
 
-  it('marks failed on provider error and lets a manual retry finish it', async () => {
-    vi.stubGlobal('fetch', azureFetch(null, 500));
+  it('retries 429 with Retry-After and lands the draft once the provider recovers', async () => {
+    // 2026-09-17 실측: Korea Central 이 단건 요청에 "Resource Exhausted" 429 를 냈다.
+    let calls = 0;
+    vi.stubGlobal('fetch', (async () => {
+      calls += 1;
+      if (calls < 3) return new Response('{"code":"TooManyRequests"}', { status: 429, headers: { 'retry-after': '0' } });
+      return new Response(JSON.stringify({ combinedPhrases: [{ text: '월세 2개월 밀렸다고 말함.' }], phrases: [] }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      });
+    }) as unknown as typeof fetch);
     const { worker, case_id } = await fixture();
     const { session_id } = await (await req(`/cases/${case_id}/sessions/start`, worker, 'POST', {})).json();
     const recording = await (await upload(session_id, worker, silentWav(4000))).json();
+    expect(await waitTranscribeState(recording.id)).toBe('done');
+    expect(calls).toBe(3);
+  });
+
+  it('marks failed when retries run out or the error is not retryable, and a manual retry can finish it', async () => {
+    let calls = 0;
+    vi.stubGlobal('fetch', (async () => {
+      calls += 1;
+      return new Response('{"code":"TooManyRequests"}', { status: 429, headers: { 'retry-after': '0' } });
+    }) as unknown as typeof fetch);
+    const { worker, case_id } = await fixture();
+    const { session_id } = await (await req(`/cases/${case_id}/sessions/start`, worker, 'POST', {})).json();
+    const recording = await (await upload(session_id, worker, silentWav(4800))).json();
     expect(await waitTranscribeState(recording.id)).toBe('failed');
+    expect(calls).toBe(6); // 첫 시도 + 5번
     const [row] = await sql<Array<{ transcribe_note: string | null }>>`
       select transcribe_note from recordings where id = ${recording.id}`;
-    expect(row.transcribe_note).toContain('500');
+    expect(row.transcribe_note).toContain('429');
+
+    // 400 은 다시 보내도 같다 — 한 번만 부른다.
+    calls = 0;
+    vi.stubGlobal('fetch', (async () => { calls += 1; return new Response('bad', { status: 400 }); }) as unknown as typeof fetch);
+    expect((await req(`/recordings/${recording.id}/transcript`, worker, 'POST', {})).status).toBe(503);
+    expect(calls).toBe(1);
 
     vi.stubGlobal('fetch', azureFetch('월세 2개월 밀렸다고 말함.'));
-    const retry = await req(`/recordings/${recording.id}/transcript`, worker, 'POST', {});
-    expect(retry.status).toBe(200);
+    expect((await req(`/recordings/${recording.id}/transcript`, worker, 'POST', {})).status).toBe(200);
     expect(await waitTranscribeState(recording.id)).toBe('done');
   });
 
