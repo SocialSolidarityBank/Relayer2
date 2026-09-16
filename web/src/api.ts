@@ -430,6 +430,7 @@ export type RequestRow = {
   case_id: number;
   pseudonym: string;
   program_name: string;
+  requester_id: number;
   requester: string;
   reason: string | null;
   created_at: string;
@@ -475,7 +476,19 @@ export const requestAssignment = (case_id: number, reason: string | null) =>
 export const decideRequest = (id: number, decision: 'approved' | 'rejected') =>
   json<{ ok: true }>(`/settings/requests/${id}`, { method: 'POST', body: JSON.stringify({ decision }) });
 
-export type ConsentCopy = { domain: string; label: string; body: string; purpose: string; hash: string };
+export type ConsentCopy = {
+  domain: string;
+  label: string;
+  body: string;
+  items: string[];
+  purpose_text: string;
+  retention_text: string;
+  refusal_text: string;
+  /** 밖으로 나가는 영역만 채워진다. 누구에게 가는지가 동의의 본체다. */
+  recipient: string | null;
+  version: string;
+  hash: string;
+};
 export const getConsentCopy = () => json<ConsentCopy[]>('/settings/consent-copy');
 
 export const getConnections = () => json<Connections>('/settings/connections');

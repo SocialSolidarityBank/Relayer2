@@ -11,7 +11,7 @@
  * 기관에 있는 것(`실무자 초대하기`·`실무자 목록`)과 이 사람을 맡은 것(`담당 배정하기`)은
  * 다르다. 방금 초대한 사람은 아무도 안 맡았는데 `담당자`라 부르면 화면이 거짓말한다.
  */
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import {
   addProgram,
   assignCase,
@@ -51,6 +51,7 @@ import {
   Empty,
   ErrorText,
   Field,
+  Fold,
   FormActions,
   Item,
   PageHeader,
@@ -84,10 +85,11 @@ export const SETTINGS_GROUPS = [
     key: 'staff',
     title: '실무자 관리',
     items: [
+      { key: 'workers', label: '실무자 목록', desc: '누가 있고 누구를 맡고 있는지 봐요.', admin: true },
       { key: 'assign', label: '담당 배정하기', desc: '올라온 요청을 확정하고, 담당이 바뀔 때 넘겨요.', admin: true },
       { key: 'invite', label: '실무자 초대하기', desc: '초대 링크를 만들어 건네요. 7일 뒤 만료돼요.', admin: true },
-      { key: 'workers', label: '실무자 목록', desc: '누가 있고 누구를 맡고 있는지 봐요.', admin: true },
-      { key: 'request', label: '담당 배정 요청하기', desc: '내가 맡겠다고 올린 당사자를 봐요.', admin: false },
+      // 관리자에게는 `담당 배정하기` 안에 합쳐 두었다. 실무자에게만 따로 선다.
+      { key: 'request', label: '담당 배정 요청하기', desc: '내가 맡겠다고 올린 당사자를 봐요.', admin: false, workerOnly: true },
     ],
   },
   {
@@ -113,7 +115,7 @@ export const SETTINGS_GROUPS = [
   },
 ] as const;
 
-export type SettingsItem = { key: string; label: string; desc: string; admin: boolean };
+export type SettingsItem = { key: string; label: string; desc: string; admin: boolean; workerOnly?: boolean };
 export type SettingsGroup = {
   key: string;
   title: string;
@@ -131,9 +133,10 @@ export const SETTINGS_GROUP_LIST: readonly SettingsGroup[] = SETTINGS_GROUPS.map
 
 /** 묶음 전체가 관리자 몫이면 실무자에게는 메뉴를 세우지 않는다. */
 export const visibleGroups = (isAdmin: boolean): readonly SettingsGroup[] =>
-  SETTINGS_GROUP_LIST.map((g) => ({ ...g, items: g.items.filter((i) => !i.admin || isAdmin) })).filter(
-    (g) => g.items.length > 0,
-  );
+  SETTINGS_GROUP_LIST.map((g) => ({
+    ...g,
+    items: g.items.filter((i) => (i.admin ? isAdmin : !(i.workerOnly && isAdmin))),
+  })).filter((g) => g.items.length > 0);
 
 export type SettingsModule = string;
 
@@ -147,7 +150,7 @@ function Pane({ item, me }: { item: SettingsItem; me: { id: number; name: string
     case 'leave':
       return <LeavePane />;
     case 'assign':
-      return <AssignPane />;
+      return <AssignPane me={me} />;
     case 'invite':
       return <InvitePane />;
     case 'workers':
@@ -366,7 +369,7 @@ function LeavePane() {
 
 // ── 관리자 ────────────────────────────────────────────────────────────────
 
-function AssignPane() {
+function AssignPane({ me }: { me: { id: number } }) {
   const [workers, setWorkers] = useState<Worker[] | null>(null);
   const [reqs, setReqs] = useState<RequestRow[]>([]);
   const [who, setWho] = useState<number | null>(null);
@@ -386,15 +389,20 @@ function AssignPane() {
   }, [who]);
 
   const live = (workers ?? []).filter((w) => !w.deactivated_at);
-  const pending = reqs.filter((r) => !r.decided_at);
+  // 남이 올린 대기 요청은 내가 확정할 것이고, 내가 올린 것은 결과를 기다리는 것이다.
+  const toApprove = reqs.filter((r) => !r.decided_at && r.requester_id !== me.id);
+  const mine = reqs.filter((r) => r.requester_id === me.id);
 
   return (
     <>
-      <Card title="올라온 배정 요청">
-        {pending.length === 0 ? (
+      {/* 승인할 것과 내가 올린 것을 한자리에 둔다(2026-09-16 Q) —
+          관리자도 당사자를 맡는 사람이라 둘이 같이 있어야 흐름이 끊기지 않는다. */}
+      <Card title="담당 배정 요청">
+        <h3 className="wire-subhead">승인할 배정 요청</h3>
+        {toApprove.length === 0 ? (
           <Empty>대기 중인 요청이 없어요.</Empty>
         ) : (
-          pending.map((r) => (
+          toApprove.map((r) => (
             <div className="wire-repeat-card" key={r.id}>
               <Item
                 title={`${r.pseudonym} · ${r.program_name}`}
@@ -414,9 +422,32 @@ function AssignPane() {
             </div>
           ))
         )}
+
+        <h3 className="wire-subhead">내 요청</h3>
+        {mine.length === 0 ? (
+          <Empty>내가 올린 요청이 없어요.</Empty>
+        ) : (
+          mine.map((r) => (
+            <div className="wire-repeat-card" key={r.id}>
+              <Item
+                title={`${r.pseudonym} · ${r.program_name}`}
+                desc={`${date(r.created_at)} 올림${r.reason ? ` · ${r.reason}` : ''}`}
+                action={
+                  r.decided_at ? (
+                    <Badge tone={r.decision === 'approved' ? 'mint' : undefined}>
+                      {r.decision === 'approved' ? '배정됨' : '거절됨'}
+                    </Badge>
+                  ) : (
+                    <Badge tone="blue">기다리는 중</Badge>
+                  )
+                }
+              />
+            </div>
+          ))
+        )}
       </Card>
 
-      <Card title="담당이 바뀔 때">
+      <Card title="담당 실무자 배정">
         <Field label="실무자" htmlFor="as-who" control="select">
           <select id="as-who" value={who ?? ''} onChange={(e) => setWho(e.target.value ? Number(e.target.value) : null)}>
             <option value="">고르기</option>
@@ -558,6 +589,10 @@ function InvitePane() {
   );
 }
 
+/**
+ * 실무자 목록. **한 사람이 한 줄이다**(2026-09-16 Q) — 두 층으로 쌓으면 열 명만 넘어도
+ * 누가 몇 명을 맡았는지 견줄 수 없다. 맨 오른쪽이 `당사자 보기`다.
+ */
 function WorkersPane() {
   const [rows, setRows] = useState<Worker[] | null>(null);
   const [open, setOpen] = useState<number | null>(null);
@@ -574,35 +609,49 @@ function WorkersPane() {
       {rows === null ? (
         <Empty>불러오는 중이에요.</Empty>
       ) : (
-        rows.map((w) => (
-          <div className="wire-repeat-card" key={w.id}>
-            <Item
-              title={
-                <>
-                  {w.name} {w.role === 'admin' && <Badge tone="lavender">관리자</Badge>}
-                  {w.deactivated_at && <Badge>나감</Badge>}
-                </>
-              }
-              desc={`${w.email} · 맡은 당사자 ${w.open_cases}명`}
-              action={
-                <Button onClick={() => setOpen(open === w.id ? null : w.id)}>
-                  {open === w.id ? '접기' : '당사자 보기'}
-                </Button>
-              }
-            />
-            {open === w.id &&
-              (cases.length === 0 ? (
-                <Empty>맡고 있는 당사자가 없어요.</Empty>
-              ) : (
-                <DataRows
-                  rows={cases.map((c) => [
-                    c.pseudonym,
-                    `${c.program_name} · ${c.status === 'open' ? '진행 중' : '종결'}`,
-                  ])}
-                />
+        <div className="data-table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>이름</th>
+                <th>역할</th>
+                <th>아이디</th>
+                <th>맡은 당사자</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((w) => (
+                <Fragment key={w.id}>
+                  <tr>
+                    <td>{w.name}</td>
+                    <td>{w.deactivated_at ? '나감' : w.role === 'admin' ? '관리자' : '실무자'}</td>
+                    <td>{w.email}</td>
+                    <td>{w.open_cases}명</td>
+                    <td>
+                      <Button onClick={() => setOpen(open === w.id ? null : w.id)}>
+                        {open === w.id ? '접기' : '당사자 보기'}
+                      </Button>
+                    </td>
+                  </tr>
+                  {open === w.id && (
+                    <tr>
+                      <td colSpan={5}>
+                        {cases.length === 0 ? (
+                          <Empty>맡고 있는 당사자가 없어요.</Empty>
+                        ) : (
+                          cases
+                            .map((c) => `${c.pseudonym} · ${c.program_name} · ${c.status === 'open' ? '진행 중' : '종결'}`)
+                            .join(' / ')
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
-          </div>
-        ))
+            </tbody>
+          </table>
+        </div>
       )}
     </Card>
   );
@@ -696,42 +745,58 @@ function ProgramsPane() {
 }
 
 /**
- * 동의서 관리 — 문안은 코드에 박혀 있다(`api/src/consent.ts`).
+ * 동의서 관리 — **읽기만 한다.** 문안은 코드가 정본이다(`api/src/consent.ts`).
  *
- * **문안을 화면에서 고치게 하지 않는다.** 동의는 문안 해시에 묶여 있어, 글자 하나가 바뀌면
- * 이미 받은 동의가 전부 `확인 필요`로 떨어진다. 그 일이 실수로 일어나서는 안 된다.
- * 여기서는 지금 쓰는 문안이 무엇인지 보여 준다.
+ * 화면에서 고치게 하지 않는 이유는 글자 하나가 바뀌면 이미 받은 동의가 전부
+ * `확인 필요`로 떨어지기 때문이다. 그때는 **동의하신 분들께 다시 알리고 받아야 한다.**
+ * 고치는 장치는 그 절차가 정해진 뒤에 붙인다(2026-09-16 Q).
  */
 function ConsentPane() {
   const [rows, setRows] = useState<ConsentCopy[] | null>(null);
   useEffect(() => {
     void getConsentCopy().then(setRows);
   }, []);
+
   return (
-    <Card
-      title="동의서 관리"
-    >
-      {rows === null ? (
-        <Empty>불러오는 중이에요.</Empty>
-      ) : rows.length === 0 ? (
-        <Empty>문안을 불러오지 못했어요.</Empty>
-      ) : (
-        rows.map((r) => (
-          <div className="wire-repeat-card" key={r.domain}>
-            <Item title={r.label} desc={`${r.body} · 문안 지문 ${r.hash}`} />
-          </div>
-        ))
-      )}
-    </Card>
+    <>
+      <Card title="동의서 문안">
+        {rows === null ? (
+          <Empty>불러오는 중이에요.</Empty>
+        ) : (
+          rows.map((r) => (
+            <Fold key={r.domain} title={r.label} desc={r.body}>
+              <DataRows
+                rows={[
+                  ['무엇을 받나', r.items.join(' · ')],
+                  ['왜 받나', r.purpose_text],
+                  ['얼마나 두나', r.retention_text],
+                  ...(r.recipient ? ([['어디로 가나', r.recipient]] as Array<[string, string]>) : []),
+                  ['거부할 수 있나', r.refusal_text],
+                  ['문안 판', `${r.version} · 지문 ${r.hash}`],
+                ]}
+              />
+            </Fold>
+          ))
+        )}
+      </Card>
+
+      <Card title="문안을 고칠 때">
+        <DataRows
+          rows={[
+            ['지금', '화면에서 고칠 수 없어요. 문안은 코드에 있어요.'],
+            ['고치면', '그 영역에 동의하신 모든 분이 `확인 필요`로 바뀌어요.'],
+            ['해야 할 일', '바뀐 내용을 알리고 다시 동의를 받아야 해요. 받기 전에는 그 기능이 멈춰요.'],
+            ['고치는 버튼', '알리는 절차를 정한 뒤에 붙여요.'],
+          ]}
+        />
+      </Card>
+    </>
   );
 }
 
 /**
  * 자료 다운로드(2026-09-16 Q). 화면에서 찾는 것과 파일로 받는 것을 갈랐다 —
  * 찾기는 한 건을 짚는 일이고, 받기는 기간 전체를 통째로 옮기는 일이라 고를 것이 다르다.
- *
- * **이름을 실을지 여기서 고르고, 그 선택이 열람 기록에 남는다.** 실명이 든 파일은
- * 기관 밖으로 나가는 순간 우리 보유기간도 삭제 장치도 닿지 않는다.
  */
 function DownloadPane() {
   const [days, setDays] = useState(30);
@@ -745,18 +810,12 @@ function DownloadPane() {
   }, []);
 
   const href = auditCsvHref(
-    {
-      days,
-      kind: kind === '전부' ? undefined : kind,
-      actor: actor ? Number(actor) : undefined,
-    },
+    { days, kind: kind === '전부' ? undefined : kind, actor: actor ? Number(actor) : undefined },
     withNames,
   );
 
   return (
-    <Card
-      title="열람 기록 내려받기"
-    >
+    <Card title="열람 기록 내려받기">
       <Field label="기간" htmlFor="dl-days">
         <div className="info-tabs" id="dl-days">
           {AUDIT_DAYS.map(([d, label]) => (
@@ -796,11 +855,7 @@ function DownloadPane() {
         </div>
       </Field>
 
-      <Field
-        label="당사자 표기"
-        htmlFor="dl-names"
-        control="select"
-      >
+      <Field label="당사자 표기" htmlFor="dl-names" control="select">
         <select
           id="dl-names"
           value={withNames ? 'name' : 'pseudonym'}

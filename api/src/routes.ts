@@ -18,7 +18,7 @@ import {
 import { AiUnavailable, approveDraft, draftSession, latestDraft } from './ai.ts';
 import { audit, auditCsv, auditSummary, listAudit, AUDIT_KIND_LIST } from './audit.ts';
 import { accessState, issueAccess, openAccess, revokeAccess } from './participant-access.ts';
-import { CONSENT_COPY, CONSENT_DECISIONS, CONSENT_DOMAINS, copyHash } from './consent.ts';
+import { CONSENT_COPY, CONSENT_DECISIONS, CONSENT_DOMAINS, COPY_VERSION, copyHash } from './consent.ts';
 import { LIFE_AREAS } from './domain/types.ts';
 import * as service from './service.ts';
 import * as settings from './settings.ts';
@@ -600,13 +600,21 @@ app.post('/settings/requests/:id', async (c) => {
 app.get('/settings/consent-copy', async (c) => {
   if (adminOnly(c)) return c.json(DENY, 403);
   return c.json(
-    CONSENT_DOMAINS.map((domain) => ({
-      domain,
-      label: CONSENT_COPY[domain].label,
-      body: CONSENT_COPY[domain].copy,
-      purpose: CONSENT_COPY[domain].purpose,
-      hash: copyHash(domain).slice(0, 12),
-    })),
+    CONSENT_DOMAINS.map((domain) => {
+      const c = CONSENT_COPY[domain];
+      return {
+        domain,
+        label: c.label,
+        body: c.copy,
+        items: c.items,
+        purpose_text: c.purposeText,
+        retention_text: c.retentionText,
+        refusal_text: c.refusalText,
+        recipient: c.provider ? `${c.provider.legalRecipient} (${c.provider.country})` : null,
+        version: COPY_VERSION,
+        hash: copyHash(domain).slice(0, 12),
+      };
+    }),
   );
 });
 

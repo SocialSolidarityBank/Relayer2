@@ -222,8 +222,8 @@ export function AuditScreen({ embedded }: { embedded?: boolean } = {}) {
           ) : shown.length === 0 ? (
             <Empty>해당하는 기록이 없어요.</Empty>
           ) : (
-            <div className="log-table-wrap">
-              <table className="log-table">
+            <div className="data-table-wrap">
+              <table className="data-table">
                 <thead>
                   <tr>
                     <th>언제</th>

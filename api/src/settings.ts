@@ -252,6 +252,7 @@ export type RequestRow = {
   case_id: number;
   pseudonym: string;
   program_name: string;
+  requester_id: number;
   requester: string;
   reason: string | null;
   created_at: string;
@@ -261,7 +262,7 @@ export type RequestRow = {
 
 export async function listRequests(mineOnly: number | null): Promise<RequestRow[]> {
   return sql<RequestRow[]>`
-    select r.id, r.case_id, p.pseudonym, c.program_name, u.name as requester,
+    select r.id, r.case_id, p.pseudonym, c.program_name, r.requested_by as requester_id, u.name as requester,
            r.reason, r.created_at, r.decided_at, r.decision
     from assignment_requests r
     join support_cases c on c.id = r.case_id

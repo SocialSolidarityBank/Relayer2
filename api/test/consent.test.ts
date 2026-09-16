@@ -27,10 +27,24 @@ describe('문안 해시', () => {
     expect(copyHash('personal_data_collection_use')).not.toBe(copyHash('sensitive_information_processing'));
   });
 
-  it('원문은 여덟 줄이고 마지막이 줄바꿈이다', () => {
+  it('원문에 표준 양식 항목이 전부 들어가고 마지막이 줄바꿈이다', () => {
+    // 무엇을 받고·왜·얼마나 두고·거부하면 어떻게 되는지가 바뀌면 그것은 다른 동의다.
     const text = canonicalPreimage('personal_data_collection_use');
     expect(text.endsWith('\n')).toBe(true);
-    expect(text.trimEnd().split('\n')).toHaveLength(8);
+    for (const key of ['domain=', 'label=', 'copy=', 'items=', 'purposeText=', 'retentionText=', 'refusalText=', 'provider=', 'purpose=', 'retentionDuration=']) {
+      expect(text).toContain(key);
+    }
+  });
+
+  it('표준 양식 항목이 바뀌면 해시가 바뀐다', () => {
+    // 이 계약이 깨지면 문안을 조용히 고칠 수 있게 된다.
+    const before = copyHash('personal_data_collection_use');
+    const copy = CONSENT_COPY.personal_data_collection_use;
+    const kept = copy.refusalText;
+    copy.refusalText = '아무 불이익이 없습니다.';
+    expect(copyHash('personal_data_collection_use')).not.toBe(before);
+    copy.refusalText = kept;
+    expect(copyHash('personal_data_collection_use')).toBe(before);
   });
 });
 

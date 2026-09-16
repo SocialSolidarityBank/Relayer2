@@ -19,7 +19,14 @@ export type ConsentDomain = (typeof CONSENT_DOMAINS)[number];
 export const CONSENT_DECISIONS = ['grant', 'withdraw', 'decline'] as const;
 export type ConsentDecision = (typeof CONSENT_DECISIONS)[number];
 
-export const COPY_VERSION = 'consent-six-domains-v1';
+/**
+ * 문안 판. **v2 는 표준 양식 항목을 채운 판이다**(2026-09-16 Q) — 수집 항목·보유기간·
+ * 거부 권리를 한 줄 설명 밖에 두지 않고 문안 안에 넣었다. 개인정보보호법이 고지하라는 것들이다.
+ *
+ * 판이 바뀌면 이미 받은 동의는 전부 `확인 필요`로 떨어진다. 설계대로다 —
+ * **문안이 바뀌면 그 문안에 동의한 적 없는 사람이 된다.**
+ */
+export const COPY_VERSION = 'consent-standard-form-v2';
 
 /** 승인된 LLM 제공자. 여기 없는 곳으로는 보내지 않는다. */
 export const AI_PROVIDERS = {
@@ -56,6 +63,14 @@ type DomainCopy = {
   label: string;
   copy: string;
   purpose: string;
+  /** 무엇을 다루는가. 개인정보보호법이 고지하라는 첫째다. */
+  items: string[];
+  /** 왜 다루는가 — 사람 말로. `purpose` 는 코드용 열쇠다. */
+  purposeText: string;
+  /** 얼마나 두는가. */
+  retentionText: string;
+  /** 거부할 수 있는가, 거부하면 무엇이 달라지는가. 이것을 빼면 동의가 아니라 통보다. */
+  refusalText: string;
   /** 외부 수신자가 있는 영역만 채운다. 해시 원문에 그대로 들어간다(정본 §2.1). */
   provider?: { id: string; legalRecipient: string; country: string };
   /** 보유기간을 고지하는 영역만 채운다. 이것도 해시에 묶인다. */
@@ -68,16 +83,29 @@ export const CONSENT_COPY: Record<ConsentDomain, DomainCopy> = {
     label: '개인정보 수집·이용',
     copy: '개인정보를 상담과 사례관리 제공 및 상담 기록 관리 목적으로 수집·이용합니다.',
     purpose: 'case_management',
+    items: ['이름', '연락처', '이메일', '생년월일', '주소', '상담 신청 내용'],
+    purposeText: '상담과 사례관리를 제공하고 그 기록을 관리하기 위해서예요.',
+    retentionText: '상담 종결 뒤 1년까지 보관하고 그 뒤에 지워요.',
+    refusalText: '동의하지 않을 수 있어요. 다만 이 정보가 없으면 상담 신청을 받을 수 없어요.',
   },
   sensitive_information_processing: {
     label: '민감정보 처리',
     copy: '건강·채무·주거 등 상담에 포함될 수 있는 민감정보를 사례관리 목적에 필요한 범위에서 처리합니다.',
     purpose: 'sensitive_case_management',
+    items: ['건강·질병', '채무·연체', '주거 상황', '가족 관계', '그 밖에 상담에서 말씀하신 사정'],
+    purposeText: '어떤 도움이 필요한지 판단하고 알맞은 지원으로 이어 주기 위해서예요.',
+    retentionText: '상담 종결 뒤 1년까지 보관하고 그 뒤에 지워요.',
+    refusalText:
+      '동의하지 않을 수 있어요. 다만 이 내용을 적을 수 없으면 상담 기록에 사정을 남기지 못해, 다음 상담에서 처음부터 다시 말씀하셔야 해요.',
   },
   counseling_recording: {
     label: '상담 녹음',
     copy: '상담 내용을 녹음하여 상담 기록 작성에 이용합니다.',
     purpose: 'counseling_recording',
+    items: ['상담 중 음성'],
+    purposeText: '상담을 들으며 받아 적지 않아도 되도록, 기록을 나중에 정확히 쓰기 위해서예요.',
+    retentionText: '기관 안에만 두고 1년 뒤에 지워요.',
+    refusalText: '동의하지 않을 수 있어요. 녹음하지 않고 손으로 적어요. 상담은 그대로 받으실 수 있어요.',
     // 녹음 자체는 기관 안에서 한다. 밖으로 보내는 것은 외부 STT 영역이 따로 받는다.
     provider: { id: 'institution_recording', legalRecipient: '사회연대은행', country: 'KR' },
   },
@@ -85,12 +113,20 @@ export const CONSENT_COPY: Record<ConsentDomain, DomainCopy> = {
     label: '외부 STT 처리',
     copy: '녹음 음성을 선택한 외부 음성인식(STT) 제공자에게 보내 전사합니다.',
     purpose: 'speech_to_text',
+    items: ['상담 중 음성'],
+    purposeText: '녹음을 글로 옮겨 기록 작성을 돕기 위해서예요.',
+    retentionText: '보낸 음성은 전사가 끝나면 제공자 쪽에 남기지 않도록 요청해요. 기관 안 원본은 1년 뒤 지워요.',
+    refusalText: '동의하지 않을 수 있어요. 녹음은 기관 안에만 두고 글로 옮기는 일은 하지 않아요.',
     provider: STT_PROVIDERS[(process.env.STT_PROVIDER as SttProviderId) ?? 'azure'],
   },
   external_llm_cross_border_processing: {
     label: '외부 LLM·국외 처리',
     copy: '가림 처리한 상담 자료를 외부 LLM에 보내 요약·정리하며 국외에서 처리될 수 있습니다.',
     purpose: 'ai_briefing',
+    items: ['이름·연락처·주민등록번호 등을 가린 상담 기록 글'],
+    purposeText: '상담 기록을 요약해 다음 상담을 준비하기 위해서예요.',
+    retentionText: '보낸 자료를 제공자 쪽 학습에 쓰지 않도록 요청하고, 기관 안 기록은 1년 뒤 지워요.',
+    refusalText: '동의하지 않을 수 있어요. 요약을 사람이 직접 쓰고, 상담은 그대로 받으실 수 있어요.',
     // 수신자는 기관이 고른 제공자다. **바뀌면 문안 해시가 달라지고 기존 동의는 `확인 필요`로 떨어진다** —
     // 누구에게 보내는지가 동의의 본체이기 때문이다(정본 §2.1).
     provider: AI_PROVIDERS[(process.env.AI_PROVIDER as AiProviderId) ?? 'openai'],
@@ -99,6 +135,10 @@ export const CONSENT_COPY: Record<ConsentDomain, DomainCopy> = {
     label: '음성 원본 보유기간',
     copy: '상담 음성 원본을 고지한 보유기간 동안 보관한 뒤 삭제합니다.',
     purpose: 'voice_original_retention',
+    items: ['상담 음성 원본 파일'],
+    purposeText: '기록에 빠진 것이 있을 때 다시 들어 확인하기 위해서예요.',
+    retentionText: '1년 동안 기관 안에만 두고, 그날이 지나면 지워요.',
+    refusalText: '동의하지 않을 수 있어요. 글로 옮긴 뒤 음성 원본을 바로 지워요.',
     provider: { id: 'institution_private_storage', legalRecipient: '사회연대은행', country: 'KR' },
     retentionDuration: 'institution_retention_1y',
   },
@@ -109,6 +149,10 @@ export const CONSENT_COPY: Record<ConsentDomain, DomainCopy> = {
     label: '서면 문서 보관',
     copy: '상담 중 받은 서면·파일 문서를 기관 안에 보관하며, 고지한 보유기간이 지나면 삭제합니다.',
     purpose: 'document_retention',
+    items: ['상담 중 주신 서류와 파일(예: 채무 내역서, 진단서, 임대차 계약서)'],
+    purposeText: '말씀하신 사정을 서류로 확인하고 지원 신청에 쓰기 위해서예요.',
+    retentionText: '기관 안에만 두고 1년 뒤에 지워요. 누가 열어 봤는지 기록에 남아요.',
+    refusalText: '동의하지 않을 수 있어요. 서류는 보관하지 않고 확인만 한 뒤 돌려드려요.',
     provider: { id: 'institution_private_storage', legalRecipient: '사회연대은행', country: 'KR' },
     retentionDuration: 'institution_retention_1y',
   },
@@ -120,11 +164,18 @@ export const CONSENT_COPY: Record<ConsentDomain, DomainCopy> = {
  * NFC 정규화 → 줄바꿈 LF → 줄 끝 공백 제거 → 마지막 LF 하나.
  */
 export function canonicalPreimage(domain: ConsentDomain): string {
-  const { label, copy, purpose, provider, retentionDuration } = CONSENT_COPY[domain];
+  const { label, copy, purpose, provider, retentionDuration, items, purposeText, retentionText, refusalText } =
+    CONSENT_COPY[domain];
   const lines = [
     `domain=${domain}`,
     `label=${label}`,
     `copy=${copy}`,
+    // 표준 양식 항목도 문안이다(2026-09-16 Q). 무엇을 받고 얼마나 두고 거부하면 어떻게 되는지가
+    // 바뀌면 그것은 다른 동의다 — 해시에 넣어야 바뀐 사실이 드러난다.
+    `items=${items.join('|')}`,
+    `purposeText=${purposeText}`,
+    `retentionText=${retentionText}`,
+    `refusalText=${refusalText}`,
     `provider=${provider?.id ?? '<null>'}`,
     `providerLegalRecipient=${provider?.legalRecipient ?? '<null>'}`,
     `providerCountry=${provider?.country ?? '<null>'}`,
