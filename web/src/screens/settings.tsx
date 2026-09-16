@@ -4,8 +4,12 @@
  * `#/settings/<모듈>` 이 주소다. 사이드바가 모듈별로 링크를 세우므로, 어디에 있는지가
  * 왼쪽에서 늘 보인다 — 화면 안에 또 목록을 두면 메뉴가 두 겹이 된다.
  *
- * 이름 규율: **설정·배정 맥락은 `담당자`다**(2026-09-16 Q 2차 재지시 — 요구 17 의 일괄
- * `실무자` 치환에서 이 맥락만 떼어 낸다). 상담 기록의 `실무자 의견`은 정본 그대로 둔다.
+ * 이름 규율(2026-09-16 Q 3차 검토): **역할은 `실무자`, 관계는 `담당`**이다.
+ * 정본 D40·ADR-0017 이 `상담사 → 실무자`, `담당자 → 담당 실무자`로 정했다 —
+ * 홀로 선 `담당자`는 폐어다. 그 말이 둘을 뭉뚱그리기 때문이다.
+ *
+ * 기관에 있는 것(`실무자 초대하기`·`실무자 목록`)과 이 사람을 맡은 것(`담당 배정하기`)은
+ * 다르다. 방금 초대한 사람은 아무도 안 맡았는데 `담당자`라 부르면 화면이 거짓말한다.
  */
 import { useEffect, useState } from 'react';
 import {
@@ -46,7 +50,7 @@ const date = (s: string) => new Date(s).toLocaleDateString('ko-KR', { month: 'lo
  * 설정 묶음(2026-09-16 Q 2차). **사이드바에 늘어뜨리지 않는다** — 열세 줄이 세로로 서면
  * 일정·당사자가 그 밑에 묻힌다. 사이드바에는 `설정하기` 하나만 두고 여기서 편다.
  *
- * `admin: true` 는 관리자만 본다. **관리자는 담당자가 하는 일도 전부 본다**(Q 지시) —
+ * `admin: true` 는 관리자만 본다. **관리자는 실무자가 하는 일도 전부 본다**(Q 지시) —
  * 관리자도 당사자를 맡는 사람이지, 남의 일을 구경만 하는 자리가 아니다.
  */
 export const SETTINGS_GROUPS = [
@@ -59,12 +63,12 @@ export const SETTINGS_GROUPS = [
     ],
   },
   {
-    title: '담당자 관리',
+    title: '실무자 관리',
     items: [
-      { key: 'assign', label: '담당자 배정하기', desc: '올라온 요청을 확정하고, 담당자가 바뀔 때 넘겨요.', admin: true },
-      { key: 'invite', label: '담당자 초대하기', desc: '초대 링크를 만들어 건네요. 7일 뒤 만료돼요.', admin: true },
-      { key: 'workers', label: '담당자 목록', desc: '누가 있고 누구를 맡고 있는지 봐요.', admin: true },
-      { key: 'request', label: '담당자 배정 요청하기', desc: '내가 맡겠다고 올린 당사자를 봐요.', admin: false },
+      { key: 'assign', label: '담당 배정하기', desc: '올라온 요청을 확정하고, 담당이 바뀔 때 넘겨요.', admin: true },
+      { key: 'invite', label: '실무자 초대하기', desc: '초대 링크를 만들어 건네요. 7일 뒤 만료돼요.', admin: true },
+      { key: 'workers', label: '실무자 목록', desc: '누가 있고 누구를 맡고 있는지 봐요.', admin: true },
+      { key: 'request', label: '담당 배정 요청하기', desc: '내가 맡겠다고 올린 당사자를 봐요.', admin: false },
     ],
   },
   {
@@ -104,7 +108,7 @@ export function SettingsScreen({
   if (module === 'home' || !item) {
     return (
       <>
-        <PageHeader title="설정하기" meta={isAdmin ? '관리자' : '담당자'} />
+        <PageHeader title="설정하기" meta={isAdmin ? '관리자' : '실무자'} />
         {SETTINGS_GROUPS.map((group) => {
           const shown = group.items.filter((i) => !i.admin || isAdmin);
           if (shown.length === 0) return null;
@@ -197,7 +201,7 @@ function ProfilePane() {
       <DataRows
         rows={[
           ['로그인 아이디', p.email],
-          ['역할', p.role === 'admin' ? '관리자' : '담당자'],
+          ['역할', p.role === 'admin' ? '관리자' : '실무자'],
         ]}
       />
       <Field label="이름" htmlFor="pf-name">
@@ -313,7 +317,7 @@ function AssignPane() {
 
   return (
     <>
-      <Card title="올라온 배정 요청" hint="담당자가 맡겠다고 손든 당사자예요. 관리자가 확정하면 바로 효력이 생겨요.">
+      <Card title="올라온 배정 요청" hint="실무자가 맡겠다고 손든 당사자예요. 관리자가 확정하면 바로 효력이 생겨요.">
         {pending.length === 0 ? (
           <Empty>대기 중인 요청이 없어요.</Empty>
         ) : (
@@ -339,8 +343,8 @@ function AssignPane() {
         )}
       </Card>
 
-      <Card title="담당자가 바뀔 때" hint="담당자를 고르면 맡고 있는 당사자가 나와요. 한 사람씩 다른 담당자에게 넘겨요.">
-        <Field label="담당자" htmlFor="as-who">
+      <Card title="담당이 바뀔 때" hint="실무자를 고르면 맡고 있는 당사자가 나와요. 한 사람씩 다른 실무자에게 넘겨요.">
+        <Field label="실무자" htmlFor="as-who">
           <select id="as-who" value={who ?? ''} onChange={(e) => setWho(e.target.value ? Number(e.target.value) : null)}>
             <option value="">고르기</option>
             {live.map((w) => (
@@ -365,7 +369,7 @@ function AssignPane() {
                         value={moveTo[c.id] ?? ''}
                         onChange={(e) => setMoveTo({ ...moveTo, [c.id]: e.target.value })}
                       >
-                        <option value="">넘길 담당자</option>
+                        <option value="">넘길 실무자</option>
                         {live
                           .filter((w) => w.id !== who)
                           .map((w) => (
@@ -422,7 +426,7 @@ function InvitePane() {
       >
         <Field label="역할" htmlFor="iv-role">
           <select id="iv-role" value={role} onChange={(e) => setRole(e.target.value as 'worker' | 'admin')}>
-            <option value="worker">담당자</option>
+            <option value="worker">실무자</option>
             <option value="admin">관리자</option>
           </select>
         </Field>
@@ -464,7 +468,7 @@ function InvitePane() {
             return (
               <div className="wire-repeat-card" key={v.id}>
                 <Item
-                  title={`${v.role === 'admin' ? '관리자' : '담당자'}${v.note ? ` · ${v.note}` : ''}`}
+                  title={`${v.role === 'admin' ? '관리자' : '실무자'}${v.note ? ` · ${v.note}` : ''}`}
                   desc={`${date(v.created_at)} 만듦 · ${date(v.expires_at)}까지 · ${state}`}
                   action={
                     state === '기다리는 중' ? (
@@ -493,7 +497,7 @@ function WorkersPane() {
   }, [open]);
 
   return (
-    <Card title="담당자 목록" hint="이름을 누르면 맡고 있는 당사자가 나와요.">
+    <Card title="실무자 목록" hint="이름을 누르면 맡고 있는 당사자가 나와요.">
       {rows === null ? (
         <Empty>불러오는 중이에요.</Empty>
       ) : (
