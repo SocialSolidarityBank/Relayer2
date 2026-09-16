@@ -3,7 +3,7 @@
 //   동의 확인 → 가림 처리 → 외부 호출 → **초안 저장** → 사람이 승인해야 기록
 //
 // 승인 전에는 어떤 것도 회차 기록이 되지 않는다. 승인은 사람만 한다(GLOSSARY §6-5).
-import { assertConsent } from './service.ts';
+import { assertConsent, replaceAiCards } from './service.ts';
 import { AI_PROVIDERS, type AiProviderId } from './consent.ts';
 import { audit } from './audit.ts';
 import { sql } from './db.ts';
@@ -256,6 +256,10 @@ export async function latestDraft(sessionId: number): Promise<Draft | null> {
 /**
  * 승인. 사람이 고친 문구가 있으면 그것으로 승인한다(수정본도 승인 전에는 초안이다).
  * 지우지 않고 새 행을 쌓는다 — 무엇을 보고 승인했는지가 남아야 한다.
+ *
+ * **승인이 곧 기록이다**(SPEC §15-4, 2026-09-16 검수). 승인 행만 남기고 카드를 안 만들었더니
+ * 승인한 요약이 어디에도 안 떴다. 과제·질문은 같은 트랜잭션에서 `ai_approved` 카드가 되어
+ * 다음 회차의 확인할 과제·물어볼 것으로 올라간다. 요약·달라진 것은 승인 행에서 읽는다.
  */
 export async function approveDraft(
   sessionId: number,
@@ -263,6 +267,7 @@ export async function approveDraft(
   edited?: { summary?: string; changes?: string[]; tasks?: string[]; questions?: string[] },
 ): Promise<Draft> {
   const [session] = await sql<Session[]>`select case_id from sessions where id = ${sessionId}`;
+  if (!session) throw new Error('회차가 없어요.');
   const current = await latestDraft(sessionId);
   if (!current) throw new Error('승인할 초안이 없어요.');
 
@@ -271,16 +276,23 @@ export async function approveDraft(
   const tasks = edited?.tasks ?? current.tasks;
   const questions = edited?.questions ?? current.questions;
 
-  const [row] = await sql<Array<{ id: number; created_at: string }>>`
-    insert into ai_drafts (session_id, status, summary, changes, tasks, questions, mask_hits, model, created_by, approved_by)
-    values (${sessionId}, 'approved', ${summary}, ${sql.json(changes)}, ${sql.json(tasks)}, ${sql.json(questions)},
-            ${sql.json(current.mask_hits)}, ${current.model}, ${current.created_by ?? actorId}, ${actorId})
-    returning id, created_at`;
+  const row = await sql.begin(async (tx) => {
+    const [inserted] = await tx<Array<{ id: number; created_at: string }>>`
+      insert into ai_drafts (session_id, status, summary, changes, tasks, questions, mask_hits, model, created_by, approved_by)
+      values (${sessionId}, 'approved', ${summary}, ${sql.json(changes)}, ${sql.json(tasks)}, ${sql.json(questions)},
+              ${sql.json(current.mask_hits)}, ${current.model}, ${current.created_by ?? actorId}, ${actorId})
+      returning id, created_at`;
+    await replaceAiCards(tx as unknown as typeof sql, session.case_id, sessionId, [
+      ...tasks.map((text) => ({ kind: 'promise' as const, text, section: 'promise' as const })),
+      ...questions.map((text) => ({ kind: 'question' as const, text, section: 'question' as const })),
+    ]);
+    return inserted;
+  });
 
   await audit({
     actorId,
     action: 'ai.approve',
-    caseId: session?.case_id,
+    caseId: session.case_id,
     fields: [`draft=${current.id}`, edited ? 'edited=yes' : 'edited=no'],
   });
 

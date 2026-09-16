@@ -125,15 +125,27 @@ export function BriefingScreen({
           </Card>
         )}
 
-        {/* 4. 직전 회차 요약 — 비어도 빠지지 않는다 */}
+        {/* 4. 직전 회차 요약 — 비어도 빠지지 않는다. 승인된 AI 정리가 있으면 그 문장이 요약이다. */}
         <Card title="직전 회차 요약">
           {briefing.last_session_summary.session_seq ? (
-            <>
-              <Item title={briefing.last_session_summary.line ?? ''} />
-              <p className="panel-meta">
-                {briefing.last_session_summary.session_seq}회차 · 요약 없음 (AI 확인 안 함)
-              </p>
-            </>
+            briefing.last_session_summary.summary_state === 'approved' ? (
+              <>
+                <Item title={briefing.last_session_summary.summary ?? ''} />
+                {briefing.last_session_summary.changes.length > 0 && (
+                  <p className="wire-item-desc">
+                    달라진 것: {briefing.last_session_summary.changes.join(' · ')}
+                  </p>
+                )}
+                <p className="panel-meta">{briefing.last_session_summary.session_seq}회차 · AI 정리 승인함</p>
+              </>
+            ) : (
+              <>
+                <Item title={briefing.last_session_summary.line ?? ''} />
+                <p className="panel-meta">
+                  {briefing.last_session_summary.session_seq}회차 · 요약 없음 (AI 확인 안 함)
+                </p>
+              </>
+            )
           ) : (
             <Empty>아직 기록된 회차가 없어요.</Empty>
           )}
