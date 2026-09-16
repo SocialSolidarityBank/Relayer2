@@ -84,6 +84,30 @@ export function ConsentDetail({
   );
 }
 
+/**
+ * 회차간 사실관계 변화(2026-09-16 Q). 지난 회차와 이번 회차의 **원문**을 나란히 보여 준다.
+ * 어느 쪽이 맞는지 적지 않는다 — 번복했을 수 있고, 판정은 사람 몫이다.
+ * 검토 화면과 회차별 요약이 같은 부품을 쓴다.
+ */
+export function FactChanges({ items }: { items: Array<{ topic: string; before: { seq: number; quote: string }; after: { seq: number; quote: string }; note: string }> }) {
+  if (items.length === 0) return <Empty>지난 회차와 어긋나는 사실이 없어요.</Empty>;
+  return (
+    <>
+      {items.map((f, i) => (
+        <div className="wire-repeat-card" key={i}>
+          <Item title={f.topic} desc={f.note} />
+          <DataRows
+            rows={[
+              [`${f.before.seq}회차 원문`, f.before.quote],
+              [`${f.after.seq}회차 원문`, f.after.quote],
+            ]}
+          />
+        </div>
+      ))}
+    </>
+  );
+}
+
 export function PageHeader({ title, meta }: { title: string; meta?: ReactNode }) {
   return (
     <header className="page-header">
