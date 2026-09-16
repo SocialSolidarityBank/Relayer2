@@ -82,6 +82,11 @@ body { margin: 0; }
 }
 .api-failure > span { margin-right: auto; }
 
+/* 계정 행동 세 버튼(2026-09-17 Q) — 사이드바 맨 아래 한 줄이다. 메뉴가 길어져 묶음 칸이
+   스크롤해도 이 줄은 자리를 지킨다(`.navigation-groups` 가 스크롤 주인이라 margin-top:auto
+   가 남는 높이를 전부 먹는다). 버튼 옷은 이식한 `.header-icon-button` 32 원형 그대로다. */
+.sidebar-footer { margin-top: auto; display: flex; align-items: center; gap: var(--space-2); }
+
 /* 767 이하: 내비를 본문 위에 눕힌다(2026-09-16).
    이식 CSS 는 이 폭에서 사이드바를 **드로어**로 바꾸고(.sidebar{position:fixed;translateX(100%)})
    헤더를 숨긴다. 여는 손잡이(.drawer-bar)·스크림·닫기 버튼 마크업이 릴레이어에는 없어서

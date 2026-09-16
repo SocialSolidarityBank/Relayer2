@@ -1,7 +1,8 @@
 // 베타 라우팅. 화면이 다섯이라 라우터 의존성을 두지 않는다.
 // 로그인하지 않았으면 어떤 화면도 열지 않는다.
 import { useEffect, useState } from 'react';
-import { applyTheme, followSystemTheme, initialTheme, type Theme } from './theme.ts';
+import { applyTheme, followSystemTheme, initialTheme, setTheme as chooseTheme, type Theme } from './theme.ts';
+import { NavIcon, type ShellIconName } from './shell-icons.tsx';
 import { getMe, logout, Unauthorized, type Me } from './api.ts';
 import { AccessScreen } from './screens/access.tsx';
 import { ApiFailureBanner, BackLink } from './ui.tsx';
@@ -150,28 +151,51 @@ export function Routes() {
    *
    * 일정 묶음의 기록·일정 등록은 사례가 없으면 당사자 선택 화면으로 보낸다.
    * 당사자 정보는 열어 둔 사례가 있을 때만 당사자 묶음에 따라붙는다.
+   *
+   * 아이콘은 CCC 글리프를 그대로 쓴다(2026-09-17 Q). 같은 대상의 보기와 등록은 더하기
+   * 유무로 가른다 — 당사자 목록(사람)·당사자 등록(사람+더하기), 일정 보기(시계)·일정
+   * 등록(달력+더하기). 기록은 쓰는 행동이라 펜이다.
    */
-  const link = (href: string, label: string) => (
+  const link = (href: string, label: string, icon: ShellIconName) => (
     <li key={href}>
       <a className="navigation-link" href={href} data-current={hash === href || undefined}>
+        <NavIcon name={icon} />
         <span>{label}</span>
       </a>
     </li>
   );
 
+  /**
+   * 설정 묶음 메뉴의 아이콘. CCC 관리자 메뉴의 배정(`admin-format.ts`)을 따른다 —
+   * 기관은 `org`, 시스템 연결은 `settings`(슬라이더). 사람 글리프가 당사자 목록과 겹치는
+   * 것은 CCC 도 그렇다(당사자 목록·사용자·역할) — 묶음 제목이 자리를 구분한다.
+   */
+  const settingsIcon: Record<string, ShellIconName> = {
+    me: 'participants',
+    staff: 'invite',
+    org: 'org',
+    system: 'settings',
+  };
+
+  const settingsGroups = visibleGroups(me.role === 'admin');
+  const inSettingsArea = hash.startsWith('#/settings');
+  /**
+   * 하단 설정 버튼은 `시스템` 으로 간다(2026-09-17 Q). 시스템 묶음은 관리자만 보므로
+   * 실무자에게는 자기가 볼 수 있는 첫 묶음(내 정보)으로 보낸다 — 못 여는 화면을 가리키는
+   * 버튼은 "고장"으로 읽힌다. 주소로 직접 들어오면 설정 화면이 그대로 막는다.
+   */
+  const settingsHref = `#/settings/${settingsGroups.some((g) => g.key === 'system') ? 'system' : (settingsGroups[0]?.key ?? 'me')}`;
+  // 테마 버튼은 **가는 곳**을 말한다(DESIGN.md §9) — 라이트면 달, 다크면 해.
+  const nextTheme = theme === 'dark' ? 'light' : 'dark';
+
   return (
     <div className="app-shell">
       <header className="app-header">
         <span className="app-header-brand">릴레이어</span>
+        {/* 계정 행동은 사이드바 하단 세 버튼으로 내렸다(2026-09-17 Q) — 머리줄은 기관·사람
+            이름만 갖는다. 로그아웃이 두 자리에 있으면 어느 것이 정본인지 알 수 없다. */}
         <div className="header-actions">
           <span className="app-nav-me">{me.name}</span>
-          <button
-            type="button"
-            className="app-nav-logout"
-            onClick={() => void logout().then(() => setMe(null))}
-          >
-            로그아웃
-          </button>
         </div>
       </header>
 
@@ -180,20 +204,20 @@ export function Routes() {
           <div className="navigation-group">
             <p className="navigation-section-title">일정</p>
             <ul className="navigation-list">
-              {link(caseId ? `#/cases/${caseId}/schedule` : '#/pick/schedule', '상담 일정 등록')}
-              {link(HOME, '상담 일정 보기')}
+              {link(caseId ? `#/cases/${caseId}/schedule` : '#/pick/schedule', '상담 일정 등록', 'calendar-plus')}
+              {link(HOME, '상담 일정 보기', 'upcoming')}
               {/* 기록하기는 늘 선다. 사례를 안 열었으면 누구 것인지 고르는 자리로 보낸다 —
                   메뉴에서 사라지면 "그 기능이 없다"로 읽힌다. */}
-              {link(caseId ? `#/cases/${caseId}/record` : '#/pick/record', '상담 기록하기')}
+              {link(caseId ? `#/cases/${caseId}/record` : '#/pick/record', '상담 기록하기', 'record')}
             </ul>
           </div>
 
           <div className="navigation-group">
             <p className="navigation-section-title">당사자</p>
             <ul className="navigation-list">
-              {link('#/participants', '당사자 목록')}
-              {link('#/participants/new', '당사자 등록')}
-              {caseId && link(`#/cases/${caseId}/info`, '당사자 정보')}
+              {link('#/participants', '당사자 목록', 'participants')}
+              {link('#/participants/new', '당사자 등록', 'participant-add')}
+              {caseId && link(`#/cases/${caseId}/info`, '당사자 정보', 'participants')}
             </ul>
           </div>
 
@@ -202,9 +226,46 @@ export function Routes() {
             <ul className="navigation-list">
               {/* 묶음마다 메뉴 하나다(2026-09-16 Q 3차). 그 페이지에 항목이 곧바로 펼쳐져
                   두 번 누를 일이 없다. 관리자 전용 묶음은 실무자에게 서지 않는다. */}
-              {visibleGroups(me.role === 'admin').map((g) => link(`#/settings/${g.key}`, g.title))}
+              {settingsGroups.map((g) =>
+                link(`#/settings/${g.key}`, g.title, settingsIcon[g.key] ?? 'settings'),
+              )}
             </ul>
           </div>
+        </div>
+
+        {/* 계정 행동 세 버튼(2026-09-17 Q — CCC 는 데스크톱 헤더·드로어 상단에 두지만
+            릴레이어는 사이드바 하단이다). 옷은 이식한 `.header-icon-button` 32 원형 그대로고
+            라벨은 `aria-label`·`title` 이 갖는다. 설정 버튼의 목적지는 위 `settingsHref` 가 정한다. */}
+        <div className="sidebar-footer">
+          <a
+            className="header-icon-button"
+            href={settingsHref}
+            aria-label="설정"
+            title="설정"
+            data-current={inSettingsArea || undefined}
+            aria-current={inSettingsArea ? 'page' : undefined}
+          >
+            <NavIcon name="settings" />
+          </a>
+          <button
+            type="button"
+            className="header-icon-button"
+            aria-label={nextTheme === 'dark' ? '어둡게' : '밝게'}
+            title={nextTheme === 'dark' ? '어둡게' : '밝게'}
+            aria-pressed={theme === 'dark'}
+            onClick={() => setTheme(chooseTheme(nextTheme))}
+          >
+            <NavIcon name={nextTheme === 'dark' ? 'theme-dark' : 'theme-light'} />
+          </button>
+          <button
+            type="button"
+            className="header-icon-button"
+            aria-label="로그아웃"
+            title="로그아웃"
+            onClick={() => void logout().then(() => setMe(null))}
+          >
+            <NavIcon name="logout" />
+          </button>
         </div>
       </aside>
 
