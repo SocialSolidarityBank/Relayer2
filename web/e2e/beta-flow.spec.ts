@@ -454,9 +454,10 @@ test('PII 를 본 조회가 열람 기록에 남고, 관리자만 본다', async
   await page.getByRole('button', { name: '로그인' }).click();
   await page.getByRole('link', { name: '시스템' }).click();
 
-  // 시스템은 한 계층 더 들어간다(2026-09-16 Q 4차).
+  // 시스템은 한 계층 더 들어간다(2026-09-16 Q 4차). 항목 넷은 각자 카드다(2026-09-17 Q —
+  // 구 `무엇을 볼까요` 묶음 카드 안 반복 행 대체).
   await page
-    .locator('.wire-repeat-card', { hasText: '열람 기록 관리' })
+    .locator('section.wire-card', { hasText: '열람 기록 관리' })
     .getByRole('button', { name: '열기' })
     .click();
 
