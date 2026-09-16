@@ -539,8 +539,6 @@ export const createInvite = (role: 'worker' | 'admin', note: string | null) =>
 export const revokeInvite = (id: number) => json<Invite[]>(`/settings/invites/${id}`, { method: 'DELETE' });
 
 export const listRequests = () => json<RequestRow[]>('/settings/requests');
-export const requestAssignment = (case_id: number, reason: string | null) =>
-  json<{ ok: true }>('/settings/requests', { method: 'POST', body: JSON.stringify({ case_id, reason }) });
 export const decideRequest = (id: number, decision: 'approved' | 'rejected') =>
   json<{ ok: true }>(`/settings/requests/${id}`, { method: 'POST', body: JSON.stringify({ decision }) });
 
