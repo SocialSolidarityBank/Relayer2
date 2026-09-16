@@ -45,6 +45,14 @@ const dateLabel = (iso: string | null): string => {
 };
 
 /** 회차별 요약 — 회차 목록과 원문. 상담 종결은 회차가 아니므로 번호 없이 따로 붙는다(SPEC §4-3). */
+const TRANSCRIPT_LABEL: Record<string, string> = {
+  pending: '전사 중',
+  draft: '전사 초안(확인 전)',
+  approved: '전사 확인됨',
+  failed: '전사 실패',
+  skipped: '전사 건너뜀',
+};
+
 function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
   const [openIds, setOpenIds] = useState<number[]>([]);
   const done = detail.sessions.filter((s) => s.status === 'done');
@@ -79,13 +87,31 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
   return (
     <>
       <Card title="회차별 요약" hint="회차 줄은 기록 상태예요. 승인한 AI 정리는 아래 접힌 카드에 있어요.">
-        {done.map((s) => (
-          <div className="wire-repeat-card" key={s.id}>
-            <Item
-              title={`${s.seq}회차 · ${dateLabel(s.held_at)}${s.kind === 'intake' ? ' · 인테이크' : ''}`}
-              desc={s.ai_summary ? `AI 정리 승인함 · ${s.line}` : s.line}
-              action={
+        {done.map((s) => {
+          // 수기·음성 상태는 회차 줄의 설명에 붙는다(2026-09-16 인계).
+          const transcriptLabel =
+            s.voice.recordings > 0 ? TRANSCRIPT_LABEL[s.voice.transcript] : undefined;
+          return (
+            <div className="wire-repeat-card" key={s.id}>
+              <Item
+                title={`${s.seq}회차 · ${dateLabel(s.held_at)}${s.kind === 'intake' ? ' · 인테이크' : ''}`}
+                desc={
+                  <>
+                    {s.ai_summary ? `AI 정리 승인함 · ${s.line}` : s.line}
+                    {s.written === false && <> · <Badge tone="lavender">수기 미작성</Badge></>}
+                    {s.voice.recordings > 0 && ` · 녹음 ${s.voice.recordings}`}
+                    {transcriptLabel && ` · ${transcriptLabel}`}
+                  </>
+                }
+                action={
                 <>
+                  <Button
+                    onClick={() =>
+                      (window.location.hash = `#/cases/${caseId}/sessions/${s.id}/full`)
+                    }
+                  >
+                    전문 보기
+                  </Button>
                   <Button
                     onClick={() =>
                       setOpenIds((prev) =>
@@ -136,7 +162,8 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
             )}
             {openIds.includes(s.id) && <p className="info-original">{s.memo ?? '수기 기록이 없어요.'}</p>}
           </div>
-        ))}
+          );
+        })}
       </Card>
       {detail.closure && (
         <Card title="상담 종결" hint="회차가 아니에요. 번호를 받지 않아요.">

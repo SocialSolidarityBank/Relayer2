@@ -18,6 +18,7 @@ import { ParticipantsScreen } from './screens/participants.tsx';
 import { RecordScreen } from './screens/record.tsx';
 import { ReviewScreen } from './screens/review.tsx';
 import { ScheduleNewScreen } from './screens/schedule-new.tsx';
+import { SessionFullScreen } from './screens/session-full.tsx';
 
 const HOME = '#/schedule';
 
@@ -118,6 +119,10 @@ export function Routes() {
 
     const reviewing = hash.match(/^#\/cases\/(\d+)\/sessions\/(\d+)\/review$/);
     if (reviewing) return <ReviewScreen caseId={Number(reviewing[1])} sessionId={Number(reviewing[2])} />;
+
+    // 수기·음성 전문 보기(2026-09-16 인계). 읽기 전용 — 편집·승인은 기록 화면이 담당한다.
+    const full = hash.match(/^#\/cases\/(\d+)\/sessions\/(\d+)\/full$/);
+    if (full) return <SessionFullScreen caseId={Number(full[1])} sessionId={Number(full[2])} />;
 
     const byCase = hash.match(/^#\/cases\/(\d+)\/(briefing|record|schedule|intake|info|close)$/);
     if (byCase) {
