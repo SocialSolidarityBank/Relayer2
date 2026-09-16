@@ -95,7 +95,7 @@ export function Routes() {
 
   const screen = (() => {
     if (hash === HOME) return <HomeScreen />;
-    if (hash === '#/participants') return <ParticipantsScreen me={me} />;
+    if (hash === '#/participants') return <ParticipantsScreen />;
     // 사례를 안 고른 채 상담 기록하기·상담 일정 등록을 누르면 여기로 온다.
     if (hash === '#/pick/record') return <ParticipantsScreen pickFor="record" />;
     if (hash === '#/pick/schedule') return <ParticipantsScreen pickFor="schedule" />;

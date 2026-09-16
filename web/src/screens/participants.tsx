@@ -1,28 +1,14 @@
-// 당사자 목록 — 기존 사례로 돌아가는 유일한 길이자, **당사자를 고르는 자리**다.
-//
-// 상담 기록하기·상담 일정 등록은 누구의 것인지 정해야 열린다. 사례가 안 정해진 채로 그 메뉴를
-// 누르면 여기로 온다. 그때는 무엇을 하러 왔는지 위에 적고, 카드마다 그 버튼을 앞세운다.
-//
-// 이름은 금고 암호문이라 서버가 검색하지 못한다. 받아 온 목록을 화면에서 거른다(기관 하나 규모).
+// 당사자 목록. CCC apps/web/app/components/wire/participant-card.tsx와
+// participants/page.tsx의 이름·상태·정보 행·카드 링크 구조를 이식했다(Apache-2.0).
+// 서버 계약은 그대로 쓴다. 목록에 없는 연락처를 얻으려고 상담 상세를 미리 읽지 않는다.
 import { useEffect, useMemo, useState } from 'react';
-import { listParticipants, requestAssignment, type ParticipantRow } from '../api.ts';
-import { Button, Card, Empty, ErrorText, Field, Fold, FormActions, PageHeader } from '../ui.tsx';
+import { listParticipants, type ParticipantRow } from '../api.ts';
+import { Badge, Card, Empty, Field, PageHeader } from '../ui.tsx';
 
-const dateLabel = (iso: string): string => {
-  const d = new Date(iso);
-  return `${d.getMonth() + 1}월 ${d.getDate()}일`;
-};
-
-function sessionLabel(row: ParticipantRow): string {
-  const parts: string[] = [row.program_name];
-  // 배정되지 않은 사례는 회차·일정이 서버에서 비워 온다 — '기록 없음'이라 적으면 거짓말이다.
-  if (row.can_access) {
-    parts.push(row.last_session_seq ? `${row.last_session_seq}회차까지 기록` : '기록 없음');
-    if (row.next_scheduled_at) parts.push(`다음 ${dateLabel(row.next_scheduled_at)}`);
-  }
-  if (row.status === 'closed') parts.push('종결');
-  return parts.join(' · ');
-}
+const scheduleDate = new Intl.DateTimeFormat('ko-KR', {
+  month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+});
+const displayName = (row: ParticipantRow) => (row.can_access && row.name) || row.pseudonym;
 
 /** 무엇을 하러 왔는가. 메뉴에서 사례 없이 눌렀을 때 붙는다. */
 export type PickFor = 'record' | 'schedule' | null;
@@ -32,36 +18,25 @@ const PURPOSE: Record<Exclude<PickFor, null>, { title: string; go: string; label
   schedule: { title: '누구의 일정을 잡을까요', go: 'schedule', label: '상담 일정 등록' },
 };
 
-export function ParticipantsScreen({
-  pickFor = null,
-  me,
-}: {
-  pickFor?: PickFor;
-  me?: { id: number; role: string };
-}) {
+export function ParticipantsScreen({ pickFor = null }: { pickFor?: PickFor }) {
   const [rows, setRows] = useState<ParticipantRow[] | null>(null);
   const [q, setQ] = useState('');
-  // 배정 요청을 올린 뒤 그 자리에서 알려 준다. 목록을 떠나 설정까지 가서야 결과를 보면
-  // "눌린 건가" 하고 다시 누르게 된다.
-  // **성공과 실패를 갈라 둔다**(2026-09-16 검수) — 한 칸에 담았더니 실패 문구가 버튼을 잠가
-  // 네트워크가 돌아와도 다시 누를 수 없었다.
-  const [asked, setAsked] = useState<Record<number, true>>({});
-  const [askError, setAskError] = useState<Record<number, string>>({});
 
   useEffect(() => {
-    void listParticipants().then(setRows);
+    void listParticipants().then((data) =>
+      setRows(data.sort((a, b) => displayName(a).localeCompare(displayName(b), 'ko'))),
+    );
   }, []);
 
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return rows ?? [];
     return (rows ?? []).filter((r) =>
-      [r.name, r.pseudonym, r.program_name].some((v) => v?.toLowerCase().includes(needle)),
+      [displayName(r), r.pseudonym, r.program_name].some((v) => v.toLowerCase().includes(needle)),
     );
   }, [rows, q]);
 
   const purpose = pickFor ? PURPOSE[pickFor] : null;
-  const go = (caseId: number, where: string) => (window.location.hash = `#/cases/${caseId}/${where}`);
 
   return (
     <>
@@ -89,72 +64,65 @@ export function ParticipantsScreen({
           </Card>
         )}
 
-        {/* 카드는 접혀 있다. 이름과 한 줄 요약만 보고 고르고, 펼쳐야 할 일이 나온다.
-            사람이 많아도 한 화면에 들어오게 하려는 것이다. */}
-        {shown.map((row) => (
-          <Fold
-            key={row.case_id}
-            title={row.can_access ? (row.name ?? row.pseudonym) : row.pseudonym}
-            desc={
-              row.can_access
-                ? `${sessionLabel(row)}${row.assignees.length > 0 ? ` · 담당 ${row.assignees.map((a) => a.name).join(', ')}` : ' · 담당 없음'}`
-                : `${sessionLabel(row)} · 배정 필요${row.assignees.length > 0 ? ` · 담당 ${row.assignees.map((a) => a.name).join(', ')}` : ''}`
+        <div className="participant-row-list">
+          {shown.map((row) => {
+            const name = displayName(row);
+            const fields: Array<[string, string]> = [
+              ['참여 사업', row.program_name],
+              ['담당자', row.assignees.map((a) => a.name).join(', ') || '미배정'],
+            ];
+            // 권한 때문에 비워 온 회차·일정은 '기록 없음'으로 바꾸지 않는다.
+            if (row.can_access) {
+              fields.push(
+                ['상담 기록', row.last_session_seq ? `${row.last_session_seq}회차까지 기록` : '기록 없음'],
+                ['다음 상담', row.next_scheduled_at ? scheduleDate.format(new Date(row.next_scheduled_at)) : '예정 없음'],
+              );
             }
-            // 찾아서 하나만 남았으면 펼쳐 둔다. 한 명을 보려고 또 누르게 하지 않는다.
-            open={shown.length === 1}
-          >
-            <FormActions>
-              {/* 배정된 사람에게만 사례로 가는 길을 연다. 아닌 사람에게는 가명과
-                  '배정 필요'만 보이고, 맡겠다고 손드는 것만 남는다. */}
-              {row.can_access && (
-                <>
-                  {purpose && (
-                    <Button variant="primary" onClick={() => go(row.case_id, purpose.go)}>
-                      {purpose.label}
-                    </Button>
-                  )}
-                  <Button onClick={() => go(row.case_id, 'info')}>당사자 정보</Button>
-                  <Button onClick={() => go(row.case_id, 'briefing')}>15초 다시보기</Button>
-                  {/* 인테이크는 아직 안 쓴 사람에게만 뜬다. 다 쓴 사람에게 또 권하지 않는다. */}
-                  {!row.last_session_seq && (
-                    <Button onClick={() => go(row.case_id, 'intake')}>인테이크 작성하기</Button>
-                  )}
-                  {!purpose && (
-                    <>
-                      <Button onClick={() => go(row.case_id, 'record')}>상담 기록하기</Button>
-                      <Button onClick={() => go(row.case_id, 'schedule')}>상담 일정 등록</Button>
-                    </>
-                  )}
-                </>
-              )}
-              {/* 내 담당이 아닌 사람은 맡겠다고 손들 수 있다. 확정은 관리자 몫이다
-                  (GLOSSARY 배정 규칙 — 실무자의 수락 단계는 없고, 관리자 확정이 곧 효력이다). */}
-              {me && !row.can_access && (
-                <>
-                  <Button
-                    disabled={asked[row.case_id] === true}
-                    onClick={() =>
-                      void requestAssignment(row.case_id, null)
-                        .then(() => {
-                          setAsked((p) => ({ ...p, [row.case_id]: true }));
-                          setAskError((p) => ({ ...p, [row.case_id]: '' }));
-                        })
-                        .catch((e: unknown) =>
-                          setAskError((p) => ({
-                            ...p,
-                            [row.case_id]: e instanceof Error ? e.message : '올리지 못했어요',
-                          })),
-                        )
-                    }
+            const card = (
+              <article className="surface-card participant-card" data-variant="list">
+                <header className="participant-card-header">
+                  <span className="participant-card-identity">
+                    <span className="participant-name-group participant-card-name-group" data-size="row">
+                      <span className={`participant-name participant-card-name${name === row.pseudonym ? ' is-empty' : ''}`}>
+                        {name}
+                      </span>
+                    </span>
+                    {name !== row.pseudonym && <span className="participant-card-id">{row.pseudonym}</span>}
+                  </span>
+                  <span className="participant-card-badges">
+                    {!row.can_access && <Badge>배정 필요</Badge>}
+                    <Badge tone={row.status === 'open' ? 'mint' : undefined}>
+                      {row.status === 'open' ? '진행 중' : '종결'}
+                    </Badge>
+                  </span>
+                </header>
+                <div className="participant-card-fields">
+                  {fields.map(([label, value]) => (
+                    <div className="wire-field-row" data-compact="true" data-size="sm" data-tone="sub" key={label}>
+                      <span className="wire-field-label">{label}</span>
+                      <span className="wire-field-value">{value}</span>
+                    </div>
+                  ))}
+                </div>
+              </article>
+            );
+            return (
+              <div key={row.case_id}>
+                {row.can_access ? (
+                  <a
+                    className="participant-card-link"
+                    href={`#/cases/${row.case_id}/${purpose?.go ?? 'info'}`}
+                    aria-label={`${name}, ${row.program_name}, ${purpose?.label ?? '당사자 정보'}`}
                   >
-                    {asked[row.case_id] ? '요청했어요' : '내가 맡기'}
-                  </Button>
-                  {askError[row.case_id] && <ErrorText>{askError[row.case_id]}</ErrorText>}
-                </>
-              )}
-            </FormActions>
-          </Fold>
-        ))}
+                    {card}
+                  </a>
+                ) : (
+                  <div className="participant-card-link">{card}</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </>
   );

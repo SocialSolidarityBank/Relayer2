@@ -127,6 +127,14 @@ CCC는 블루 채움 배지를 시간 축으로 제한하지만, 릴레이어의
 
 `.app-nav`는 메뉴 순서를 유지한 채 공간이 모자라면 항목 단위로 줄바꿈한다. 메뉴 이름과 로그인 사용자·로그아웃 묶음을 글자 중간에서 쪼개지 않는다. 항목의 클릭 높이는 최소 32px이고, 항목 사이 가로 간격은 16px·행 간격은 8px이다. 내비게이션의 최소 내용 폭이 페이지 전체를 밀어내지 않게 하기 위한 보정이다. 사이드바나 새 메뉴 구조로 바꾸지 않는다.
 
+### 당사자 목록
+
+CCC의 `apps/web/app/components/wire/participant-card.tsx`와 `participants/page.tsx`에서 이름 중심 카드 구조를 가져왔다. 기존 `.participant-row-list`, `.participant-card`, `.participant-name-group`, `.wire-field-row` 스타일을 그대로 사용하며 아코디언이나 카드 안 행동 버튼 묶음은 두지 않는다.
+
+이름은 16px·600으로 앞세우고 가명은 옆에 보조 정보로 둔다. 이름이 없거나 접근 권한 때문에 받지 못하면 가명이 이름 자리를 대신한다. 상태는 우상단 배지이며 사업·담당자·기록 회차·다음 상담은 항상 펼친 정보 행으로 표시한다. 라벨과 값은 CCC의 compact·sm·sub 필드 규칙을 따른다.
+
+카드 전체가 링크다. 일반 목록에서는 당사자 정보로, 기록·일정 선택 화면에서는 해당 작성 화면으로 간다. 미배정 사례는 같은 모양의 읽기 전용 카드로 두며 링크와 `내가 맡기` 버튼을 만들지 않는다. 연락처는 현재 목록 API가 주지 않으므로 임의로 표시하거나 상담 상세를 미리 불러오지 않는다.
+
 ### 상담 기록하기의 레일
 
 구조는 다음과 같다. 구획이나 저장 버튼을 다른 열로 옮기지 않는다.
@@ -243,7 +251,7 @@ routes.tsx           내비 오른쪽의 `어둡게`/`밝게` 단추
 | 아코디언 | ~90 | `.wire-card-details` · `.wire-card-summary` · `.wire-disclosure-chevron` | `wire.css:97-156, 558-590` |
 | 일정 화면 | ~150 | `.schedule-nav` · `.schedule-day-list` · `.schedule-candidate-*` | `shell.css:815-908` |
 | 날짜·시각 피커 | ~135 | `.wire-date-popover` · `.wire-time-slot` | `wire.css:1277-1410` |
-| 당사자 카드·HERO | ~200 | `.participant-card` · `.participant-hero-card` | `wire.css:47-88, 264-369` |
+| 당사자 HERO | — | `.participant-hero-card` | `wire.css:269-293` |
 | 고대비 토큰 | ~40 | `[data-contrast="high"]` | `tokens.css:359-399` |
 
 **월간 7열 격자만 CSS 조차 없다**(`.month-*`·`.calendar-*` 0건). CCC 는 달력 라이브러리를 쓰지 않고

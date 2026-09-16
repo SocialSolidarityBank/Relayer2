@@ -122,11 +122,11 @@ test('등록부터 15초 다시보기까지 한 바퀴', async ({ page }) => {
   // URL 을 외우지 않고 목록에서 이 사례로 되돌아올 수 있어야 한다.
   await page.getByRole('link', { name: '당사자 목록', exact: true }).click();
   await page.locator('#q').fill(NAME);
-  // 목록은 접힌 카드다. 찾아서 하나만 남으면 펼쳐진다.
-  const row = page.locator('details.wire-card-details', { hasText: NAME });
-  await expect(row).toContainText('2회차까지 기록');
-  await row.getByRole('button', { name: '15초 다시보기' }).click();
-  await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
+  const row = page.getByRole('link', { name: new RegExp(NAME) });
+  await expect(row.getByText('2회차까지 기록', { exact: true })).toBeVisible();
+  await row.click();
+  await page.getByRole('tab', { name: '15초 다시보기', exact: true }).click();
+  await expect(page.getByRole('tab', { name: '15초 다시보기', exact: true })).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('section.wire-card', { hasText: '확인할 과제' })).toContainText(TASK);
 });
 
@@ -222,7 +222,7 @@ test('상담 종결은 회차를 만들지 않고 미완료 과제를 그대로 
   // 목록에서도 종결로 보인다
   await page.getByRole('link', { name: '당사자 목록', exact: true }).click();
   await page.locator('#q').fill(name);
-  await expect(page.locator('details.wire-card-details', { hasText: name })).toContainText('종결');
+  await expect(page.getByRole('link', { name: new RegExp(name) }).getByText('종결', { exact: true })).toBeVisible();
 });
 
 // 요구 5 — 기록 화면에서 `종결 상담`을 고르면 저장 성공 뒤 종결 화면으로 간다.
