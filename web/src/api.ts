@@ -18,7 +18,13 @@ export type Briefing = {
     method: string | null;
   };
   goals: { overall: string | null; today: { text: string; from_session_seq: number | null } | null } | null;
-  last_session_summary: { session_seq: number | null; line: string | null; summary_state: string };
+  last_session_summary: {
+    session_seq: number | null;
+    line: string | null;
+    summary: string | null;
+    changes: string[];
+    summary_state: 'none' | 'approved';
+  };
   today_questions: BriefingItem[] | null;
   open_tasks: { items: BriefingItem[]; unchecked_carried_over: number } | null;
 };
@@ -151,6 +157,7 @@ export type CaseDetail = {
     line: string;
     memo: string | null;
     today_goal_text: string | null;
+    ai_summary: { summary: string; changes: string[] } | null;
   }>;
   goal_revisions: Array<{ text: string | null; created_at: string }>;
   open_cards: Array<{ id: number; kind: string; text: string; source_session_seq?: number | null }>;

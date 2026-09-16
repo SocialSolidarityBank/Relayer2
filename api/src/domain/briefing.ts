@@ -35,7 +35,10 @@ export type Briefing = {
   last_session_summary: {
     session_seq: number | null;
     line: string | null;
-    summary_state: 'none';
+    /** 승인된 AI 정리가 있으면 그 문장. 없으면 null 이고 line 이 기록 상태를 말한다. */
+    summary: string | null;
+    changes: string[];
+    summary_state: 'none' | 'approved';
     status: CheckStatus;
   };
   today_questions: BriefingItem[] | null;
@@ -50,6 +53,8 @@ export type BriefingInput = {
   sessions: Session[];
   cards: Card[];
   outcomes: CardOutcome[];
+  /** 회차 id → 승인된 AI 정리. 승인 전 초안은 여기 없다. */
+  approved?: Record<number, { summary: string; changes: string[] }>;
 };
 
 const AI_OFF: CheckStatus = { state: 'not_checked', reason: 'ai_disabled', through_session_seq: null };
@@ -106,14 +111,21 @@ export function buildBriefing(input: BriefingInput): Briefing {
           today: today ? { text: today.text, from_session_seq: today.fromSessionSeq } : null,
         }
       : null,
-    last_session_summary: {
-      session_seq: lastDone?.seq ?? null,
-      line: lastDone ? buildSessionLine(lastDone, cards) : null,
-      summary_state: 'none',
-      status: lastDone
-        ? { state: 'not_checked', reason: 'ai_disabled', through_session_seq: lastDone.seq }
-        : AI_OFF,
-    },
+    last_session_summary: (() => {
+      const summary = lastDone ? input.approved?.[lastDone.id] : undefined;
+      return {
+        session_seq: lastDone?.seq ?? null,
+        line: lastDone ? buildSessionLine(lastDone, cards) : null,
+        summary: summary?.summary ?? null,
+        changes: summary?.changes ?? [],
+        summary_state: summary ? 'approved' : 'none',
+        status: lastDone
+          ? summary
+            ? { state: 'checked', reason: null, through_session_seq: lastDone.seq }
+            : { state: 'not_checked', reason: 'ai_disabled', through_session_seq: lastDone.seq }
+          : AI_OFF,
+      };
+    })(),
     today_questions: questions.length > 0 ? questions : null,
     open_tasks:
       taskItems.length > 0

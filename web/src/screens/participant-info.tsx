@@ -76,12 +76,12 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
 
   return (
     <>
-      <Card title="회차별 요약" hint="AI 없이 만든 기록 상태예요. 요약이 아니에요.">
+      <Card title="회차별 요약" hint="회차 줄은 기록 상태예요. 승인한 AI 정리가 있으면 그 아래에 보여요.">
         {done.map((s) => (
           <div className="wire-repeat-card" key={s.id}>
             <Item
               title={`${s.seq}회차 · ${dateLabel(s.held_at)}${s.kind === 'intake' ? ' · 인테이크' : ''}`}
-              desc={s.line}
+              desc={s.ai_summary ? `AI 정리 승인함 · ${s.line}` : s.line}
               action={
                 <>
                   <Button
@@ -112,6 +112,14 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
                 </>
               }
             />
+            {s.ai_summary && (
+              <div className="info-ai-summary">
+                <p className="wire-item-desc">{s.ai_summary.summary}</p>
+                {s.ai_summary.changes.length > 0 && (
+                  <p className="wire-item-desc">달라진 것: {s.ai_summary.changes.join(' · ')}</p>
+                )}
+              </div>
+            )}
             {openIds.includes(s.id) && <p className="info-original">{s.memo ?? '수기 기록이 없어요.'}</p>}
           </div>
         ))}

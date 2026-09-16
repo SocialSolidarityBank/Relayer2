@@ -487,13 +487,49 @@ async function insertCards(
   caseId: number,
   sessionId: number,
   cards: NewCardInput[],
+  sourceType: Card['source_type'] = 'manual',
 ): Promise<void> {
   for (const card of cards) {
     // 카드 본문은 사람이 쓴 문장이다. 평문으로 앉히지 않는다(P1).
-    await tx`insert into cards (case_id, kind, text, area, risk_type, quote, source_session_id, source_section)
+    await tx`insert into cards (case_id, kind, text, area, risk_type, quote, source_session_id, source_section, source_type)
       values (${caseId}, ${card.kind}, ${encryptText(card.text)}, ${card.area ?? null}, ${card.risk_type ?? null},
-              ${encryptText(card.quote)}, ${sessionId}, ${card.section})`;
+              ${encryptText(card.quote)}, ${sessionId}, ${card.section}, ${sourceType})`;
   }
+}
+
+/**
+ * 승인한 AI 과제·질문을 그 회차의 카드로 앉힌다(SPEC §15-4 "승인하면 그대로 카드가 된다").
+ * 다시 승인하면 **결과가 안 찍힌 AI 카드만** 갈아 끼운다 — 이미 확인함·못 함이 붙은 카드는
+ * 이력이라 지우지 않는다. 사람이 같은 문장을 이미 적어 뒀으면 또 만들지 않는다(인테이크와 같은 규칙).
+ */
+export async function replaceAiCards(
+  tx: typeof sql,
+  caseId: number,
+  sessionId: number,
+  cards: NewCardInput[],
+): Promise<void> {
+  await tx`
+    delete from cards c
+    where c.source_session_id = ${sessionId} and c.source_type = 'ai_approved'
+      and not exists (select 1 from card_outcomes o where o.card_id = c.id)`;
+  const existing = await tx<Array<{ kind: string; text: string }>>`
+    select kind, text from cards where source_session_id = ${sessionId}`;
+  const keep = new Set(existing.map((c) => `${c.kind}\u0000${decryptText(c.text) ?? ''}`));
+  const fresh = cards.filter((c) => c.text.trim() && !keep.has(`${c.kind}\u0000${c.text}`));
+  await insertCards(tx, caseId, sessionId, fresh, 'ai_approved');
+}
+
+export type ApprovedSummary = { summary: string; changes: string[] };
+
+/** 회차별 승인된 요약. 마지막 행이 새 초안이면 이전 승인본으로 조용히 되돌아가지 않는다(불일치 화면과 같은 규칙). */
+async function approvedSummaries(sessionIds: number[]): Promise<Record<number, ApprovedSummary>> {
+  if (sessionIds.length === 0) return {};
+  const rows = await sql<Array<{ session_id: number; status: 'draft' | 'approved'; summary: string; changes: string[] }>>`
+    select distinct on (session_id) session_id, status, summary, changes
+    from ai_drafts where session_id in ${sql(sessionIds)} order by session_id, id desc`;
+  return Object.fromEntries(
+    rows.filter((r) => r.status === 'approved').map((r) => [r.session_id, { summary: r.summary, changes: r.changes }]),
+  );
 }
 
 async function loadCase(caseId: number) {
@@ -613,6 +649,8 @@ export type CaseDetail = {
     line: string;
     memo: string | null;
     today_goal_text: string | null;
+    /** 승인된 AI 정리. 없거나 마지막 행이 초안이면 null. */
+    ai_summary: ApprovedSummary | null;
   }>;
   goal_revisions: Array<{ text: string | null; created_at: string }>;
   open_cards: Array<ReturnType<typeof openCards>[number] & { source_session_seq: number | null }>;
@@ -629,6 +667,7 @@ export async function getCaseDetail(caseId: number): Promise<CaseDetail | null> 
   const loaded = await loadCase(caseId);
   if (!loaded) return null;
   const { supportCase, pseudonym, sessions, cards, outcomes } = loaded;
+  const approved = await approvedSummaries(sessions.map((s) => s.id));
 
   const [vault] = await sql<Array<{ enc_name: string | null; enc_phone: string | null; enc_email: string | null }>>`
     select enc_name, enc_phone, enc_email from participant_pii
@@ -661,6 +700,7 @@ export async function getCaseDetail(caseId: number): Promise<CaseDetail | null> 
       // 금고에서 꺼내 보낸다. 안 꺼내면 화면에 암호문이 그대로 뜬다(2026-09-16 검수).
       memo: decryptText(s.memo),
       today_goal_text: decryptText(s.today_goal_text),
+      ai_summary: approved[s.id] ?? null,
     })),
     goal_revisions: revisions,
     open_cards: openCards(cards, outcomes, sessions).map((c) => ({
@@ -817,6 +857,7 @@ export async function listSchedules(actorId: number, from: string, to: string): 
 export async function getBriefing(caseId: number, seq?: number): Promise<Briefing | null> {
   const loaded = await loadCase(caseId);
   if (!loaded) return null;
+  const approved = await approvedSummaries(loaded.sessions.map((s) => s.id));
 
   if (seq === undefined) {
     return buildBriefing({
@@ -826,6 +867,7 @@ export async function getBriefing(caseId: number, seq?: number): Promise<Briefin
       sessions: loaded.sessions,
       cards: loaded.cards,
       outcomes: loaded.outcomes,
+      approved,
     });
   }
 
@@ -841,6 +883,7 @@ export async function getBriefing(caseId: number, seq?: number): Promise<Briefin
     sessions: loaded.sessions.filter((s) => s.seq <= seq),
     cards: loaded.cards.filter((c) => upTo(c.source_session_id)),
     outcomes: loaded.outcomes.filter((o) => upTo(o.session_id)),
+    approved,
   });
 }
 

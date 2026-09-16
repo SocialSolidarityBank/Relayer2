@@ -15,6 +15,9 @@ body { margin: 0; }
 .info-tabs .wire-step { cursor: pointer; }
 .info-tabs .wire-step[aria-selected="true"] { border-color: var(--ink); background: var(--ink); color: var(--on-badge); }
 .info-original { margin: var(--space-2) 0 0; padding: var(--space-3); border-radius: var(--radius-md); background: var(--panel-alt, var(--panel)); color: var(--ink); white-space: pre-wrap; }
+/* 회차별 요약 안 승인된 AI 정리(2026-09-16 검수). 원문 위, 제목 아래 본문 단이다. */
+.info-ai-summary { display: grid; gap: var(--space-1); margin-top: var(--space-2); }
+.info-ai-summary > p { margin: 0; }
 
 .wire-choice-hint { display: block; margin-top: var(--space-1); font-size: var(--text-sm); font-weight: 400; color: var(--sub); }
 
