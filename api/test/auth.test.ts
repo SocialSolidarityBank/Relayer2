@@ -2,6 +2,7 @@
 import { createHmac } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { COOKIE_NAME, issueCookie, verifyToken } from '../src/auth.ts';
+import { isWebAsset } from '../src/routes.ts';
 
 const SECRET = 'test-secret';
 const tokenOf = (cookie: string): string => cookie.slice(`${COOKIE_NAME}=`.length).split(';')[0];
@@ -38,5 +39,34 @@ describe('세션 쿠키', () => {
     const cookie = issueCookie(1);
     expect(cookie).toContain('HttpOnly');
     expect(cookie).toContain('SameSite=Lax');
+  });
+});
+
+/**
+ * 로그인 없이 줄 수 있는 것(2026-09-16 검수에서 뚫려 있던 자리).
+ *
+ * 전에는 "경로 끝에 점이 있으면 정적 파일"로 보아 `GET /sessions/1.0` 이 인증을 건너뛰고
+ * 상담 기록을 통째로 내주었다. Hono 는 그것을 `/sessions/:id` 로 받고 `Number('1.0')` 은 1 이다.
+ * 이 테스트가 그 그물을 다시 못 치게 막는다.
+ */
+describe('로그인 없이 열리는 경로', () => {
+  const open = ['/', '/test', '/index.html', '/favicon.ico', '/assets/app-abc123.js'];
+  const shut = [
+    '/sessions/1',
+    '/sessions/1.0',
+    '/cases/1.0/briefing',
+    '/participants',
+    '/participants/x.js',
+    '/audit.json',
+    '/settings/workers.csv',
+    '/settings/org.json',
+  ];
+
+  it('화면 껍데기만 연다', () => {
+    for (const path of open) expect(isWebAsset(path)).toBe(true);
+  });
+
+  it('자료를 내는 경로는 확장자가 붙어도 막힌다', () => {
+    for (const path of shut) expect(isWebAsset(path)).toBe(false);
   });
 });

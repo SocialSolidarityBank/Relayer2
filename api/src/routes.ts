@@ -123,22 +123,33 @@ app.post('/auth/logout', (c) => {
   return c.json({ ok: true });
 });
 
-/**
- * 화면 껍데기(HTML·JS·CSS)는 로그인 전에도 받아야 로그인 화면이 뜬다.
- * 자료는 그 뒤 API 가 내고 그건 전부 막혀 있다. API 경로에는 확장자가 없다.
- */
 /** 당사자 열람은 로그인 없이 연다. 대신 링크와 코드 두 자물쇠를 통과해야 한다. */
 const isParticipantGate = (path: string): boolean => path === '/access/open';
 
 /**
- * 화면으로 들어오는 주소. 여기 없는 확장자 없는 경로는 전부 API 로 본다.
+ * 화면으로 들어오는 주소. 로그인 전에도 받아야 로그인 화면이 뜬다.
  * `/test` 는 관문 2 측정용 입구다 — 참가자에게 `relayer.kr/test` 한 줄만 주면 된다.
- * 목록으로 두는 이유: 아무 경로나 화면으로 열면 API 오타가 404 대신 화면을 뱉어 원인을 못 찾는다.
  */
 const WEB_ENTRIES = new Set(['/', '/test']);
 
-const isWebAsset = (path: string): boolean =>
-  WEB_ENTRIES.has(path) || path.startsWith('/assets/') || /\.[a-z0-9]+$/i.test(path);
+/**
+ * 빌드가 루트에 내놓는 파일. `web/dist` 에는 `index.html` 과 `assets/` 뿐이다.
+ * 브라우저가 묻지도 않았는데 찾는 것들만 더 연다.
+ */
+const PUBLIC_FILES = new Set(['/index.html', '/favicon.ico', '/robots.txt']);
+
+/**
+ * 로그인 없이 줄 수 있는 것.
+ *
+ * **확장자로 판정하지 않는다**(2026-09-16 검수). 전에는 `/\.[a-z0-9]+$/` 로 "점이 있으면
+ * 정적 파일"이라 보았는데, `GET /sessions/1.0` 이 그 그물을 빠져나가 **로그인 없이 상담 기록을
+ * 통째로 내주고 있었다** — Hono 는 그것을 `/sessions/:id` 로 받고 `Number('1.0')` 은 1 이다.
+ *
+ * 그래서 목록으로 못 박는다. 정적 자산은 `assets/` 아래에만 있고 루트 파일은 셋뿐이다.
+ * 새 파일이 늘면 여기 적어야 한다 — 적는 수고가 뚫리는 것보다 싸다.
+ */
+export const isWebAsset = (path: string): boolean =>
+  WEB_ENTRIES.has(path) || PUBLIC_FILES.has(path) || path.startsWith('/assets/');
 
 // 여기부터는 로그인한 사람만. 실패는 401 하나로 답한다(무엇이 있는지 알려주지 않는다).
 app.use('*', async (c, next) => {
