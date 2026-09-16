@@ -19,6 +19,7 @@ import {
   SPEECH_MAX_BYTES,
   speechStatus,
   SttUnavailable,
+  withdrawCaseRecordings,
 } from './stt.ts';
 import { AiUnavailable, approveDraft, draftSession, latestDraft } from './ai.ts';
 import { audit, auditCsv, auditSummary, listAudit, AUDIT_KIND_LIST } from './audit.ts';
@@ -38,6 +39,7 @@ import { sql } from './db.ts';
 import {
   AccessDenied,
   assertCaseAccess,
+  CaseClosed,
   caseIdOfDocument,
   caseIdOfRecording,
   caseIdOfSession,
@@ -76,6 +78,10 @@ app.onError((err, c) => {
   if (err instanceof NotFound) return c.json({ error: err.message }, 404);
   if (err instanceof AccessDenied) return c.json({ error: err.message }, 403);
   if (err instanceof service.ConsentRequired) return c.json({ error: err.message }, 409);
+  // 종결 사례에 새 녹음·전사를 보내는 것도 상태 충돌이다.
+  if (err instanceof CaseClosed || err instanceof service.SessionAlreadyStarted) {
+    return c.json({ error: err.message }, 409);
+  }
   // AI 는 없어도 제품이 돌아간다. 없는 것을 있는 것처럼 답하지 않는다.
   if (err instanceof AiUnavailable || err instanceof SttUnavailable) {
     return c.json({ error: err.message }, 503);
@@ -278,6 +284,22 @@ app.post('/cases/:id/sessions', async (c) => {
   return c.json(await service.planSession(caseId, body), 201);
 });
 
+/**
+ * 상담 시작(2026-09-16 Q). 수기 첫 입력이든 녹음 시작이든 그 순간 회차가 생긴다.
+ * 예정 회차 id 를 주면 그 회차를 기록됨으로 바꾸고, 없으면 새 회차를 만든다. 내용은 나중에 채운다.
+ */
+app.post('/cases/:id/sessions/start', async (c) => {
+  const caseId = await caseAccess(c.req.param('id'), c.get('actor').id);
+  const body = z
+    .object({
+      session_id: z.number().int().positive().optional(),
+      method: sessionMethod.optional(),
+      is_closing: z.boolean().optional(),
+    })
+    .parse(await c.req.json().catch(() => ({})));
+  return c.json(await service.startSession(caseId, { ...body, actorId: c.get('actor').id }), 201);
+});
+
 
 app.get('/cases/:id', async (c) => {
   const caseId = await caseAccess(c.req.param('id'), c.get('actor').id);
@@ -296,7 +318,8 @@ app.patch('/sessions/:id', async (c) => {
   const body = z
     .object({
       held_at: isoDateTime.optional(),
-      memo: z.string().min(1), // 유일한 필수 입력
+      // 상담 내용은 선택이다(2026-09-16 Q). 녹음만 하고 나중에 적어도 회차다.
+      memo: z.string().optional(),
       method: sessionMethod.optional(),
       place: z.string().nullable().optional(),
       detail: z.record(z.unknown()).optional(),
@@ -325,6 +348,13 @@ app.post('/cases/:id/consents', async (c) => {
   const caseId = await caseAccess(c.req.param('id'), c.get('actor').id);
   const body = consentInput.parse(await c.req.json());
   const view = await service.recordConsent(caseId, { ...body, actorId: c.get('actor').id });
+  // 녹음·보유기간 동의를 거두면 그 사례의 음성 원본을 그 자리에서 지운다 — 문안이 그렇게 약속한다.
+  if (
+    body.decision === 'withdraw' &&
+    (body.domain === 'counseling_recording' || body.domain === 'voice_original_retention_period')
+  ) {
+    await withdrawCaseRecordings(caseId, c.get('actor').id);
+  }
   // 동의·철회는 열람이 아니지만 남긴다 — 누가 언제 받았는지가 곧 증거다.
   await audit({
     actorId: c.get('actor').id,

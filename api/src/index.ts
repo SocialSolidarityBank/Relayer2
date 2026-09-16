@@ -5,6 +5,7 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { app } from './routes.ts';
 import { startRetentionSweep } from './retention.ts';
+import { failStaleTranscriptions } from './stt.ts';
 
 const port = Number(process.env.PORT ?? 8787);
 
@@ -22,6 +23,10 @@ if (existsSync(webDist)) {
 
 serve({ fetch: app.fetch, port }, (info) => {
   console.log(`relayer on http://localhost:${info.port}`);
+  // 전사 중이던 녹음은 끊긴 것이다. 그대로 두면 영원히 '전사 중'으로 보인다(2026-09-16 Q).
+  void failStaleTranscriptions().then((n) => {
+    if (n > 0) console.log(`[전사] 끊긴 전사 ${n}건을 실패로 표시`);
+  });
   // 보유기간 청소. 뜰 때 한 번, 그 뒤 하루 한 번(2026-09-16 검수 — 아무도 안 부르고 있었다).
   startRetentionSweep();
 });

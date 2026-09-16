@@ -27,7 +27,7 @@ import { openCards, resolveOutcomes, type OutcomeSubmission } from './domain/car
 import { carryOverOnRecord } from './domain/goals.ts';
 import { buildSessionLine } from './domain/session-line.ts';
 import type { Assignee, Card, CardOutcome, FactChange, Session, SupportCase } from './domain/types.ts';
-import { NotFound } from './access.ts';
+import { assertCaseOpen, NotFound } from './access.ts';
 
 const ANIMALS = [
   'swallow', 'otter', 'heron', 'badger', 'marten', 'crane', 'gecko', 'finch', 'ibex', 'lynx',
@@ -273,6 +273,43 @@ export async function planSession(
 }
 
 /**
+ * 상담 시작(2026-09-16 Q). 시작이 곧 회차다 — 수기든 녹음이든 시작한 순간 기록 회차가 생기고
+ * 부족한 정보는 나중에 채운다. 예정 회차를 주면 그 회차가 기록됨이 되고, 없으면 새로 만든다.
+ * 저장(recordSession)과 달리 카드·결과·목표 이어받기를 건드리지 않는다 — 그건 채울 때 한다.
+ */
+export async function startSession(
+  caseId: number,
+  input: { session_id?: number; method?: string; is_closing?: boolean; actorId?: number },
+): Promise<{ session_id: number; seq: number }> {
+  await assertCaseOpen(caseId);
+  await assertConsent(caseId, 'sensitive_information_processing');
+  return await sql.begin(async (tx) => {
+    await tx`select id from support_cases where id = ${caseId} for update`;
+    const now = new Date().toISOString();
+    if (input.session_id !== undefined) {
+      const [target] = await tx<Session[]>`
+        select * from sessions where id = ${input.session_id} and case_id = ${caseId} for update`;
+      if (!target) throw new NotFound('회차를 찾지 못했어요.');
+      if (target.status === 'done') throw new SessionAlreadyStarted('이미 시작한 회차예요.');
+      await tx`update sessions set status = 'done', held_at = ${now},
+        method = ${input.method ?? target.method}, is_closing = ${input.is_closing ?? target.is_closing}
+        where id = ${target.id}`;
+      return { session_id: target.id, seq: target.seq };
+    }
+    const [{ seq }] = await tx<{ seq: number }[]>`
+      select coalesce(max(seq), 0) + 1 as seq from sessions where case_id = ${caseId}`;
+    const [s] = await tx<{ id: number }[]>`
+      insert into sessions (case_id, seq, kind, status, held_at, method, is_closing)
+      values (${caseId}, ${seq}, 'regular', 'done', ${now}, ${input.method ?? null}, ${input.is_closing ?? false})
+      returning id`;
+    return { session_id: s.id, seq };
+  });
+}
+
+/** 이미 기록됨인 회차를 다시 시작하려 했다. 라우트는 409 로 답한다. */
+export class SessionAlreadyStarted extends Error {}
+
+/**
  * 상담 기록하기. 한 트랜잭션에서
  *  - 회차를 done 으로 저장하고
  *  - 직전 회차의 다음 상담 목표를 이어받고
@@ -283,7 +320,8 @@ export async function recordSession(
   sessionId: number,
   input: {
     held_at?: string;
-    memo: string;
+    /** 상담 내용. 비우거나 안 보내도 된다(2026-09-16 Q) — 안 보내면 있던 것을 지키고, 빈 글은 없음으로 둔다. */
+    memo?: string;
     method?: string | null;
     place?: string | null;
     detail?: Record<string, unknown>;
@@ -343,7 +381,7 @@ export async function recordSession(
     await tx`update sessions set
         status = 'done',
         held_at = ${input.held_at ?? target.held_at ?? new Date().toISOString()},
-        memo = ${encryptText(input.memo)},
+        memo = ${input.memo === undefined ? target.memo : input.memo.trim() ? encryptText(input.memo) : null},
         method = ${method},
         place = ${place},
         detail = ${tx.json(detail)},
@@ -650,6 +688,10 @@ export type CaseDetail = {
     scheduled_at: string | null;
     line: string;
     memo: string | null;
+    /** 수기가 있는가. 녹음만 하고 아직 안 적은 회차는 false — 화면이 '수기 미작성'을 그린다. */
+    written: boolean;
+    /** 녹음·전사 상태. 여러 녹음이면 가장 최근 녹음 기준. */
+    voice: { recordings: number; transcript: SessionTranscriptState };
     today_goal_text: string | null;
     /** 승인된 AI 정리. 없거나 마지막 행이 초안이면 null. */
     ai_summary: ApprovedSummary | null;
@@ -664,12 +706,43 @@ export type CaseDetail = {
   } | null;
 };
 
+export type SessionTranscriptState = 'none' | 'pending' | 'draft' | 'approved' | 'failed' | 'skipped';
+
+/**
+ * 회차별 녹음 수와 전사 상태. 전사문이 있으면 그 상태(draft/approved)가 우선이고,
+ * 없으면 가장 최근 녹음의 진행 상태(pending/failed/skipped)다. 녹음이 없으면 none.
+ */
+async function voiceStates(
+  sessionIds: number[],
+): Promise<Record<number, { recordings: number; transcript: SessionTranscriptState }>> {
+  if (sessionIds.length === 0) return {};
+  const rows = await sql<Array<{ session_id: number; recordings: number; latest_state: string | null; transcript_status: string | null }>>`
+    select s.id as session_id,
+           (select count(*)::int from recordings r where r.session_id = s.id and r.deleted_at is null) as recordings,
+           (select r.transcribe_state from recordings r where r.session_id = s.id and r.deleted_at is null
+              order by r.id desc limit 1) as latest_state,
+           (select t.status from transcripts t where t.session_id = s.id order by t.id desc limit 1) as transcript_status
+    from sessions s where s.id in ${sql(sessionIds)}`;
+  const out: Record<number, { recordings: number; transcript: SessionTranscriptState }> = {};
+  for (const r of rows) {
+    const transcript: SessionTranscriptState =
+      r.transcript_status === 'approved' || r.transcript_status === 'draft'
+        ? r.transcript_status
+        : r.latest_state === 'pending' || r.latest_state === 'failed' || r.latest_state === 'skipped'
+          ? r.latest_state
+          : 'none';
+    out[r.session_id] = { recordings: r.recordings, transcript: r.recordings > 0 ? transcript : 'none' };
+  }
+  return out;
+}
+
 /** 당사자 정보 화면(탭 4)의 재료를 한 번에 낸다. 탭마다 따로 부르지 않는다. */
 export async function getCaseDetail(caseId: number): Promise<CaseDetail | null> {
   const loaded = await loadCase(caseId);
   if (!loaded) return null;
   const { supportCase, pseudonym, sessions, cards, outcomes } = loaded;
   const approved = await approvedSummaries(sessions.map((s) => s.id));
+  const voice = await voiceStates(sessions.map((s) => s.id));
 
   const [vault] = await sql<Array<{ enc_name: string | null; enc_phone: string | null; enc_email: string | null }>>`
     select enc_name, enc_phone, enc_email from participant_pii
@@ -691,19 +764,24 @@ export async function getCaseDetail(caseId: number): Promise<CaseDetail | null> 
       phone: decryptPii(vault?.enc_phone ?? null),
       email: decryptPii(vault?.enc_email ?? null),
     },
-    sessions: sessions.map((s) => ({
-      id: s.id,
-      seq: s.seq,
-      kind: s.kind,
-      status: s.status,
-      held_at: s.held_at,
-      scheduled_at: s.scheduled_at,
-      line: buildSessionLine(s, cards),
+    sessions: sessions.map((s) => {
       // 금고에서 꺼내 보낸다. 안 꺼내면 화면에 암호문이 그대로 뜬다(2026-09-16 검수).
-      memo: decryptText(s.memo),
-      today_goal_text: decryptText(s.today_goal_text),
-      ai_summary: approved[s.id] ?? null,
-    })),
+      const memo = decryptText(s.memo);
+      return {
+        id: s.id,
+        seq: s.seq,
+        kind: s.kind,
+        status: s.status,
+        held_at: s.held_at,
+        scheduled_at: s.scheduled_at,
+        line: buildSessionLine(s, cards),
+        memo,
+        written: Boolean(memo?.trim()),
+        voice: voice[s.id] ?? { recordings: 0, transcript: 'none' as const },
+        today_goal_text: decryptText(s.today_goal_text),
+        ai_summary: approved[s.id] ?? null,
+      };
+    }),
     goal_revisions: revisions,
     open_cards: openCards(cards, outcomes, sessions).map((c) => ({
       ...c,

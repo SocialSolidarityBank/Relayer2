@@ -8,8 +8,16 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
-import { assertCaseAccess, caseIdOfRecording, caseIdOfSession, NotFound } from './access.ts';
-import { assertConsent } from './service.ts';
+import {
+  assertCaseAccess,
+  assertCaseOpen,
+  AccessDenied,
+  CaseClosed,
+  caseIdOfRecording,
+  caseIdOfSession,
+  NotFound,
+} from './access.ts';
+import { assertConsent, ConsentRequired } from './service.ts';
 import { audit } from './audit.ts';
 import {
   CONSENT_COPY,
@@ -29,8 +37,12 @@ const PROVIDER = 'azure' as const;
 /** 음성이 사는 곳. 기관 디스크다. 백업 스크립트는 여기를 건드리지 않는다. */
 const VOICE_ROOT = resolve(process.env.VOICE_ROOT ?? './voice');
 
-/** 한 번에 받는 음성의 상한. 라우트의 본문 제한과 같은 값이다. */
-export const SPEECH_MAX_BYTES = 50 * 1024 * 1024;
+/**
+ * 한 번에 받는 음성의 상한. 라우트의 본문 제한과 같은 값이다.
+ * 200MiB — 브라우저 녹음으로 한두 시간짜리 상담을 통째로 올린다(2026-09-16 Q).
+ * Azure Fast Transcription 한도(300MB·2시간) 안이다.
+ */
+export const SPEECH_MAX_BYTES = 200 * 1024 * 1024;
 
 /** 받는 음성 형식. 파일 머리(매직)로 확인한다 — 보낸 쪽이 적은 형식은 믿지 않는다. */
 export const SPEECH_FORMATS = ['wav', 'mp3', 'm4a', 'flac', 'ogg', 'webm'] as const;
@@ -71,6 +83,12 @@ export class SttUnavailable extends Error {}
 /** 받지 않는 파일·깨진 요청은 보낸 쪽 잘못이다(400). 서버 고장(503)과 구분한다. */
 export class RecordingRejected extends Error {}
 
+/**
+ * 전사 진행 상태. transcripts 는 append-only 라 상태를 고칠 수 없어 녹음 행이 갖는다.
+ *   pending 전사 중 · done 초안 있음 · failed 오류(수동 재시도) · skipped 외부 STT 동의 없음
+ */
+export type TranscribeState = 'pending' | 'done' | 'failed' | 'skipped';
+
 export type Recording = {
   id: number;
   session_id: number;
@@ -80,7 +98,16 @@ export type Recording = {
   delete_after: string;
   deleted_at: string | null;
   created_at: string;
+  transcribe_state: TranscribeState;
+  /** 실패·건너뜀 이유 한 줄. 본문은 담지 않는다. */
+  transcribe_note: string | null;
 };
+
+/** recordings 에서 화면으로 내는 칸. 한 곳에 두고 select 마다 붙인다. */
+const RECORDING_COLUMNS = sql([
+  'id', 'session_id', 'content_type', 'bytes', 'duration_ms', 'delete_after', 'deleted_at', 'created_at',
+  'transcribe_state', 'transcribe_note',
+]);
 
 export type TranscriptSegment = { text: string; offset_ms: number; duration_ms: number };
 
@@ -174,9 +201,14 @@ export async function saveRecording(
   if (!session) throw new NotFound('회차를 찾지 못했어요.');
   // 배정되지 않은 실무자는 동의 문구가 뭐든 받지 않는다. 확인은 부수 효과보다 먼저다.
   await assertCaseAccess(session.case_id, actorId);
+  await assertCaseOpen(session.case_id);
 
   await assertConsent(session.case_id, 'counseling_recording');
   await assertConsent(session.case_id, 'voice_original_retention_period');
+
+  // 자동 전사(2026-09-16 Q): 받자마자 뒤에서 돌린다. 문은 둘 — 제공자 설정과 외부 STT 동의.
+  // 어느 쪽이 없든 실패가 아니라 건너뜀이다. 이유는 화면이 그대로 보여 준다.
+  const autoStart = await autoTranscribeGate(session.case_id);
 
   const days = RETENTION_DAYS[CONSENT_COPY.voice_original_retention_period.retentionDuration ?? ''];
   if (!days) throw new Error('보유기간 문구를 해석하지 못했어요.');
@@ -184,7 +216,7 @@ export async function saveRecording(
   const sha256 = createHash('sha256').update(audio).digest('hex');
   // 같은 회차에 같은 파일을 두 번 올리면 새 물건이 아니다 — 있는 행을 돌려준다.
   const [dup] = await sql<Recording[]>`
-    select id, session_id, content_type, bytes, duration_ms, delete_after, deleted_at, created_at
+    select ${RECORDING_COLUMNS}
     from recordings
     where session_id = ${sessionId} and sha256 = ${sha256} and deleted_at is null`;
   if (dup) {
@@ -203,10 +235,12 @@ export async function saveRecording(
   let row: Recording;
   try {
     [row] = await sql<Recording[]>`
-      insert into recordings (session_id, rel_path, bytes, sha256, content_type, duration_ms, delete_after, created_by)
+      insert into recordings (session_id, rel_path, bytes, sha256, content_type, duration_ms, delete_after, created_by,
+                              transcribe_state, transcribe_note)
       values (${sessionId}, ${relPath}, ${audio.byteLength}, ${sha256},
-              ${FORMAT_INFO[format].mime}, ${durationMs ?? null}, ${deleteAfter}, ${actorId})
-      returning id, session_id, content_type, bytes, duration_ms, delete_after, deleted_at, created_at`;
+              ${FORMAT_INFO[format].mime}, ${durationMs ?? null}, ${deleteAfter}, ${actorId},
+              ${autoStart.state}, ${autoStart.note})
+      returning ${RECORDING_COLUMNS}`;
   } catch (err) {
     // 행이 없는 파일은 아무도 지우지 않는다. 쓰고 실패했으면 바로 치운다.
     await rm(full, { force: true });
@@ -227,6 +261,9 @@ export async function saveRecording(
   });
   await assertCaseAccess(session.case_id, actorId);
 
+  // 응답을 기다리게 하지 않는다. 결과는 녹음 행의 상태로 온다.
+  if (autoStart.state === 'pending') void runAutoTranscribe(row.id, actorId);
+
   return row;
 }
 
@@ -236,7 +273,7 @@ export async function listRecordings(sessionId: number, actorId: number): Promis
   if (caseId === null) throw new NotFound('회차를 찾지 못했어요.');
   await assertCaseAccess(caseId, actorId);
   const rows = await sql<Recording[]>`
-    select id, session_id, content_type, bytes, duration_ms, delete_after, deleted_at, created_at
+    select ${RECORDING_COLUMNS}
     from recordings where session_id = ${sessionId} order by id desc`;
   await assertCaseAccess(caseId, actorId);
   return rows;
@@ -255,7 +292,7 @@ export async function readRecordingAudio(
   await assertCaseAccess(caseId, actorId);
 
   const [rec] = await sql<Array<Recording & { rel_path: string }>>`
-    select id, session_id, content_type, bytes, duration_ms, delete_after, deleted_at, created_at, rel_path
+    select ${RECORDING_COLUMNS}, rel_path
     from recordings where id = ${recordingId}`;
   if (!rec) throw new NotFound('녹음을 찾지 못했어요.');
   if (rec.deleted_at) throw new RecordingRejected('보유기간이 지나 지운 녹음이에요.');
@@ -363,13 +400,66 @@ async function transcribeAudio(
   return { text, segments };
 }
 
+/** 자동 전사를 돌릴 수 있는가. 제공자 설정과 외부 STT 동의 둘 다 있어야 pending 이다. */
+async function autoTranscribeGate(
+  caseId: number,
+): Promise<{ state: TranscribeState; note: string | null }> {
+  if (!sttEnabled()) return { state: 'skipped', note: '전사 제공자 설정이 없어요.' };
+  try {
+    await assertConsent(caseId, 'external_stt_processing');
+  } catch (err) {
+    if (err instanceof ConsentRequired) return { state: 'skipped', note: '외부 STT 동의가 없어요.' };
+    throw err;
+  }
+  return { state: 'pending', note: null };
+}
+
+const setTranscribeState = (recordingId: number, state: TranscribeState, note: string | null) =>
+  sql`update recordings set transcribe_state = ${state}, transcribe_note = ${note} where id = ${recordingId}`;
+
 /**
- * 전사 초안을 만든다. 보내기 전에 가린다 — 음성에도 이름과 번호가 들어 있다.
- * 다만 **음성 자체는 가릴 수 없다.** 그래서 외부 STT 동의를 따로 받는다.
+ * 업로드 응답 뒤에 도는 자동 전사. 결과는 녹음 행의 상태로만 남는다.
+ * 잡 큐가 없다 — 프로세스가 죽으면 pending 이 남고, 다음에 뜰 때 failed 로 바꾼다(failStaleTranscriptions).
+ */
+async function runAutoTranscribe(recordingId: number, actorId: number): Promise<void> {
+  try {
+    await draftTranscript(recordingId, actorId);
+  } catch (err) {
+    // 상태는 draftTranscript 가 이미 적었다. 여기서는 조용히 끝낸다 — 응답은 벌써 나갔다.
+    console.error(`[전사] 녹음 ${recordingId} 자동 전사 실패: ${err instanceof Error ? err.message : err}`);
+  }
+}
+
+/** 서버가 다시 떴다. 전사 중이던 것은 끊긴 것이다 — 그대로 두면 영원히 '전사 중'이다. */
+export async function failStaleTranscriptions(): Promise<number> {
+  const rows = await sql<Array<{ id: number }>>`
+    update recordings set transcribe_state = 'failed', transcribe_note = '서버가 다시 시작돼 전사가 끊겼어요. 전사하기로 다시 시도해요.'
+    where transcribe_state = 'pending' returning id`;
+  return rows.length;
+}
+
+/**
+ * 전사 초안을 만든다. 수동(전사하기)과 자동이 같은 길을 지난다.
+ * 진행 상태를 녹음 행에 적는다 — pending 으로 시작해 done 또는 failed 로 끝난다.
+ * 동의가 없으면 skipped, 권한·존재 문제는 상태를 건드리지 않는다(그 녹음의 일이 아니다).
  */
 export async function draftTranscript(recordingId: number, actorId: number): Promise<Transcript> {
   if (!voiceEnabled()) throw new SttUnavailable('전사 기능이 꺼져 있어요.');
   if (!sttEnabled()) throw new SttUnavailable('전사 제공자 설정이 없어 전사를 할 수 없어요.');
+  try {
+    const out = await transcribeRecording(recordingId, actorId);
+    await setTranscribeState(recordingId, 'done', null);
+    return out;
+  } catch (err) {
+    if (err instanceof ConsentRequired) await setTranscribeState(recordingId, 'skipped', '외부 STT 동의가 없어요.');
+    else if (!(err instanceof AccessDenied) && !(err instanceof NotFound) && !(err instanceof CaseClosed)) {
+      await setTranscribeState(recordingId, 'failed', err instanceof Error ? err.message : '전사가 되지 않았어요.');
+    }
+    throw err;
+  }
+}
+
+async function transcribeRecording(recordingId: number, actorId: number): Promise<Transcript> {
 
   const [rec] = await sql<
     Array<{ id: number; session_id: number; rel_path: string; content_type: string; deleted_at: string | null }>
@@ -381,6 +471,7 @@ export async function draftTranscript(recordingId: number, actorId: number): Pro
   if (!session) throw new NotFound('회차를 찾지 못했어요.');
   // 외부로 나가기 직전에 배정을 다시 본다 — 파일을 읽고 나서 알면 늦는다.
   await assertCaseAccess(session.case_id, actorId);
+  await assertCaseOpen(session.case_id);
   await assertConsent(session.case_id, 'external_stt_processing');
 
   const full = join(VOICE_ROOT, rec.rel_path);
@@ -595,4 +686,35 @@ export async function sweepExpiredRecordings(): Promise<{
     });
   }
   return { deleted, missing, failed };
+}
+
+/**
+ * 동의 철회(2026-09-16 Q). 상담 녹음 또는 음성 원본 보유기간 동의가 철회되면 **그 사례**의
+ * 음성 원본을 그 자리에서 지운다 — 동의 문안이 "바로 지워요"라고 약속한다.
+ * 범위는 사례 하나다(SPEC §944: 한 사업의 동의가 다른 사업을 바꾸지 않는다). 전사문(글)은 남는다.
+ */
+export async function withdrawCaseRecordings(
+  caseId: number,
+  actorId: number,
+): Promise<{ deleted: number; failed: number }> {
+  const rows = await sql<Array<{ id: number; rel_path: string }>>`
+    select r.id, r.rel_path from recordings r
+    join sessions s on s.id = r.session_id
+    where s.case_id = ${caseId} and r.deleted_at is null`;
+  let deleted = 0;
+  let failed = 0;
+  for (const rec of rows) {
+    try {
+      await rm(join(VOICE_ROOT, rec.rel_path), { force: true });
+    } catch {
+      failed += 1;
+      continue;
+    }
+    await sql`update recordings set deleted_at = now() where id = ${rec.id}`;
+    deleted += 1;
+  }
+  if (rows.length > 0) {
+    await audit({ actorId, action: 'voice.withdraw', caseId, fields: [`deleted=${deleted}`, `failed=${failed}`] });
+  }
+  return { deleted, failed };
 }
