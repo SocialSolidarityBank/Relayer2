@@ -1,17 +1,16 @@
 /**
- * 열람 기록 — 관리자만 본다(GLOSSARY §6-7 · 설계는 docs/audit-view.md).
+ * 열람 기록 관리 — 관리자만 본다(설계는 `docs/audit-view.md`, 2026-09-16 Q 2차 개정).
  *
- * **두 층이다.** 위는 숫자와 눈여겨볼 것, 아래는 목록과 필터. 정기 점검은 위에서 끝나고
- * 사고 추적은 아래로 내려간다.
+ * **찾기 전에는 아무것도 보여 주지 않는다.** 수백 건을 늘어놓으면 훑을 수 없고,
+ * 그 자체가 개인정보를 화면에 펼쳐 두는 일이다. 무엇을 찾는지 정해야 줄이 선다.
  *
- * **판정하지 않는다.** `맡지 않은 당사자를 연 것 9건`은 사실이고 `의심스러운 접근 9건`은
- * 판정이다. 앞엣것만 쓴다 — 불일치 기능과 같은 규율이다. 붉은색도 경고 표시도 없다.
+ * 요약을 위에 따로 세우지 않는다 — **거르는 조건과 세는 조건이 같으므로 필터가 곧 숫자다.**
+ * `맡지 않은 당사자를 연 것 304건`은 버튼 이름이면서 그 자체로 점검 결과다.
  *
- * 값은 없다. 실은 항목 이름만 남는다.
+ * **판정하지 않는다.** 붉은색도 경고도 없다. 세기만 하고 판단은 사람이 한다.
  */
 import { useEffect, useMemo, useState } from 'react';
 import {
-  auditCsvHref,
   auditSummary,
   listAudit,
   type AuditKind,
@@ -19,7 +18,7 @@ import {
   type AuditRow,
   type AuditSummary,
 } from '../api.ts';
-import { Badge, Button, Card, Empty, Field, FormActions, Item, PageHeader, Select } from '../ui.tsx';
+import { Badge, Card, Empty, Field, PageHeader } from '../ui.tsx';
 
 const FIELD_LABEL: Record<string, string> = {
   name: '이름',
@@ -68,11 +67,8 @@ const KEY_LABEL: Record<string, string> = {
   delete_after: '지울 날',
 };
 
-/**
- * `fields` 한 조각을 사람 말로 편다. 셋을 담는다 — PII 항목 이름(`name`),
- * 동의 결정(`영역:grant`), 그 밖의 `열쇠=값` 메모(`role=worker`).
- */
-function fieldText(field: string): string {
+/** `fields` 한 조각을 사람 말로 편다. */
+export function fieldText(field: string): string {
   if (WORD[field]) return WORD[field];
   if (field.includes(':')) {
     const [domain, decision] = field.split(':');
@@ -93,242 +89,193 @@ const when = (iso: string): string =>
 
 const TONE: Record<string, 'mint' | 'lavender' | 'blue'> = { 열람: 'blue', 기록: 'mint', 운영: 'lavender' };
 
-const KINDS = ['전부', '열람', '기록', '운영'] as const;
-const DAYS: ReadonlyArray<[number, string]> = [
+export const AUDIT_DAYS: ReadonlyArray<[number, string]> = [
   [7, '지난 7일'],
   [30, '지난 30일'],
   [90, '지난 90일'],
   [365, '지난 1년'],
 ];
 
+export const AUDIT_KIND_TABS = ['전부', '열람', '기록', '운영'] as const;
+
+const LIMIT = 200;
+
 /** `embedded` 는 설정 › 시스템 안에서 쓸 때다. 제목이 두 번 뜨지 않게 한다. */
 export function AuditScreen({ embedded }: { embedded?: boolean } = {}) {
-  const [rows, setRows] = useState<AuditRow[] | null>(null);
+  const [days, setDays] = useState(30);
+  const [only, setOnly] = useState<'off_assignment' | 'download' | null>(null);
+  const [q, setQ] = useState('');
   const [sum, setSum] = useState<AuditSummary | null>(null);
+  const [rows, setRows] = useState<AuditRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const [days, setDays] = useState(30);
-  const [kind, setKind] = useState<(typeof KINDS)[number]>('전부');
-  // 한 줄을 눌러 좁힌 자리. 상세 패널 대신 조사를 잇는다(docs/audit-view.md).
-  const [actor, setActor] = useState<{ id: number; name: string } | null>(null);
-  const [subject, setSubject] = useState<{ caseId: number; name: string } | null>(null);
-  const [q, setQ] = useState('');
-  const [withNames, setWithNames] = useState(false);
+  // 세는 것은 기간만 따른다. 버튼에 붙는 숫자라 눌러도 바뀌지 않아야 한다.
+  useEffect(() => {
+    void auditSummary(days)
+      .then(setSum)
+      .catch(() => setSum(null));
+  }, [days]);
 
-  const query: AuditQuery = useMemo(
-    () => ({
-      days,
-      kind: kind === '전부' ? undefined : (kind as AuditKind),
-      actor: actor?.id,
-      case: subject?.caseId,
-    }),
-    [days, kind, actor, subject],
-  );
+  // **찾기 전에는 부르지도 않는다.** 글자를 치거나 눈여겨볼 것을 골라야 줄이 선다.
+  const asked = q.trim().length > 0 || only !== null;
+
+  const query: AuditQuery = useMemo(() => ({ days, only: only ?? undefined }), [days, only]);
 
   useEffect(() => {
+    if (!asked) {
+      setRows(null);
+      return;
+    }
     setRows(null);
     void listAudit(query)
       .then(setRows)
       .catch((e) => setError(e instanceof Error ? e.message : '불러오지 못했어요.'));
-  }, [query]);
-
-  // 요약은 좁히기와 무관하게 기간 전체를 본다 — 위층은 점검이고 아래층이 조사다.
-  useEffect(() => {
-    void auditSummary(days).then(setSum).catch(() => setSum(null));
-  }, [days]);
+  }, [query, asked]);
 
   // 글자 검색은 화면이 한다. 이름이 금고 암호문이라 서버가 이름으로 못 찾는다.
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    if (!needle || !rows) return (rows ?? []).slice(0, 200);
-    return rows
-      .filter((r) =>
-        [r.label, r.subject, r.pseudonym, r.actor_name, r.program_name, ...r.fields].some((v) =>
-          v?.toLowerCase().includes(needle),
-        ),
-      )
-      .slice(0, 200);
+    if (!rows) return [];
+    const matched = needle
+      ? rows.filter((r) =>
+          [r.label, r.subject, r.pseudonym, r.actor_name, r.program_name, ...r.fields].some((v) =>
+            v?.toLowerCase().includes(needle),
+          ),
+        )
+      : rows;
+    return matched.slice(0, LIMIT);
   }, [rows, q]);
 
-  if (error) {
-    return (
-      <Card>
-        <Empty>{error}</Empty>
-      </Card>
-    );
-  }
-
-  const narrowed = actor || subject;
+  const watch = (key: 'off_assignment' | 'download'): { label: string; count: number } => {
+    const w = sum?.watch.find((x) => x.key === key);
+    return { label: w?.label ?? '', count: w?.count ?? 0 };
+  };
 
   return (
     <>
       {!embedded && <PageHeader title="열람 기록" meta="누가 누구 것을 언제 봤는지. 본 값은 남기지 않아요" />}
 
       <Card
-        title="얼마나 있었나"
-        hint="고른 기간 전체예요. 아래에서 좁혀도 이 숫자는 그대로예요."
+        title="찾기"
+        hint="찾아야 줄이 나와요. 기록을 펼쳐 두지 않는 건 그 자체가 개인정보를 화면에 늘어놓는 일이기 때문이에요."
       >
-        <div className="info-tabs">
-          {DAYS.map(([d, label]) => (
-            <button type="button" key={d} className="wire-step" data-active={days === d} onClick={() => setDays(d)}>
-              {label}
-            </button>
-          ))}
-        </div>
-        {sum === null ? (
-          <Empty>세는 중이에요.</Empty>
-        ) : (
-          <>
-            <div className="wire-repeat-card">
-              <Item
-                title={`모두 ${sum.total.toLocaleString()}건`}
-                desc={sum.by_kind.map((k) => `${k.kind} ${k.count.toLocaleString()}`).join(' · ')}
-              />
-            </div>
-            {/* 눈여겨볼 것 — **세기만 한다.** 이상하다고 말하지 않는다. */}
-            {sum.watch.map((w) => (
-              <div className="wire-repeat-card" key={w.key}>
-                <Item title={`${w.label} ${w.count.toLocaleString()}건`} />
-              </div>
+        <Field label="기간" htmlFor="audit-days">
+          <div className="info-tabs" id="audit-days">
+            {AUDIT_DAYS.map(([d, label]) => (
+              <button type="button" key={d} className="wire-step" data-active={days === d} onClick={() => setDays(d)}>
+                {label}
+              </button>
             ))}
-          </>
-        )}
+          </div>
+        </Field>
+
+        <Field
+          label="눈여겨볼 것"
+          hint="고르면 그것만 봐요. 숫자는 고른 기간 전체예요 — 이상하다는 뜻이 아니라 센 수예요."
+        >
+          <div className="info-tabs">
+            {(['off_assignment', 'download'] as const).map((key) => {
+              const w = watch(key);
+              return (
+                <button
+                  type="button"
+                  key={key}
+                  className="wire-step"
+                  data-active={only === key}
+                  onClick={() => setOnly(only === key ? null : key)}
+                >
+                  {w.label} {w.count.toLocaleString()}건
+                </button>
+              );
+            })}
+            {sum && (
+              <button
+                type="button"
+                className="wire-step"
+                data-active={only === null}
+                onClick={() => setOnly(null)}
+              >
+                모두 {sum.total.toLocaleString()}건
+              </button>
+            )}
+          </div>
+        </Field>
+
+        <Field
+          label="글자로 찾기"
+          htmlFor="audit-q"
+          hint="당사자 이름 · 가명 · 실무자 이름 · 사업 이름 · 한 일(예: 내려받기, 동의, 배정)"
+        >
+          <input
+            id="audit-q"
+            type="search"
+            placeholder="김민희 · otter-001 · 내려받기 · 함께온기금"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+        </Field>
       </Card>
 
-      {sum !== null && sum.actors.length > 0 && (
-        <Card title="누가 얼마나 열었나" hint="이름을 누르면 그 사람이 한 일만 봐요.">
-          {sum.actors.map((a) => (
-            <div className="wire-repeat-card" key={a.actor_id}>
-              <Item
-                title={a.name}
-                desc={`당사자 ${a.cases}명 · ${a.hits.toLocaleString()}회 · 맡지 않은 당사자 ${a.off_assignment.toLocaleString()}회`}
-                action={
-                  <Button
-                    variant={actor?.id === a.actor_id ? 'primary' : 'secondary'}
-                    onClick={() =>
-                      setActor(actor?.id === a.actor_id ? null : { id: a.actor_id, name: a.name })
-                    }
-                  >
-                    {actor?.id === a.actor_id ? '좁히기 풀기' : '이 사람만'}
-                  </Button>
-                }
-              />
-            </div>
-          ))}
+      {error && (
+        <Card>
+          <Empty>{error}</Empty>
         </Card>
       )}
 
-      <Card
-        title={embedded ? '열람 기록 관리' : '최근 200건'}
-        hint="누가 누구의 것을 무엇 했는지예요. 목록을 여는 것은 남기지 않고, 같은 사람이 같은 당사자를 10분 안에 다시 열면 한 줄로 접어요."
-      >
-        <div className="info-tabs">
-          {KINDS.map((k) => (
-            <button type="button" key={k} className="wire-step" data-active={kind === k} onClick={() => setKind(k)}>
-              {k}
-            </button>
-          ))}
-        </div>
-
-        {narrowed && (
-          <div className="wire-repeat-card">
-            <Item
-              title={
-                <>
-                  {actor && <Badge tone="lavender">{actor.name}가 한 일</Badge>}{' '}
-                  {subject && <Badge tone="blue">{subject.name}에 대한 일</Badge>}
-                </>
-              }
-              desc="좁혀 보는 중이에요."
-              action={
-                <Button
-                  onClick={() => {
-                    setActor(null);
-                    setSubject(null);
-                  }}
-                >
-                  전체로
-                </Button>
-              }
-            />
-          </div>
-        )}
-
-        <Field label="찾기" htmlFor="audit-q" hint="이름 · 사업 · 한 일. 불러온 것 안에서 찾아요.">
-          <input id="audit-q" type="search" value={q} onChange={(e) => setQ(e.target.value)} />
-        </Field>
-
-        {rows === null && <Empty>불러오는 중이에요.</Empty>}
-        {rows !== null && shown.length === 0 && <Empty>해당하는 기록이 없어요.</Empty>}
-        {shown.map((r) => (
-          <Item
-            key={r.id}
-            title={
-              <>
-                <Badge tone={TONE[r.kind]}>{r.kind}</Badge> {r.label}
-                {r.subject || r.pseudonym ? ` · ${r.subject ?? r.pseudonym}` : ''}
-                {r.off_assignment && ' · 맡은 당사자가 아니에요'}
-              </>
-            }
-            desc={[
-              when(r.at),
-              r.by_participant ? '당사자 본인' : (r.actor_name ?? '알 수 없음'),
-              r.program_name,
-              r.fields.map(fieldText).join(' · '),
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-            action={
-              <>
-                {r.actor_id !== null && actor?.id !== r.actor_id && (
-                  <Button
-                    onClick={() => setActor({ id: r.actor_id as number, name: r.actor_name ?? '알 수 없음' })}
-                  >
-                    이 사람만
-                  </Button>
-                )}
-                {r.case_id !== null && subject?.caseId !== r.case_id && (
-                  <Button
-                    onClick={() =>
-                      setSubject({
-                        caseId: r.case_id as number,
-                        name: r.subject ?? r.pseudonym ?? '이 당사자',
-                      })
-                    }
-                  >
-                    이 당사자만
-                  </Button>
-                )}
-              </>
-            }
-          />
-        ))}
-        {rows !== null && rows.length > shown.length + 0 && shown.length === 200 && (
-          <Empty>200건까지 보여요. 기간을 줄이거나 좁혀서 보세요.</Empty>
-        )}
-      </Card>
-
-      <Card
-        title="내려받기"
-        hint="지금 걸어 둔 기간과 좁히기가 그대로 실려요. 어느 쪽으로 내렸는지가 열람 기록에 남아요."
-      >
-        <Field
-          label="당사자 표기"
-          htmlFor="csv-names"
-          control="select"
-          hint="기관 밖으로 내보낼 때는 가명이 안전해요. 실명 파일에는 우리 보유기간도 삭제 장치도 닿지 않아요."
+      {!asked ? (
+        <Card title="찾은 기록">
+          <Empty>위에서 찾아 주세요. 전체를 받아 보려면 `자료 다운로드`를 쓰세요.</Empty>
+        </Card>
+      ) : (
+        <Card
+          title={rows === null ? '찾는 중' : `찾은 기록 ${shown.length.toLocaleString()}건`}
+          hint={
+            shown.length >= LIMIT
+              ? `${LIMIT}건까지 보여요. 기간을 줄이거나 더 좁혀서 찾으세요.`
+              : '같은 사람이 같은 당사자를 10분 안에 다시 열면 한 줄로 접어요.'
+          }
         >
-          <select id="csv-names" value={withNames ? 'name' : 'pseudonym'} onChange={(e) => setWithNames(e.target.value === 'name')}>
-            <option value="pseudonym">가명만 — 외부 제출용</option>
-            <option value="name">이름 포함 — 기관 안에서만</option>
-          </select>
-        </Field>
-        <FormActions>
-          <a className="wire-button" data-variant="primary" href={auditCsvHref(query, withNames)}>
-            <span className="wire-button-text">CSV 로 내려받기</span>
-          </a>
-        </FormActions>
-      </Card>
+          {rows === null ? (
+            <Empty>찾는 중이에요.</Empty>
+          ) : shown.length === 0 ? (
+            <Empty>해당하는 기록이 없어요.</Empty>
+          ) : (
+            <div className="log-table-wrap">
+              <table className="log-table">
+                <thead>
+                  <tr>
+                    <th>언제</th>
+                    <th>묶음</th>
+                    <th>한 일</th>
+                    <th>한 사람</th>
+                    <th>대상</th>
+                    <th>사업</th>
+                    <th>자세히</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {shown.map((r) => (
+                    <tr key={r.id}>
+                      <td>{when(r.at)}</td>
+                      <td>
+                        <Badge tone={TONE[r.kind]}>{r.kind}</Badge>
+                      </td>
+                      <td>{r.label}</td>
+                      <td>{r.by_participant ? '당사자 본인' : (r.actor_name ?? '알 수 없음')}</td>
+                      <td>
+                        {r.subject ?? r.pseudonym ?? ''}
+                        {r.off_assignment && ' (맡은 당사자 아님)'}
+                      </td>
+                      <td>{r.program_name ?? ''}</td>
+                      <td>{r.fields.map(fieldText).join(' · ')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      )}
     </>
   );
 }

@@ -147,6 +147,11 @@ export type AuditQuery = {
   actorId?: number;
   /** 누구 것인가. 사례 하나로 좁힌다. */
   caseId?: number;
+  /**
+   * 눈여겨볼 것만 골라 보기(2026-09-16 Q). 세는 것과 거르는 것이 같은 조건이라
+   * 필터가 곧 숫자다 — 화면 위에 요약을 따로 세우지 않는다.
+   */
+  only?: 'off_assignment' | 'download';
   limit?: number;
 };
 
@@ -185,6 +190,15 @@ export async function listAudit(q: AuditQuery = {}): Promise<AuditRow[]> {
       and a.at > now() - (${days} || ' days')::interval
       and ${q.actorId ? sql`a.actor_id = ${q.actorId}` : sql`true`}
       and ${q.caseId ? sql`a.case_id = ${q.caseId}` : sql`true`}
+      and ${
+        q.only === 'download'
+          ? sql`a.action = 'document.read'`
+          : q.only === 'off_assignment'
+            ? sql`a.action = any(${liveActions('열람')})
+                  and a.actor_id is not null
+                  and a.actor_id is distinct from c.assigned_user_id`
+            : sql`true`
+      }
     order by a.at desc, a.id desc
     limit ${limit}`;
 
@@ -213,12 +227,12 @@ export type AuditSummary = {
   by_kind: Array<{ kind: AuditKind; count: number }>;
   /** 눈여겨볼 것. **판정하지 않는다 — 세기만 한다.** */
   watch: Array<{ key: 'off_assignment' | 'download'; label: string; count: number }>;
-  /** 사람별 요약. 누구를 들여다볼지 고르는 자리다. */
-  actors: Array<{ actor_id: number; name: string; cases: number; hits: number; off_assignment: number }>;
 };
 
 /**
- * 화면 맨 위 두 층 — 숫자와 눈여겨볼 것(2026-09-16 Q · docs/audit-view.md).
+ * 필터에 실을 숫자(2026-09-16 Q 2차). 화면 위에 요약을 따로 세우지 않는다 —
+ * **거르는 조건과 세는 조건이 같으므로 필터가 곧 숫자다.**
+ * `맡지 않은 당사자를 연 것 304건` 은 버튼 이름이면서 그 자체로 점검 결과다.
  *
  * `watch` 는 **사실을 센 것이지 판정이 아니다.** `담당 아닌 열람 9건`은 사실이고
  * `의심스러운 접근 9건`은 판정이다. 앞엣것만 낸다 — 불일치 기능과 같은 규율이다.
@@ -231,7 +245,7 @@ export async function auditSummary(days = DEFAULT_DAYS): Promise<AuditSummary> {
   const live = liveActions();
   const viewing = liveActions('열람');
 
-  const [byKind, off, downloads, actors] = await Promise.all([
+  const [byKind, off, downloads] = await Promise.all([
     sql<Array<{ action: AuditAction; count: number }>>`
       select action, count(*)::int as count from audit_log
       where action = any(${live}) and at > ${since} group by action`,
@@ -243,19 +257,6 @@ export async function auditSummary(days = DEFAULT_DAYS): Promise<AuditSummary> {
     sql<Array<{ count: number }>>`
       select count(*)::int as count from audit_log
       where action = 'document.read' and at > ${since}`,
-    sql<Array<{ actor_id: number; name: string; cases: number; hits: number; off_assignment: number }>>`
-      select a.actor_id, coalesce(u.name, '알 수 없음') as name,
-             count(distinct a.case_id)::int as cases,
-             count(*)::int as hits,
-             count(*) filter (
-               where c.id is not null and a.actor_id is distinct from c.assigned_user_id
-             )::int as off_assignment
-      from audit_log a
-      left join users u on u.id = a.actor_id
-      left join support_cases c on c.id = a.case_id
-      where a.action = any(${viewing}) and a.at > ${since} and a.actor_id is not null
-      group by a.actor_id, u.name
-      order by hits desc`,
   ]);
 
   const counts = new Map<AuditKind, number>();
@@ -274,7 +275,6 @@ export async function auditSummary(days = DEFAULT_DAYS): Promise<AuditSummary> {
       { key: 'off_assignment', label: '맡지 않은 당사자를 연 것', count: off[0]?.count ?? 0 },
       { key: 'download', label: '문서를 내려받은 것', count: downloads[0]?.count ?? 0 },
     ],
-    actors,
   };
 }
 

@@ -41,10 +41,17 @@ export type NewCardInput = {
   quote?: string | null;
 };
 
+/**
+ * 다음 가명. **세지 않고 뽑는다**(2026-09-16 버그 수정).
+ *
+ * 전에는 `count(*) + 1` 이었다. 당사자를 지우면 그 수가 줄어 이미 쓴 가명이 다시 나오고,
+ * 유일 제약에 걸려 등록이 500 으로 죽었다. 세는 것과 번호 매기는 것은 다른 일이다 —
+ * 시퀀스는 뒤로 가지 않는다.
+ */
 async function nextPseudonym(tx: typeof sql): Promise<string> {
-  const [{ count }] = await tx<{ count: string }[]>`select count(*)::text as count from participants`;
-  const n = Number(count) + 1;
-  return `${ANIMALS[n % ANIMALS.length]}-${String(n).padStart(3, '0')}`;
+  const [{ n }] = await tx<{ n: string }[]>`select nextval('participant_seq')::text as n`;
+  const seq = Number(n);
+  return `${ANIMALS[seq % ANIMALS.length]}-${String(seq).padStart(3, '0')}`;
 }
 
 export async function createCase(input: {

@@ -243,7 +243,13 @@ export type AuditRow = {
   program_name: string | null;
 };
 
-export type AuditQuery = { days?: number; kind?: AuditKind; actor?: number; case?: number };
+export type AuditQuery = {
+  days?: number;
+  kind?: AuditKind;
+  actor?: number;
+  case?: number;
+  only?: 'off_assignment' | 'download';
+};
 
 const auditParams = (q: AuditQuery): string => {
   const p = new URLSearchParams();
@@ -251,6 +257,7 @@ const auditParams = (q: AuditQuery): string => {
   if (q.kind) p.set('kind', q.kind);
   if (q.actor) p.set('actor', String(q.actor));
   if (q.case) p.set('case', String(q.case));
+  if (q.only) p.set('only', q.only);
   return p.toString();
 };
 
@@ -260,8 +267,7 @@ export type AuditSummary = {
   days: number;
   total: number;
   by_kind: Array<{ kind: AuditKind; count: number }>;
-  watch: Array<{ key: string; label: string; count: number }>;
-  actors: Array<{ actor_id: number; name: string; cases: number; hits: number; off_assignment: number }>;
+  watch: Array<{ key: 'off_assignment' | 'download'; label: string; count: number }>;
 };
 
 export const auditSummary = (days: number) => json<AuditSummary>(`/audit/summary?days=${days}`);

@@ -44,3 +44,20 @@ body { margin: 0; }
    최소 폭만 올려 1440 에서 3열이 열리지 않게 한다.
    3열이면 눈이 Z 자로 튀어 15초 다시보기가 한눈에 안 들어오고, 인테이크 선택지는 줄바꿈이 심해진다. */
 .two-col { --grid-min: 560px; }
+
+/* 열람 기록 표(2026-09-16 Q "엑셀 시트같은 걸로"). 정본에 표 부품이 없어 여기서 만든다 —
+   DESIGN.md §12 에 그 사실을 적었다. 세 줄로 흐르는 목록은 수백 건에서 훑을 수 없다.
+   칸 너비를 고정하지 않고 내용에 맡기되, 가로로 넘치면 표만 스크롤한다(본문은 안 밀린다). */
+.log-table-wrap { overflow-x: auto; }
+.log-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+.log-table th, .log-table td {
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line);
+}
+.log-table th { font-weight: 600; color: var(--sub); position: sticky; top: 0; background: var(--panel); }
+/* 마지막 칸(자세히)만 줄바꿈을 허용한다 — 나머지가 밀리지 않게 한다. */
+.log-table td:last-child { white-space: normal; min-width: 18ch; }
+.log-table tbody tr:hover { background: var(--gradient-hover); }

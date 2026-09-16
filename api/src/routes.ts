@@ -400,6 +400,7 @@ const auditQuery = (c: { req: { query: (k: string) => string | undefined } }) =>
   kind: AUDIT_KIND_LIST.find((k) => k === c.req.query('kind')),
   actorId: Number(c.req.query('actor')) || undefined,
   caseId: Number(c.req.query('case')) || undefined,
+  only: (['off_assignment', 'download'] as const).find((o) => o === c.req.query('only')),
 });
 
 app.get('/audit', async (c) => {

@@ -26,6 +26,7 @@ import {
   listPrograms,
   listRequests,
   listWorkers,
+  auditCsvHref,
   retireProgram,
   revokeInvite,
   saveOrg,
@@ -38,6 +39,7 @@ import {
   type Profile,
   type Program,
   type RequestRow,
+  type AuditKind,
   type Worker,
   type WorkerCase,
 } from '../api.ts';
@@ -55,7 +57,7 @@ import {
   Select,
 } from '../ui.tsx';
 import { setTheme, themeChoice, type ThemeChoice } from '../theme.ts';
-import { AuditScreen } from './audit.tsx';
+import { AUDIT_DAYS, AUDIT_KIND_TABS, AuditScreen } from './audit.tsx';
 
 const date = (s: string) => new Date(s).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
 
@@ -99,20 +101,31 @@ export const SETTINGS_GROUPS = [
   {
     key: 'system',
     title: '시스템',
+    // 시스템만 **한 계층 더 들어간다**(2026-09-16 Q). 안의 화면들이 각자 크고
+    // 서로 상관이 없어, 한 페이지에 쌓으면 무엇을 보러 왔는지 잃는다.
+    nested: true,
     items: [
       { key: 'connections', label: 'API 연결 관리', desc: 'AI·전사·데이터베이스가 붙어 있는지.', admin: true },
-      { key: 'audit', label: '열람 기록 관리', desc: '누가 언제 무엇을 열었는지.', admin: true },
+      { key: 'audit', label: '열람 기록 관리', desc: '누가 언제 무엇을 열었는지 찾아봐요.', admin: true },
       { key: 'consent', label: '동의서 관리', desc: '지금 쓰는 동의 문안.', admin: true },
+      { key: 'download', label: '자료 다운로드', desc: '기간·실무자·종류를 정해 CSV 로 받아요.', admin: true },
     ],
   },
 ] as const;
 
 export type SettingsItem = { key: string; label: string; desc: string; admin: boolean };
-export type SettingsGroup = { key: string; title: string; items: readonly SettingsItem[] };
+export type SettingsGroup = {
+  key: string;
+  title: string;
+  /** 참이면 항목을 펼치지 않고 목록으로 세운다. 눌러 들어간다. */
+  nested: boolean;
+  items: readonly SettingsItem[];
+};
 
 export const SETTINGS_GROUP_LIST: readonly SettingsGroup[] = SETTINGS_GROUPS.map((g) => ({
   key: g.key,
   title: g.title,
+  nested: 'nested' in g && g.nested === true,
   items: [...g.items],
 }));
 
@@ -151,14 +164,19 @@ function Pane({ item, me }: { item: SettingsItem; me: { id: number; name: string
       return <ConsentPane />;
     case 'audit':
       return <AuditScreen embedded />;
+    case 'download':
+      return <DownloadPane />;
     default:
       return null;
   }
 }
 
 /**
- * 묶음 한 페이지. **항목을 눌러 들어가지 않는다** — 내용이 그대로 선다.
- * 두 번 눌러야 닿던 것이 헷갈림의 원인이었다(2026-09-16 Q 3차).
+ * 설정 한 페이지.
+ *
+ * 보통은 묶음의 항목이 **그대로 펼쳐진다** — 두 번 눌러야 닿던 것이 헷갈림의 원인이었다.
+ * 다만 `nested` 묶음(시스템)은 안의 화면들이 각자 크고 서로 상관이 없어, 목록으로 세우고
+ * 눌러 들어간다(2026-09-16 Q). 한 페이지에 쌓으면 무엇을 보러 왔는지 잃는다.
  */
 export function SettingsScreen({
   module,
@@ -170,13 +188,20 @@ export function SettingsScreen({
   const isAdmin = me.role === 'admin';
   const groups = visibleGroups(isAdmin);
   const group = groups.find((g) => g.key === module);
+  // `시스템 › 열람 기록 관리`처럼 한 계층 안쪽을 가리키는 주소.
+  const nestedItem = groups
+    .filter((g) => g.nested)
+    .flatMap((g) => g.items.map((i) => ({ group: g, item: i })))
+    .find(({ item }) => item.key === module);
 
-  // 관리자 전용 묶음을 주소로 직접 열면 여기서 막힌다. 감추기는 안내이지 잠금이 아니다.
-  if (!group) {
-    const known = SETTINGS_GROUP_LIST.find((g) => g.key === module);
+  // 관리자 전용을 주소로 직접 열면 여기서 막힌다. 감추기는 안내이지 잠금이 아니다.
+  if (!group && !nestedItem) {
+    const known =
+      SETTINGS_GROUP_LIST.find((g) => g.key === module) ??
+      SETTINGS_GROUP_LIST.flatMap((g) => g.items).find((i) => i.key === module);
     return (
       <>
-        <PageHeader title={known?.title ?? '설정'} />
+        <PageHeader title={(known && ('title' in known ? known.title : known.label)) ?? '설정'} />
         <Card title="관리자만 볼 수 있어요">
           <Empty>이 설정은 기관 관리자가 다뤄요. 필요하면 관리자에게 말씀해 주세요.</Empty>
         </Card>
@@ -184,10 +209,42 @@ export function SettingsScreen({
     );
   }
 
+  if (nestedItem) {
+    return (
+      <>
+        <PageHeader
+          title={nestedItem.item.label}
+          meta={<a href={`#/settings/${nestedItem.group.key}`}>{nestedItem.group.title}으로</a>}
+        />
+        <Pane item={nestedItem.item} me={me} />
+      </>
+    );
+  }
+
+  const g = group as SettingsGroup;
+  if (g.nested) {
+    return (
+      <>
+        <PageHeader title={g.title} meta={isAdmin ? '관리자' : '실무자'} />
+        <Card title="무엇을 볼까요">
+          {g.items.map((i) => (
+            <div className="wire-repeat-card" key={i.key}>
+              <Item
+                title={i.label}
+                desc={i.desc}
+                action={<Button onClick={() => (window.location.hash = `#/settings/${i.key}`)}>열기</Button>}
+              />
+            </div>
+          ))}
+        </Card>
+      </>
+    );
+  }
+
   return (
     <>
-      <PageHeader title={group.title} meta={isAdmin ? '관리자' : '실무자'} />
-      {group.items.map((item) => (
+      <PageHeader title={g.title} meta={isAdmin ? '관리자' : '실무자'} />
+      {g.items.map((item) => (
         <Pane item={item} me={me} key={item.key} />
       ))}
     </>
@@ -671,6 +728,102 @@ function ConsentPane() {
           </div>
         ))
       )}
+    </Card>
+  );
+}
+
+/**
+ * 자료 다운로드(2026-09-16 Q). 화면에서 찾는 것과 파일로 받는 것을 갈랐다 —
+ * 찾기는 한 건을 짚는 일이고, 받기는 기간 전체를 통째로 옮기는 일이라 고를 것이 다르다.
+ *
+ * **이름을 실을지 여기서 고르고, 그 선택이 열람 기록에 남는다.** 실명이 든 파일은
+ * 기관 밖으로 나가는 순간 우리 보유기간도 삭제 장치도 닿지 않는다.
+ */
+function DownloadPane() {
+  const [days, setDays] = useState(30);
+  const [kind, setKind] = useState<'전부' | AuditKind>('전부');
+  const [actor, setActor] = useState('');
+  const [withNames, setWithNames] = useState(false);
+  const [workers, setWorkers] = useState<Worker[]>([]);
+
+  useEffect(() => {
+    void listWorkers().then(setWorkers);
+  }, []);
+
+  const href = auditCsvHref(
+    {
+      days,
+      kind: kind === '전부' ? undefined : kind,
+      actor: actor ? Number(actor) : undefined,
+    },
+    withNames,
+  );
+
+  return (
+    <Card
+      title="열람 기록 내려받기"
+      hint="고른 조건 그대로 CSV 로 받아요. 엑셀에서 바로 열려요."
+    >
+      <Field label="기간" htmlFor="dl-days">
+        <div className="info-tabs" id="dl-days">
+          {AUDIT_DAYS.map(([d, label]) => (
+            <button type="button" key={d} className="wire-step" data-active={days === d} onClick={() => setDays(d)}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </Field>
+
+      <Field label="실무자" htmlFor="dl-actor" control="select" hint="비워 두면 모두예요.">
+        <select id="dl-actor" value={actor} onChange={(e) => setActor(e.target.value)}>
+          <option value="">모두</option>
+          {workers
+            .filter((w) => !w.deactivated_at)
+            .map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}
+              </option>
+            ))}
+        </select>
+      </Field>
+
+      <Field label="기록 종류" htmlFor="dl-kind">
+        <div className="info-tabs" id="dl-kind">
+          {AUDIT_KIND_TABS.map((k) => (
+            <button
+              type="button"
+              key={k}
+              className="wire-step"
+              data-active={kind === k}
+              onClick={() => setKind(k as '전부' | AuditKind)}
+            >
+              {k}
+            </button>
+          ))}
+        </div>
+      </Field>
+
+      <Field
+        label="당사자 표기"
+        htmlFor="dl-names"
+        control="select"
+        hint="기관 밖으로 낼 때는 가명이 안전해요. 실명이 든 파일에는 우리 보유기간도 삭제 장치도 닿지 않아요. 어느 쪽으로 내렸는지가 열람 기록에 남아요."
+      >
+        <select
+          id="dl-names"
+          value={withNames ? 'name' : 'pseudonym'}
+          onChange={(e) => setWithNames(e.target.value === 'name')}
+        >
+          <option value="pseudonym">가명만 — 외부 제출용</option>
+          <option value="name">이름 포함 — 기관 안에서만</option>
+        </select>
+      </Field>
+
+      <FormActions>
+        <a className="wire-button" data-variant="primary" href={href}>
+          <span className="wire-button-text">CSV 로 내려받기</span>
+        </a>
+      </FormActions>
     </Card>
   );
 }
