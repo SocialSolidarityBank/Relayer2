@@ -619,7 +619,7 @@ test('스키마에 안 맞는 요청은 400 으로 답한다', async ({ page, re
   const cookie = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
 
   // 개발 서버는 /api 를 API 로 넘긴다(web/src/api.ts:44).
-  const res = await request.post('/api/cases', {
+  const res = await request.post(`${process.env.PLAYWRIGHT_API_PREFIX ?? '/api'}/cases`, {
     headers: { cookie, 'content-type': 'application/json' },
     data: { name: '검증', program_name: 'x', consents: [{ domain: '없는_영역', decision: 'grant' }] },
   });

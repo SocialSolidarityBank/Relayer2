@@ -206,8 +206,13 @@ const VOICE_DOMAINS: ReadonlySet<string> = new Set([
  */
 export const voiceEnabled = (): boolean => process.env.VOICE_ENABLED === '1';
 
-/** 전사까지 되는가. 켜져 있어도 키가 없으면 전사만 503 이다. */
-export const sttEnabled = (): boolean => voiceEnabled() && Boolean(process.env.AZURE_SPEECH_KEY);
+/** 전사까지 되는가. 키와 엔드포인트(직접 또는 지역)를 모두 설정해야 한다. */
+export const sttEnabled = (): boolean =>
+  voiceEnabled() &&
+  Boolean(process.env.AZURE_SPEECH_KEY?.trim()) &&
+  Boolean(
+    process.env.AZURE_SPEECH_ENDPOINT?.trim() || process.env.AZURE_SPEECH_REGION?.trim(),
+  );
 
 export const activeDomains = (): readonly ConsentDomain[] =>
   voiceEnabled() ? CONSENT_DOMAINS : CONSENT_DOMAINS.filter((d) => !VOICE_DOMAINS.has(d));

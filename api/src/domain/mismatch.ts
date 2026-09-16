@@ -14,9 +14,12 @@ export type Mismatch = {
   kind: MismatchKind;
   /** 무엇이 어긋났는지. 사람이 읽는 한 줄이다. */
   label: string;
-  /** 한쪽 값과 다른 쪽 값. 어느 쪽이 맞다고 말하지 않는다. */
+  /** 비교한 정규화 값. 어느 쪽이 맞다고 말하지 않는다. */
   left: string;
   right: string;
+  /** 화면에서 원문 맥락을 확인할 수 있는 실제 출처 조각. */
+  leftSnippet?: string;
+  rightSnippet?: string;
   /** 어디서 왔는지. 회차간이면 회차 번호가 붙는다. */
   leftFrom: string;
   rightFrom: string;
@@ -27,26 +30,47 @@ export type Mismatch = {
  * 건수·금액·기간·횟수. 문장이 달라도 숫자가 같으면 어긋난 것이 아니다.
  */
 const NUMBER_FACTS: ReadonlyArray<{ label: string; re: RegExp }> = [
-  { label: '연체 건수', re: /연체[^0-9]{0,6}(\d+)\s*건/g },
-  { label: '금액', re: /(\d[\d,]*)\s*만\s*원/g },
-  { label: '월세', re: /월세[^0-9]{0,6}(\d[\d,]*)\s*만/g },
+  { label: '연체 건수', re: /연체[^0-9]{0,8}(\d+)\s*건/g },
+  { label: '월세', re: /월세[^0-9]{0,8}(\d[\d,]*)\s*만\s*원?/g },
+  { label: '보증금', re: /보증금[^0-9]{0,8}(\d[\d,]*)\s*만\s*원?/g },
+  { label: '대출금', re: /대출(?:금|액)?[^0-9]{0,8}(\d[\d,]*)\s*만\s*원?/g },
+  { label: '채무액', re: /(?:채무|빚)[^0-9]{0,8}(\d[\d,]*)\s*만\s*원?/g },
+  { label: '지원금', re: /지원금[^0-9]{0,8}(\d[\d,]*)\s*만\s*원?/g },
+  { label: '소득', re: /(?:소득|수입|월급|급여)[^0-9]{0,8}(\d[\d,]*)\s*만\s*원?/g },
+  { label: '총 금액', re: /(?:합계|총액|총금액)[^0-9]{0,8}(\d[\d,]*)\s*만\s*원?/g },
   { label: '밀린 개월', re: /(\d+)\s*(?:달|개월)\s*(?:밀|연체|미납)/g },
   { label: '근무 일수', re: /주\s*(\d)\s*일/g },
   { label: '통원 주기', re: /(\d+)\s*주에\s*한\s*번/g },
 ];
 
 type Fact = { label: string; value: string };
+type DetailedFact = Fact & { snippet: string };
 
-/** 한 덩어리 글에서 숫자 사실을 뽑는다. 같은 이름이 여러 번 나오면 **마지막 것**을 쓴다 —
- *  말을 고쳐 하는 일이 잦고, 나중 말이 정정이다. */
-export function extractFacts(text: string): Fact[] {
-  const found = new Map<string, string>();
+const sourceSnippet = (text: string, at: number, length: number): string =>
+  text
+    .slice(Math.max(0, at - 18), Math.min(text.length, at + length + 18))
+    .replace(/\s+/g, ' ')
+    .trim();
+
+/** 같은 이름이 여러 번 나오면 마지막 것을 쓴다 — 나중 말이 정정이다. */
+function detailedFacts(text: string): DetailedFact[] {
+  const found = new Map<string, DetailedFact>();
   for (const { label, re } of NUMBER_FACTS) {
-    for (const m of text.matchAll(new RegExp(re.source, re.flags))) {
-      found.set(label, m[1].replace(/,/g, ''));
+    for (const match of text.matchAll(new RegExp(re.source, re.flags))) {
+      const value = match[1];
+      if (!value) continue;
+      found.set(label, {
+        label,
+        value: value.replace(/,/g, ''),
+        snippet: sourceSnippet(text, match.index ?? 0, match[0].length),
+      });
     }
   }
-  return [...found].map(([label, value]) => ({ label, value }));
+  return [...found.values()];
+}
+
+export function extractFacts(text: string): Fact[] {
+  return detailedFacts(text).map(({ label, value }) => ({ label, value }));
 }
 
 /**
@@ -54,17 +78,19 @@ export function extractFacts(text: string): Fact[] {
  * 한쪽에만 있는 것은 불일치가 아니다 — 안 적었을 뿐이고, 그건 흔하다.
  */
 export function voiceVsWritten(transcript: string, written: string): Mismatch[] {
-  const left = extractFacts(transcript);
-  const right = new Map(extractFacts(written).map((f) => [f.label, f.value]));
+  const left = detailedFacts(transcript);
+  const right = new Map(detailedFacts(written).map((f) => [f.label, f]));
   const out: Mismatch[] = [];
   for (const f of left) {
     const other = right.get(f.label);
-    if (other === undefined || other === f.value) continue;
+    if (!other || other.value === f.value) continue;
     out.push({
       kind: 'voice_vs_written',
       label: f.label,
       left: f.value,
-      right: other,
+      right: other.value,
+      leftSnippet: f.snippet,
+      rightSnippet: other.snippet,
       leftFrom: '녹음',
       rightFrom: '수기 기록',
     });
@@ -81,17 +107,19 @@ export function acrossSessions(
   previous: { seq: number; text: string },
   current: { seq: number; text: string },
 ): Mismatch[] {
-  const before = extractFacts(previous.text);
-  const after = new Map(extractFacts(current.text).map((f) => [f.label, f.value]));
+  const before = detailedFacts(previous.text);
+  const after = new Map(detailedFacts(current.text).map((f) => [f.label, f]));
   const out: Mismatch[] = [];
   for (const f of before) {
     const now = after.get(f.label);
-    if (now === undefined || now === f.value) continue;
+    if (!now || now.value === f.value) continue;
     out.push({
       kind: 'across_sessions',
       label: f.label,
       left: f.value,
-      right: now,
+      right: now.value,
+      leftSnippet: f.snippet,
+      rightSnippet: now.snippet,
       leftFrom: `${previous.seq}회차`,
       rightFrom: `${current.seq}회차`,
     });

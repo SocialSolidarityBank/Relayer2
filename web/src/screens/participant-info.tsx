@@ -231,23 +231,23 @@ function Consents({ caseId }: { caseId: number }) {
  * 당사자 열람 링크(P2). 당사자는 로그인하지 않는다 — 링크와 코드를 전해 준다.
  * **코드는 발급 직후 한 번만 보인다.** 저장해 두지 않는다(해시만 남는다).
  */
-function Access({ participantId }: { participantId: number }) {
+function Access({ caseId }: { caseId: number }) {
   const [state, setState] = useState<AccessState | null>(null);
   const [issued, setIssued] = useState<{ token: string; code: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    void getAccess(participantId).then(setState);
-  }, [participantId]);
+    void getAccess(caseId).then(setState);
+  }, [caseId]);
 
   const link = issued ? `${window.location.origin}/#/access/${issued.token}` : null;
 
   const issue = async () => {
     setBusy(true);
     try {
-      const next = await issueAccess(participantId);
+      const next = await issueAccess(caseId);
       setIssued({ token: next.token, code: next.code });
-      setState(await getAccess(participantId));
+      setState(await getAccess(caseId));
     } finally {
       setBusy(false);
     }
@@ -256,9 +256,9 @@ function Access({ participantId }: { participantId: number }) {
   const revoke = async () => {
     setBusy(true);
     try {
-      await revokeAccess(participantId);
+      await revokeAccess(caseId);
       setIssued(null);
-      setState(await getAccess(participantId));
+      setState(await getAccess(caseId));
     } finally {
       setBusy(false);
     }
@@ -456,7 +456,7 @@ function Info({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
 
       <Documents caseId={caseId} />
 
-      <Access participantId={detail.case.participant_id} />
+      <Access caseId={caseId} />
 
       <Card title="상담 종결">
         {detail.closure ? (

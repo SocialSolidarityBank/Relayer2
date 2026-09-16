@@ -97,7 +97,7 @@ for (const u of junkUsers) {
   await sql`delete from invites where accepted_by = ${u.id} or created_by = ${u.id}`;
   await sql`delete from assignment_requests where requested_by = ${u.id} or decided_by = ${u.id}`;
   await sql`delete from audit_log where actor_id = ${u.id}`;
-  await sql`update support_cases set assigned_user_id = null where assigned_user_id = ${u.id}`;
+  await sql`delete from case_assignments where user_id = ${u.id}`;
   await sql`delete from users where id = ${u.id}`;
 }
 

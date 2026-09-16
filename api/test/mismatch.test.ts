@@ -39,6 +39,20 @@ describe('음성·수기 기록 불일치', () => {
   it('문장이 달라도 수가 같으면 어긋난 것이 아니다', () => {
     expect(voiceVsWritten('연체가 4건이나 된다고 함.', '연체 4건.')).toEqual([]);
   });
+
+  it('서로 다른 돈 종류를 하나의 금액으로 섞지 않는다', () => {
+    expect(voiceVsWritten('대출금 300만 원이라고 함.', '지원금 400만 원을 받음.')).toEqual([]);
+  });
+
+  it('같은 돈 종류가 다르면 실제 출처 조각을 함께 낸다', () => {
+    const [found] = voiceVsWritten(
+      '현재 대출금은 300만 원이라고 말함.',
+      '확인한 대출금은 400만 원임.',
+    );
+    expect(found.label).toBe('대출금');
+    expect(found.leftSnippet).toContain('대출금은 300만 원');
+    expect(found.rightSnippet).toContain('대출금은 400만 원');
+  });
 });
 
 describe('회차간 기록 불일치', () => {

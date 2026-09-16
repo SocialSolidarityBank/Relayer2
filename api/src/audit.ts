@@ -24,6 +24,7 @@ export const AUDIT_KINDS = {
   'case.briefing': { kind: '열람', label: '15초 다시보기 조회', fold: true },
   'participant.view': { kind: '열람', label: '당사자 본인 열람', fold: true },
   'document.read': { kind: '열람', label: '서면 문서 내려받기', fold: false },
+  'voice.read': { kind: '열람', label: '녹음 재생', fold: false },
   'audit.view': { kind: '열람', label: '열람 기록 조회', fold: true },
   'audit.export': { kind: '열람', label: '열람 기록 내려받기', fold: false },
 
@@ -136,7 +137,9 @@ type RawRow = {
   enc_name: string | null;
   case_id: number | null;
   program_name: string | null;
-  assigned_user_id: number | null;
+  case_exists: boolean;
+  actor_assigned: boolean;
+  viewer_assigned: boolean;
 };
 
 export type AuditQuery = {
@@ -153,6 +156,8 @@ export type AuditQuery = {
    */
   only?: 'off_assignment' | 'download';
   limit?: number;
+  /** 열람 기록을 보는 관리자. 맡지 않은 사례의 실명·자유 글은 이 화면에도 내지 않는다. */
+  viewerId?: number;
 };
 
 const DEFAULT_DAYS = 30;
@@ -165,9 +170,9 @@ const liveActions = (kind?: AuditKind): AuditAction[] =>
 /**
  * 열람 기록 조회. 관리자만 본다(라우트에서 막는다).
  *
- * **이름은 표에 없다.** 감사가 또 하나의 개인정보 창고가 되면 안 되므로 `participant_id` 만
- * 두고, 볼 때 금고에서 꺼낸다. 가명만 보여 주면 관리자가 당사자 목록과 맞춰 볼 수 없어
- * "누구 것을 봤나"에 답하지 못한다 — 그것이 이 화면의 존재 이유다.
+ * **이름은 표에 없다.** 맡은 사례만 조회할 때 금고에서 꺼낸다. 맡지 않은 사례는
+ * 관리자에게도 가명·사업·행위·필드 이름만 보여 준다 — 감사 화면이 상담 자료 우회로가
+ * 되어서는 안 된다.
  *
  * 그래서 **이 화면을 연 것 자체도 남긴다**(`audit.view`).
  *
@@ -179,7 +184,17 @@ export async function listAudit(q: AuditQuery = {}): Promise<AuditRow[]> {
   const limit = Math.min(q.limit ?? 500, HARD_LIMIT);
   const rows = await sql<RawRow[]>`
     select a.id, a.at, a.action, a.fields, a.actor_id, u.name as actor_name,
-           p.pseudonym, v.enc_name, a.case_id, c.program_name, c.assigned_user_id
+           p.pseudonym, v.enc_name, a.case_id, c.program_name,
+           (c.id is not null) as case_exists,
+           exists (select 1 from case_assignments ca
+                   where ca.case_id = a.case_id and ca.user_id = a.actor_id) as actor_assigned,
+           exists (
+             select 1 from case_assignments ca
+             join support_cases vc on vc.id = ca.case_id
+             where ca.user_id = ${q.viewerId ?? 0}
+               and (ca.case_id = a.case_id
+                    or (a.case_id is null and vc.participant_id = p.id))
+           ) as viewer_assigned
     from audit_log a
     left join users u on u.id = a.actor_id
     left join support_cases c on c.id = a.case_id
@@ -195,27 +210,36 @@ export async function listAudit(q: AuditQuery = {}): Promise<AuditRow[]> {
           ? sql`a.action = 'document.read'`
           : q.only === 'off_assignment'
             ? sql`a.action = any(${liveActions('열람')})
+                  and a.case_id is not null and c.id is not null
                   and a.actor_id is not null
-                  and a.actor_id is distinct from c.assigned_user_id`
+                  and not exists (
+                    select 1 from case_assignments ca
+                    where ca.case_id = a.case_id and ca.user_id = a.actor_id
+                  )`
             : sql`true`
       }
     order by a.at desc, a.id desc
     limit ${limit}`;
 
-  return rows.map(({ enc_name, assigned_user_id, ...row }) => {
+  return rows.map(({ enc_name, case_exists, actor_assigned, viewer_assigned, ...row }) => {
     const spec = AUDIT_KINDS[row.action];
+    const canSeeClinical = (row.case_id === null && enc_name === null) || viewer_assigned;
     return {
       ...row,
+      // 맡지 않은 관리자는 무슨 항목을 다뤘는지는 알되 값은 못 본다.
+      // `label=진단서` 같은 자유 글은 `label` 만 남긴다.
+      fields: canSeeClinical ? row.fields : row.fields.map((field) => field.split('=', 1)[0]),
       kind: spec.kind,
       label: spec.label,
       by_participant: row.actor_id === null,
-      subject: decryptPii(enc_name),
+      subject: canSeeClinical ? decryptPii(enc_name) : null,
       // 열람에만 뜻이 있다. 기록·운영은 원래 담당 밖에서 하는 일이 있다(관리자 배정 등).
       off_assignment:
         spec.kind === '열람' &&
         row.actor_id !== null &&
         row.case_id !== null &&
-        row.actor_id !== assigned_user_id,
+        case_exists &&
+        !actor_assigned,
     };
   });
 }
@@ -253,7 +277,11 @@ export async function auditSummary(days = DEFAULT_DAYS): Promise<AuditSummary> {
       select count(*)::int as count
       from audit_log a join support_cases c on c.id = a.case_id
       where a.action = any(${viewing}) and a.at > ${since}
-        and a.actor_id is not null and a.actor_id is distinct from c.assigned_user_id`,
+        and a.actor_id is not null
+        and not exists (
+          select 1 from case_assignments ca
+          where ca.case_id = a.case_id and ca.user_id = a.actor_id
+        )`,
     sql<Array<{ count: number }>>`
       select count(*)::int as count from audit_log
       where action = 'document.read' and at > ${since}`,

@@ -88,6 +88,9 @@ export type SupportCase = {
   sessions_planned: number | null;
 };
 
+/** 사례를 맡은 사람. 공동 배정이라 한 사례에 여럿일 수 있다(2026-09-16 Q). */
+export type Assignee = { id: number; name: string };
+
 /** 카드 결과를 추적하는 종류. 사실·판단 카드는 열고 닫지 않는다. */
 export const TRACKED_KINDS: Record<CardKind, boolean> = {
   fact: false,

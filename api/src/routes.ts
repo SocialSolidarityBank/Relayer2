@@ -12,7 +12,12 @@ import {
   approveTranscript,
   draftTranscript,
   latestTranscript,
+  listRecordings,
+  readRecordingAudio,
+  RecordingRejected,
   saveRecording,
+  SPEECH_MAX_BYTES,
+  speechStatus,
   SttUnavailable,
 } from './stt.ts';
 import { AiUnavailable, approveDraft, draftSession, latestDraft } from './ai.ts';
@@ -30,6 +35,14 @@ import { LIFE_AREAS } from './domain/types.ts';
 import * as service from './service.ts';
 import * as settings from './settings.ts';
 import { sql } from './db.ts';
+import {
+  AccessDenied,
+  assertCaseAccess,
+  caseIdOfDocument,
+  caseIdOfRecording,
+  caseIdOfSession,
+  NotFound,
+} from './access.ts';
 
 // 영역은 국가 표준 10종+기타 하나뿐이다(SPEC §8). 여기에 목록을 또 적으면 이번처럼 어긋난다.
 const area = z.enum(LIFE_AREAS);
@@ -55,13 +68,17 @@ export const app = new Hono<{ Variables: { actor: Actor } }>();
 
 // 동의 게이트에 걸린 저장은 409 다. 잘못 쓴 요청(400)도 서버 잘못(500)도 아니다.
 app.onError((err, c) => {
+  if (err instanceof NotFound) return c.json({ error: err.message }, 404);
+  if (err instanceof AccessDenied) return c.json({ error: err.message }, 403);
   if (err instanceof service.ConsentRequired) return c.json({ error: err.message }, 409);
   // AI 는 없어도 제품이 돌아간다. 없는 것을 있는 것처럼 답하지 않는다.
   if (err instanceof AiUnavailable || err instanceof SttUnavailable) {
     return c.json({ error: err.message }, 503);
   }
   // 받지 않는 파일은 **보낸 쪽 잘못**이다. 서버 고장이 아니다.
-  if (err instanceof DocumentRejected) return c.json({ error: err.message }, 400);
+  if (err instanceof DocumentRejected || err instanceof RecordingRejected) {
+    return c.json({ error: err.message }, 400);
+  }
   // 입력이 스키마에 안 맞으면 **보낸 쪽 잘못**이다. 500 으로 답하면 서버가 고장난 줄 안다.
   // 어느 자리가 틀렸는지만 알려 준다 — 보낸 값은 되돌려주지 않는다(PII 가 섞여 있다).
   if (err instanceof z.ZodError) {
@@ -161,6 +178,41 @@ app.use('*', async (c, next) => {
   c.set('actor', actor);
   await next();
 });
+const positiveId = (raw: string): number => {
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value <= 0) throw new NotFound('찾지 못했어요.');
+  return value;
+};
+
+const caseAccess = async (raw: string, actorId: number): Promise<number> => {
+  const caseId = positiveId(raw);
+  await assertCaseAccess(caseId, actorId);
+  return caseId;
+};
+
+const sessionAccess = async (raw: string, actorId: number): Promise<number> => {
+  const sessionId = positiveId(raw);
+  const caseId = await caseIdOfSession(sessionId);
+  if (!caseId) throw new NotFound('회차를 찾지 못했어요.');
+  await assertCaseAccess(caseId, actorId);
+  return sessionId;
+};
+
+const recordingAccess = async (raw: string, actorId: number): Promise<number> => {
+  const recordingId = positiveId(raw);
+  const caseId = await caseIdOfRecording(recordingId);
+  if (!caseId) throw new NotFound('녹음을 찾지 못했어요.');
+  await assertCaseAccess(caseId, actorId);
+  return recordingId;
+};
+
+const documentAccess = async (raw: string, actorId: number): Promise<number> => {
+  const documentId = positiveId(raw);
+  const caseId = await caseIdOfDocument(documentId);
+  if (!caseId) throw new NotFound('문서를 찾지 못했어요.');
+  await assertCaseAccess(caseId, actorId);
+  return documentId;
+};
 
 app.get('/me', (c) => c.json(c.get('actor')));
 
@@ -188,6 +240,7 @@ app.post('/cases', async (c) => {
 });
 
 app.put('/cases/:id/intake', async (c) => {
+  const caseId = await caseAccess(c.req.param('id'), c.get('actor').id);
   const body = z
     .object({
       held_at: z.string().optional(),
@@ -198,10 +251,11 @@ app.put('/cases/:id/intake', async (c) => {
       cards: z.array(cardInput).optional(),
     })
     .parse(await c.req.json());
-  return c.json(await service.saveIntake(Number(c.req.param('id')), body));
+  return c.json(await service.saveIntake(caseId, body));
 });
 
 app.post('/cases/:id/sessions', async (c) => {
+  const caseId = await caseAccess(c.req.param('id'), c.get('actor').id);
   const body = z
     .object({
       scheduled_at: z.string(),
@@ -214,20 +268,23 @@ app.post('/cases/:id/sessions', async (c) => {
   if (body.place && body.method !== 'in_person') {
     return c.json({ error: '상담 장소는 대면일 때만 적어요.' }, 400);
   }
-  return c.json(await service.planSession(Number(c.req.param('id')), body), 201);
+  return c.json(await service.planSession(caseId, body), 201);
 });
 
 app.get('/cases/:id', async (c) => {
-  const found = await service.getCase(Number(c.req.param('id')));
-  return found ? c.json(found) : c.json({ error: 'not found' }, 404);
+  const caseId = await caseAccess(c.req.param('id'), c.get('actor').id);
+  const found = await service.getCase(caseId);
+  return found ? c.json(found) : c.json({ error: '사례를 찾지 못했어요.' }, 404);
 });
 
 app.get('/sessions/:id', async (c) => {
-  const found = await service.getSessionRecord(Number(c.req.param('id')));
+  const sessionId = await sessionAccess(c.req.param('id'), c.get('actor').id);
+  const found = await service.getSessionRecord(sessionId);
   return found ? c.json(found) : c.json({ error: '회차를 찾지 못했어요.' }, 404);
 });
 
 app.patch('/sessions/:id', async (c) => {
+  const sessionId = await sessionAccess(c.req.param('id'), c.get('actor').id);
   const body = z
     .object({
       held_at: z.string().optional(),
@@ -242,7 +299,7 @@ app.patch('/sessions/:id', async (c) => {
       is_closing: z.boolean().optional(),
     })
     .parse(await c.req.json());
-  return c.json(await service.recordSession(Number(c.req.param('id')), { ...body, actorId: c.get('actor').id }));
+  return c.json(await service.recordSession(sessionId, { ...body, actorId: c.get('actor').id }));
 });
 
 const consentInput = z.object({
@@ -251,13 +308,14 @@ const consentInput = z.object({
 });
 
 app.get('/cases/:id/consents', async (c) => {
-  const found = await service.getConsents(Number(c.req.param('id')));
+  const caseId = await caseAccess(c.req.param('id'), c.get('actor').id);
+  const found = await service.getConsents(caseId);
   return found ? c.json(found) : c.json({ error: '사례를 찾지 못했어요.' }, 404);
 });
 
 app.post('/cases/:id/consents', async (c) => {
+  const caseId = await caseAccess(c.req.param('id'), c.get('actor').id);
   const body = consentInput.parse(await c.req.json());
-  const caseId = Number(c.req.param('id'));
   const view = await service.recordConsent(caseId, { ...body, actorId: c.get('actor').id });
   // 동의·철회는 열람이 아니지만 남긴다 — 누가 언제 받았는지가 곧 증거다.
   await audit({
@@ -270,12 +328,14 @@ app.post('/cases/:id/consents', async (c) => {
 });
 
 app.get('/cases/:id/intake', async (c) => {
-  const found = await service.getIntake(Number(c.req.param('id')));
+  const caseId = await caseAccess(c.req.param('id'), c.get('actor').id);
+  const found = await service.getIntake(caseId);
   return found ? c.json(found) : c.json({ error: '사례를 찾지 못했어요.' }, 404);
 });
 
 app.get('/cases/:id/detail', async (c) => {
-  const detail = await service.getCaseDetail(Number(c.req.param('id')));
+  const caseId = await caseAccess(c.req.param('id'), c.get('actor').id);
+  const detail = await service.getCaseDetail(caseId);
   if (!detail) return c.json({ error: '사례를 찾지 못했어요.' }, 404);
   // 당사자 정보는 금고에서 이름·연락처·이메일을 꺼내 싣는다. 실은 항목만 적는다.
   const fields = (['name', 'phone', 'email'] as const).filter((k) => detail.participant[k]);
@@ -304,37 +364,42 @@ app.post('/access/open', async (c) => {
   return c.json({ error: message }, 401);
 });
 
-app.get('/participants/:id/access', async (c) =>
-  c.json(await accessState(Number(c.req.param('id')))),
-);
+app.get('/cases/:id/access', async (c) => {
+  const caseId = await caseAccess(c.req.param('id'), c.get('actor').id);
+  return c.json(await accessState(caseId, c.get('actor').id));
+});
 
-app.post('/participants/:id/access', async (c) => {
-  const participantId = Number(c.req.param('id'));
-  const issued = await issueAccess(participantId, c.get('actor').id);
+app.post('/cases/:id/access', async (c) => {
+  const caseId = await caseAccess(c.req.param('id'), c.get('actor').id);
+  const issued = await issueAccess(caseId, c.get('actor').id);
   await audit({
     actorId: c.get('actor').id,
     action: 'consent.record',
-    participantId,
+    caseId,
     fields: ['access:issue'],
   });
   return c.json(issued);
 });
 
-app.delete('/participants/:id/access', async (c) => {
-  await revokeAccess(Number(c.req.param('id')));
+app.delete('/cases/:id/access', async (c) => {
+  const caseId = await caseAccess(c.req.param('id'), c.get('actor').id);
+  await revokeAccess(caseId, c.get('actor').id);
   return c.json({ ok: true });
 });
 
 app.get('/sessions/:id/draft', async (c) => {
-  const found = await latestDraft(Number(c.req.param('id')));
+  const sessionId = await sessionAccess(c.req.param('id'), c.get('actor').id);
+  const found = await latestDraft(sessionId);
   return c.json(found ?? { status: 'none' });
 });
 
-app.post('/sessions/:id/draft', async (c) =>
-  c.json(await draftSession(Number(c.req.param('id')), c.get('actor').id)),
-);
+app.post('/sessions/:id/draft', async (c) => {
+  const sessionId = await sessionAccess(c.req.param('id'), c.get('actor').id);
+  return c.json(await draftSession(sessionId, c.get('actor').id));
+});
 
 app.post('/sessions/:id/draft/approve', async (c) => {
+  const sessionId = await sessionAccess(c.req.param('id'), c.get('actor').id);
   const body = z
     .object({
       summary: z.string().optional(),
@@ -345,42 +410,83 @@ app.post('/sessions/:id/draft/approve', async (c) => {
       questions: z.array(z.string()).optional(),
     })
     .parse(await c.req.json().catch(() => ({})));
-  return c.json(await approveDraft(Number(c.req.param('id')), c.get('actor').id, body));
+  return c.json(await approveDraft(sessionId, c.get('actor').id, body));
 });
+
+app.get('/speech/status', (c) => c.json(speechStatus()));
 
 /**
  * 음성 경로(P4). 녹음은 본문 그대로 받는다 — multipart 로 감싸 봐야 바이트는 같고,
  * 파싱 단계가 하나 늘면 그만큼 실패할 자리가 는다.
  */
 app.post('/sessions/:id/recordings', async (c) => {
+  const sessionId = await sessionAccess(c.req.param('id'), c.get('actor').id);
+  const declaredBytes = Number(c.req.header('content-length'));
+  if (Number.isFinite(declaredBytes) && declaredBytes > SPEECH_MAX_BYTES) {
+    throw new RecordingRejected(
+      `파일이 너무 커요. ${Math.floor(SPEECH_MAX_BYTES / 1024 / 1024)}MB 까지 받아요.`,
+    );
+  }
+  const rawDurationMs = c.req.query('duration_ms');
+  const contentType = c.req.header('content-type') ?? '';
+  // 권한을 먼저 확인하고 나서야 바이트를 읽는다. 맡지 않은 요청으로 큰 파일을
+  // 읽거나 디스크·외부 제공자를 건드리지 않는다.
   const audio = new Uint8Array(await c.req.arrayBuffer());
-  const ms = Number(c.req.query('duration_ms'));
   return c.json(
-    await saveRecording(Number(c.req.param('id')), audio, c.get('actor').id, Number.isFinite(ms) ? ms : undefined),
+    await saveRecording(sessionId, audio, c.get('actor').id, {
+      durationMs: rawDurationMs === undefined ? undefined : Number(rawDurationMs),
+      contentType,
+    }),
     201,
   );
+});
+
+app.get('/sessions/:id/recordings', async (c) => {
+  const sessionId = await sessionAccess(c.req.param('id'), c.get('actor').id);
+  return c.json(await listRecordings(sessionId, c.get('actor').id));
+});
+
+app.get('/recordings/:id/audio', async (c) => {
+  const recordingId = await recordingAccess(c.req.param('id'), c.get('actor').id);
+  const { bytes, content_type } = await readRecordingAudio(recordingId, c.get('actor').id);
+  return new Response(bytes, {
+    headers: {
+      'content-type': content_type,
+      'content-length': String(bytes.byteLength),
+      'content-disposition': 'inline',
+      'cache-control': 'no-store',
+    },
+  });
 });
 
 /**
  * 회차의 불일치 둘. 한 목록에 섞지 않는다(요구 23).
  * 판정하지 않는다 — 달라졌다는 사실만 낸다. 고치는 것은 사람이다.
  */
-app.get('/sessions/:id/mismatches', async (c) =>
-  c.json(await service.getMismatches(Number(c.req.param('id')))),
-);
+app.get('/sessions/:id/mismatches', async (c) => {
+  const sessionId = await sessionAccess(c.req.param('id'), c.get('actor').id);
+  return c.json(await service.getMismatches(sessionId));
+});
 
 app.get('/sessions/:id/transcript', async (c) => {
-  const found = await latestTranscript(Number(c.req.param('id')));
+  const sessionId = await sessionAccess(c.req.param('id'), c.get('actor').id);
+  const found = await latestTranscript(sessionId, c.get('actor').id);
   return c.json(found ?? { status: 'none' });
 });
 
-app.post('/recordings/:id/transcript', async (c) =>
-  c.json(await draftTranscript(Number(c.req.param('id')), c.get('actor').id)),
-);
+app.post('/recordings/:id/transcript', async (c) => {
+  const recordingId = await recordingAccess(c.req.param('id'), c.get('actor').id);
+  return c.json(await draftTranscript(recordingId, c.get('actor').id));
+});
 
 app.post('/sessions/:id/transcript/approve', async (c) => {
-  const body = z.object({ text: z.string().optional() }).parse(await c.req.json().catch(() => ({})));
-  return c.json(await approveTranscript(Number(c.req.param('id')), c.get('actor').id, body.text));
+  const sessionId = await sessionAccess(c.req.param('id'), c.get('actor').id);
+  const body = z
+    .object({ transcript_id: z.number().int().positive(), text: z.string().optional() })
+    .parse(await c.req.json());
+  return c.json(
+    await approveTranscript(sessionId, c.get('actor').id, body.text, body.transcript_id),
+  );
 });
 
 /**
@@ -388,13 +494,22 @@ app.post('/sessions/:id/transcript/approve', async (c) => {
  * multipart 로 감싸도 바이트는 같고, 파싱 단계가 늘면 그만큼 실패할 자리가 는다.
  */
 app.post('/cases/:id/documents', async (c) => {
-  const sid = Number(c.req.query('session_id'));
+  const caseId = await caseAccess(c.req.param('id'), c.get('actor').id);
+  const rawSessionId = c.req.query('session_id');
+  let sessionId: number | null = null;
+  if (rawSessionId !== undefined) {
+    sessionId = positiveId(rawSessionId);
+    if ((await caseIdOfSession(sessionId)) !== caseId) {
+      throw new NotFound('회차를 찾지 못했어요.');
+    }
+  }
   return c.json(
     await saveDocument({
-      caseId: Number(c.req.param('id')),
-      sessionId: Number.isFinite(sid) ? sid : null,
+      caseId,
+      sessionId,
       label: c.req.query('label') ?? '',
       contentType: c.req.header('content-type') ?? '',
+      // 권한·회차 소속을 모두 확인한 뒤에야 파일을 읽는다.
       bytes: new Uint8Array(await c.req.arrayBuffer()),
       actorId: c.get('actor').id,
     }),
@@ -402,10 +517,14 @@ app.post('/cases/:id/documents', async (c) => {
   );
 });
 
-app.get('/cases/:id/documents', async (c) => c.json(await listDocuments(Number(c.req.param('id')))));
+app.get('/cases/:id/documents', async (c) => {
+  const caseId = await caseAccess(c.req.param('id'), c.get('actor').id);
+  return c.json(await listDocuments(caseId));
+});
 
 app.get('/documents/:id', async (c) => {
-  const { row, bytes } = await readDocument(Number(c.req.param('id')), c.get('actor').id);
+  const documentId = await documentAccess(c.req.param('id'), c.get('actor').id);
+  const { row, bytes } = await readDocument(documentId, c.get('actor').id);
   // 파일 이름은 사람이 붙인 이름을 쓴다. 원본 파일명은 저장하지 않는다.
   return new Response(bytes, {
     headers: {
@@ -427,7 +546,7 @@ const auditQuery = (c: { req: { query: (k: string) => string | undefined } }) =>
 app.get('/audit', async (c) => {
   // 열람 기록은 관리자만 본다(GLOSSARY §6-7 설정 › 열람 기록).
   if (c.get('actor').role !== 'admin') return c.json({ error: '관리자만 볼 수 있어요.' }, 403);
-  const rows = await listAudit(auditQuery(c));
+  const rows = await listAudit({ ...auditQuery(c), viewerId: c.get('actor').id });
   // 이 화면은 이름을 꺼내 보여 준다. 그러니 이 화면을 연 것도 남는다.
   await audit({ actorId: c.get('actor').id, action: 'audit.view', fields: ['name'] });
   return c.json(rows);
@@ -446,7 +565,7 @@ app.get('/audit/export', async (c) => {
   if (c.get('actor').role !== 'admin') return c.json({ error: '관리자만 볼 수 있어요.' }, 403);
   const withNames = c.req.query('names') === '1';
   const q = auditQuery(c);
-  const rows = await listAudit({ ...q, limit: 5000 });
+  const rows = await listAudit({ ...q, limit: 5000, viewerId: c.get('actor').id });
   await audit({
     actorId: c.get('actor').id,
     action: 'audit.export',
@@ -463,32 +582,33 @@ app.get('/audit/export', async (c) => {
 });
 
 app.post('/cases/:id/close', async (c) => {
+  const caseId = await caseAccess(c.req.param('id'), c.get('actor').id);
   const body = z
     .object({ close_reason: z.string().min(1), unfinished_note: z.string().nullish() })
     .parse(await c.req.json());
-  return c.json(
-    await service.closeCase(Number(c.req.param('id')), { ...body, actorId: c.get('actor').id }),
-  );
+  return c.json(await service.closeCase(caseId, { ...body, actorId: c.get('actor').id }));
 });
 
 // 목록 조회는 감사에 남기지 않는다(2026-09-16 Q). 화면을 여는 것마다 한 줄이면
 // 기록이 아니라 소음이다 — 실측으로 700줄 가운데 676줄이 목록 조회였다.
-// 누구의 무엇을 봤는지는 사례를 열 때 남는다.
-app.get('/participants', async (c) => c.json(await service.listParticipants()));
+// 맡지 않은 행은 가명·사업·상태·담당자만 내고 임상 정보는 서버에서 지운다.
+app.get('/participants', async (c) =>
+  c.json(await service.listParticipants(c.get('actor').id)),
+);
 
 app.get('/schedules', async (c) => {
   const now = new Date();
   const from = c.req.query('from') ?? new Date(now.getTime() - 86_400_000).toISOString();
   const to = c.req.query('to') ?? new Date(now.getTime() + 30 * 86_400_000).toISOString();
-  return c.json(await service.listSchedules(from, to));
+  return c.json(await service.listSchedules(c.get('actor').id, from, to));
 });
 
 app.get('/cases/:id/briefing', async (c) => {
-  const caseId = Number(c.req.param('id'));
+  const caseId = await caseAccess(c.req.param('id'), c.get('actor').id);
   // `seq` 를 주면 그 회차를 준비하던 시점으로 잘라서 본다.
   const seq = Number(c.req.query('seq'));
   const found = await service.getBriefing(caseId, Number.isFinite(seq) && seq > 0 ? seq : undefined);
-  if (!found) return c.json({ error: 'not found' }, 404);
+  if (!found) return c.json({ error: '사례를 찾지 못했어요.' }, 404);
   if (found.participant_card.name) {
     await audit({ actorId: c.get('actor').id, action: 'case.briefing', caseId, fields: ['name'] });
   }
@@ -555,16 +675,30 @@ app.delete('/settings/programs/:id', async (c) => {
 
 app.get('/settings/workers', async (c) => c.json(await settings.listWorkers()));
 
-app.get('/settings/workers/:id/cases', async (c) =>
-  c.json(await settings.workerCases(Number(c.req.param('id')))),
-);
+app.get('/settings/workers/:id/cases', async (c) => {
+  const userId = positiveId(c.req.param('id'));
+  const me = c.get('actor');
+  if (me.role !== 'admin' && me.id !== userId) {
+    return c.json({ error: '본인이 맡은 당사자만 볼 수 있어요.' }, 403);
+  }
+  return c.json(await settings.workerCases(userId));
+});
+
+app.get('/settings/assignments', async (c) => {
+  if (adminOnly(c)) return c.json(DENY, 403);
+  return c.json(await settings.listAssignments());
+});
 
 app.post('/settings/assign', async (c) => {
   if (adminOnly(c)) return c.json(DENY, 403);
   const body = z
-    .object({ case_id: z.number().int().positive(), user_id: z.number().int().positive().nullable() })
+    .object({
+      case_id: z.number().int().positive(),
+      user_ids: z.array(z.number().int().positive()),
+    })
     .parse(await c.req.json());
-  await settings.assign(c.get('actor').id, body.case_id, body.user_id);
+  const out = await settings.assign(c.get('actor').id, body.case_id, body.user_ids);
+  if ('error' in out) return c.json(out, 409);
   return c.json({ ok: true });
 });
 
@@ -603,8 +737,10 @@ app.post('/settings/requests', async (c) => {
 
 app.post('/settings/requests/:id', async (c) => {
   if (adminOnly(c)) return c.json(DENY, 403);
+  const requestId = positiveId(c.req.param('id'));
   const { decision } = z.object({ decision: z.enum(['approved', 'rejected']) }).parse(await c.req.json());
-  await settings.decideRequest(c.get('actor').id, Number(c.req.param('id')), decision);
+  const out = await settings.decideRequest(c.get('actor').id, requestId, decision);
+  if ('error' in out) return c.json(out, 409);
   return c.json({ ok: true });
 });
 

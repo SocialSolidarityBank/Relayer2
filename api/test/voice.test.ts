@@ -1,5 +1,5 @@
 // 음성 경로의 경계. DB 없이 도는 것만 본다 — 실제 저장·삭제는 통합에서 확인했다.
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   activeDomains,
   canonicalPreimage,
@@ -9,10 +9,11 @@ import {
   voiceEnabled,
 } from '../src/consent.ts';
 
-afterEach(() => {
-  delete process.env.VOICE_ENABLED;
-  delete process.env.AZURE_SPEECH_KEY;
+beforeEach(() => {
+  for (const name of ['VOICE_ENABLED', 'AZURE_SPEECH_KEY', 'AZURE_SPEECH_ENDPOINT', 'AZURE_SPEECH_REGION'])
+    vi.stubEnv(name, undefined);
 });
+afterEach(() => vi.unstubAllEnvs());
 
 describe('음성 스위치', () => {
   it('꺼져 있으면 음성 세 영역이 목록에 없다', () => {
@@ -31,6 +32,19 @@ describe('음성 스위치', () => {
     expect(voiceEnabled()).toBe(true);
     expect(sttEnabled()).toBe(false);
     expect(activeDomains()).toContain('counseling_recording');
+  });
+
+  it('키만 있고 엔드포인트나 지역이 없으면 준비되지 않는다', () => {
+    process.env.VOICE_ENABLED = '1';
+    process.env.AZURE_SPEECH_KEY = 'x';
+    expect(sttEnabled()).toBe(false);
+
+    process.env.AZURE_SPEECH_REGION = 'koreacentral';
+    expect(sttEnabled()).toBe(true);
+
+    delete process.env.AZURE_SPEECH_REGION;
+    process.env.AZURE_SPEECH_ENDPOINT = 'https://speech.example.test';
+    expect(sttEnabled()).toBe(true);
   });
 
   it('키가 생겼다고 녹음이 열리지 않는다', () => {

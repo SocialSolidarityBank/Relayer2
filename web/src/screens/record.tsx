@@ -30,6 +30,7 @@ import {
   type Line,
 } from '../ui.tsx';
 import { METHODS } from '../vocab.ts';
+import { SessionAudio } from './session-audio.tsx';
 
 /** `datetime-local` 이 바로 먹는 지역시각 문자열. 지금 시각을 분 단위로 자른다. */
 function localNow(): string {
@@ -159,11 +160,18 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
       setIsClosing(planned?.is_closing ?? false);
       setMethod((planned?.method as NewSessionInput['method']) ?? 'in_person');
       setHeldAt(planned?.scheduled_at ? toLocalInput(planned.scheduled_at) : localNow());
-    })();
+    })().catch((failure: unknown) => {
+      if (!live) return;
+      setBriefing(null);
+      setView(null);
+      setError(failure instanceof Error ? failure.message : '상담 기록을 불러오지 못했어요.');
+    });
     return () => {
       live = false;
     };
   }, [caseId, editingId]);
+
+  if ((!briefing || !view) && error) return <ErrorText>{error}</ErrorText>;
 
   if (!briefing || !view) return <p className="empty">불러오는 중이에요.</p>;
   if (editingId && !editing) return <p className="empty">불러오는 중이에요.</p>;
@@ -463,6 +471,23 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
               />
             </Field>
           </Card>
+
+          {(session?.id ?? openedId) ? (
+            <SessionAudio
+              key={session?.id ?? openedId}
+              sessionId={(session?.id ?? openedId)!}
+              writtenChanged={memo !== (editing?.memo ?? '')}
+              onAccessLost={() => {
+                setBriefing(null);
+                setView(null);
+                setError('담당 배정이 해제되어 상담 기록을 열 수 없어요.');
+              }}
+            />
+          ) : (
+            <Card title="음성·수기 기록 불일치">
+              <Empty>상담 회차를 저장한 뒤 음성을 업로드할 수 있어요.</Empty>
+            </Card>
+          )}
 
           <FormActions>
             {error && <ErrorText>{error}</ErrorText>}

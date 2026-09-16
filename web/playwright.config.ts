@@ -5,5 +5,5 @@ export default defineConfig({
   testDir: 'e2e',
   timeout: 60_000,
   expect: { timeout: 10_000 },
-  use: { baseURL: 'http://localhost:5173', locale: 'ko-KR' },
+  use: { baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5173', locale: 'ko-KR' },
 });
