@@ -41,7 +41,19 @@ import {
   type Worker,
   type WorkerCase,
 } from '../api.ts';
-import { Badge, Button, Card, DataRows, Empty, ErrorText, Field, FormActions, Item, PageHeader } from '../ui.tsx';
+import {
+  Badge,
+  Button,
+  Card,
+  DataRows,
+  Empty,
+  ErrorText,
+  Field,
+  FormActions,
+  Item,
+  PageHeader,
+  Select,
+} from '../ui.tsx';
 import { setTheme, themeChoice, type ThemeChoice } from '../theme.ts';
 import { AuditScreen } from './audit.tsx';
 
@@ -351,7 +363,7 @@ function AssignPane() {
       </Card>
 
       <Card title="담당이 바뀔 때" hint="실무자를 고르면 맡고 있는 당사자가 나와요. 한 사람씩 다른 실무자에게 넘겨요.">
-        <Field label="실무자" htmlFor="as-who">
+        <Field label="실무자" htmlFor="as-who" control="select">
           <select id="as-who" value={who ?? ''} onChange={(e) => setWho(e.target.value ? Number(e.target.value) : null)}>
             <option value="">고르기</option>
             {live.map((w) => (
@@ -372,9 +384,10 @@ function AssignPane() {
                   desc={c.status === 'open' ? '진행 중' : '종결'}
                   action={
                     <>
-                      <select
+                      <Select
+                        aria-label="넘길 실무자"
                         value={moveTo[c.id] ?? ''}
-                        onChange={(e) => setMoveTo({ ...moveTo, [c.id]: e.target.value })}
+                        onChange={(v) => setMoveTo({ ...moveTo, [c.id]: v })}
                       >
                         <option value="">넘길 실무자</option>
                         {live
@@ -384,7 +397,7 @@ function AssignPane() {
                               {w.name}
                             </option>
                           ))}
-                      </select>
+                      </Select>
                       <Button
                         variant="primary"
                         disabled={!moveTo[c.id]}
@@ -431,7 +444,7 @@ function InvitePane() {
         title="초대 링크 만들기"
         hint="링크를 건네면 그 사람이 이 워크스페이스에 들어와요. 7일 뒤 만료돼요."
       >
-        <Field label="역할" htmlFor="iv-role">
+        <Field label="역할" htmlFor="iv-role" control="select">
           <select id="iv-role" value={role} onChange={(e) => setRole(e.target.value as 'worker' | 'admin')}>
             <option value="worker">실무자</option>
             <option value="admin">관리자</option>

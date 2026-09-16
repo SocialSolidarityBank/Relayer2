@@ -86,6 +86,7 @@ export function ParticipantNewScreen() {
             label="사업"
             htmlFor="program"
             required
+            control="select"
             hint={
               programs !== null && programs.length === 0
                 ? '아직 사업이 없어요. 관리자가 설정 › 기관 정보 관리에서 먼저 만들어야 해요.'

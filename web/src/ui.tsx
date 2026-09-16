@@ -141,6 +141,33 @@ export function Field({
   );
 }
 
+/**
+ * 딱지 없이 줄 안에 서는 선택창. `Field` 를 못 쓰는 자리(카드 행 오른쪽 등)에 쓴다.
+ * 네이티브 화살표를 끄고 꺽쇠를 직접 그린다 — 안 그리면 입력칸으로 보인다(2026-09-16 Q).
+ */
+export function Select({
+  value,
+  onChange,
+  children,
+  id,
+  'aria-label': ariaLabel,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  children: ReactNode;
+  id?: string;
+  'aria-label'?: string;
+}) {
+  return (
+    <div className="wire-input-box" data-control="select">
+      <select id={id} aria-label={ariaLabel} value={value} onChange={(e) => onChange(e.target.value)}>
+        {children}
+      </select>
+      <Chevron />
+    </div>
+  );
+}
+
 /** 선택은 알약 버튼이 아니라 네이티브 radio·checkbox 다(DESIGN-RULES §선택지). */
 export function ChoiceGroup({ legend, children }: { legend: string; children: ReactNode }) {
   return (
