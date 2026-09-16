@@ -170,8 +170,8 @@ export function Fold({
     <details className="surface-card wire-card wire-card-details" open={open}>
       <summary className="wire-card-summary">
         <span className="wire-card-title">
-          {title}
-          {desc && <span className="wire-item-desc">{desc}</span>}
+          <span className="fold-title-text">{title}</span>
+          {desc && <span className="wire-item-desc fold-title-desc">{desc}</span>}
         </span>
         <span className="wire-card-summary-right">
           <Chevron dir="down" />
