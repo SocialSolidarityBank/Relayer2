@@ -96,15 +96,21 @@ export const login = (email: string, password: string) =>
   json<Me>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
 export const logout = () => json<{ ok: true }>('/auth/logout', { method: 'POST' });
 
+/** 담당 한 사람. 사례마다 여럿일 수 있다(2026-09-16 다중 담당). */
+export type Assignee = { id: number; name: string };
+
 export type ParticipantRow = {
   case_id: number;
-  participant_id: number;
+  /** 배정되지 않은 사례는 null 로 비워 온다. */
+  participant_id: number | null;
   pseudonym: string;
+  /** 배정된 사람에게만 온다. 아니면 null — 가명만 보인다. */
   name: string | null;
   program_name: string;
   status: 'open' | 'closed';
-  assigned_user_id: number | null;
-  assignee_name: string | null;
+  assignees: Assignee[];
+  /** 거짓이면 이름·회차·일정은 null 로 비워 온다. */
+  can_access: boolean;
   last_session_seq: number | null;
   next_scheduled_at: string | null;
 };
@@ -182,8 +188,8 @@ export type RecordInput = {
   held_at?: string;
   is_closing?: boolean;
   memo: string;
-  method?: 'in_person' | 'phone' | 'video' | 'visit';
-  place?: string;
+  method?: ConsultationMethod;
+  place?: string | null;
   next_goal_text?: string | null;
   overall_goal?: string | null;
   cards?: Array<{ kind: string; text: string; section: string; area?: string }>;
@@ -232,13 +238,13 @@ export type AccessState = {
   last_opened_at: string | null;
 };
 
-export const getAccess = (participantId: number) => json<AccessState>(`/participants/${participantId}/access`);
-export const issueAccess = (participantId: number) =>
-  json<{ token: string; code: string; expires_at: string }>(`/participants/${participantId}/access`, {
+export const getAccess = (caseId: number) => json<AccessState>(`/cases/${caseId}/access`);
+export const issueAccess = (caseId: number) =>
+  json<{ token: string; code: string; expires_at: string }>(`/cases/${caseId}/access`, {
     method: 'POST',
   });
-export const revokeAccess = (participantId: number) =>
-  json<{ ok: true }>(`/participants/${participantId}/access`, { method: 'DELETE' });
+export const revokeAccess = (caseId: number) =>
+  json<{ ok: true }>(`/cases/${caseId}/access`, { method: 'DELETE' });
 
 export type Draft = {
   id: number;
@@ -367,7 +373,12 @@ export type NewCaseInput = {
   sessions_planned?: number;
 };
 
+export type ConsultationMethod = 'in_person' | 'phone' | 'video' | 'visit' | 'other';
+
 export type IntakeInput = {
+  held_at?: string;
+  method?: ConsultationMethod;
+  place?: string | null;
   memo?: string;
   overall_goal?: string | null;
   detail?: Record<string, unknown>;
@@ -376,6 +387,9 @@ export type IntakeInput = {
 
 export type IntakeView = {
   session_id: number | null;
+  held_at: string | null;
+  method: ConsultationMethod | null;
+  place: string | null;
   memo: string | null;
   detail: Record<string, unknown>;
   overall_goal: string | null;
@@ -396,7 +410,7 @@ export const createCase = (body: NewCaseInput) =>
 export type NewSessionInput = {
   is_closing?: boolean;
   scheduled_at: string;
-  method: 'in_person' | 'phone' | 'video' | 'visit';
+  method: ConsultationMethod;
   place?: string;
   plan_memo?: string;
 };
@@ -503,8 +517,18 @@ export const retireProgram = (id: number) => json<Program[]>(`/settings/programs
 export const listWorkers = () => json<Worker[]>('/settings/workers');
 export type WorkerCase = { id: number; pseudonym: string; program_name: string; status: string };
 export const workerCases = (id: number) => json<WorkerCase[]>(`/settings/workers/${id}/cases`);
-export const assignCase = (case_id: number, user_id: number | null) =>
-  json<{ ok: true }>('/settings/assign', { method: 'POST', body: JSON.stringify({ case_id, user_id }) });
+/** 배정 화면의 사례 목록. 가명·사업·담당 이름만 오고 임상 내용은 안 온다(관리자도 무권한). */
+export type AssignmentCase = {
+  id: number;
+  pseudonym: string;
+  program_name: string;
+  status: string;
+  assignees: Assignee[];
+};
+export const listAssignmentCases = () => json<AssignmentCase[]>('/settings/assignments');
+/** `user_ids` 가 그 사례의 담당 전부다 — 빠진 사람은 거둬지고, 빈 배열은 모두 거둔다. */
+export const assignCase = (case_id: number, user_ids: number[]) =>
+  json<{ ok: true }>('/settings/assign', { method: 'POST', body: JSON.stringify({ case_id, user_ids }) });
 
 export const listInvites = () => json<Invite[]>('/settings/invites');
 export const createInvite = (role: 'worker' | 'admin', note: string | null) =>

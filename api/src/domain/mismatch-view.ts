@@ -7,18 +7,36 @@ export type MismatchView = {
   voice_vs_written: Mismatch[];
   /** 지난 회차와 이번 회차가 어긋난 것. 직전 회차가 없으면 빈 배열이다. */
   across_sessions: Mismatch[];
+  voice_status: 'unavailable' | 'needs_review' | 'ready';
+  voice_reason?: 'missing_transcript' | 'missing_written' | 'unreviewed_transcript';
+  scope: 'numeric';
 };
 
 export function buildMismatches(input: {
   written: string | null;
   transcript: string | null;
+  transcriptStatus: 'draft' | 'approved' | null;
   previous: { seq: number; text: string } | null;
   current: { seq: number };
 }): MismatchView {
   const written = input.written?.trim() ?? '';
+  const hasTranscript = Boolean(input.transcript?.trim());
+  const voice_status = !hasTranscript
+    ? 'unavailable'
+    : input.transcriptStatus !== 'approved'
+      ? 'needs_review'
+      : !written ? 'unavailable' : 'ready';
+  const voice_reason = !hasTranscript
+    ? 'missing_transcript'
+    : input.transcriptStatus !== 'approved'
+      ? 'unreviewed_transcript'
+      : !written ? 'missing_written' : undefined;
   return {
+    voice_status,
+    voice_reason,
+    scope: 'numeric',
     voice_vs_written:
-      input.transcript && written ? voiceVsWritten(input.transcript, written) : [],
+      voice_status === 'ready' ? voiceVsWritten(input.transcript!, written) : [],
     across_sessions:
       input.previous && written
         ? acrossSessions(input.previous, { seq: input.current.seq, text: written })

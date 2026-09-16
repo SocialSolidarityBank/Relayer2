@@ -15,8 +15,11 @@ const dateLabel = (iso: string): string => {
 
 function sessionLabel(row: ParticipantRow): string {
   const parts: string[] = [row.program_name];
-  parts.push(row.last_session_seq ? `${row.last_session_seq}회차까지 기록` : '기록 없음');
-  if (row.next_scheduled_at) parts.push(`다음 ${dateLabel(row.next_scheduled_at)}`);
+  // 배정되지 않은 사례는 회차·일정이 서버에서 비워 온다 — '기록 없음'이라 적으면 거짓말이다.
+  if (row.can_access) {
+    parts.push(row.last_session_seq ? `${row.last_session_seq}회차까지 기록` : '기록 없음');
+    if (row.next_scheduled_at) parts.push(`다음 ${dateLabel(row.next_scheduled_at)}`);
+  }
   if (row.status === 'closed') parts.push('종결');
   return parts.join(' · ');
 }
@@ -91,32 +94,42 @@ export function ParticipantsScreen({
         {shown.map((row) => (
           <Fold
             key={row.case_id}
-            title={row.name ?? row.pseudonym}
-            desc={`${sessionLabel(row)}${row.assignee_name ? ` · 담당 ${row.assignee_name}` : ' · 담당 없음'}`}
+            title={row.can_access ? (row.name ?? row.pseudonym) : row.pseudonym}
+            desc={
+              row.can_access
+                ? `${sessionLabel(row)}${row.assignees.length > 0 ? ` · 담당 ${row.assignees.map((a) => a.name).join(', ')}` : ' · 담당 없음'}`
+                : `${sessionLabel(row)} · 배정 필요${row.assignees.length > 0 ? ` · 담당 ${row.assignees.map((a) => a.name).join(', ')}` : ''}`
+            }
             // 찾아서 하나만 남았으면 펼쳐 둔다. 한 명을 보려고 또 누르게 하지 않는다.
             open={shown.length === 1}
           >
             <FormActions>
-              {purpose && (
-                <Button variant="primary" onClick={() => go(row.case_id, purpose.go)}>
-                  {purpose.label}
-                </Button>
-              )}
-              <Button onClick={() => go(row.case_id, 'info')}>당사자 정보</Button>
-              <Button onClick={() => go(row.case_id, 'briefing')}>15초 다시보기</Button>
-              {/* 인테이크는 아직 안 쓴 사람에게만 뜬다. 다 쓴 사람에게 또 권하지 않는다. */}
-              {!row.last_session_seq && (
-                <Button onClick={() => go(row.case_id, 'intake')}>인테이크 작성하기</Button>
-              )}
-              {!purpose && (
+              {/* 배정된 사람에게만 사례로 가는 길을 연다. 아닌 사람에게는 가명과
+                  '배정 필요'만 보이고, 맡겠다고 손드는 것만 남는다. */}
+              {row.can_access && (
                 <>
-                  <Button onClick={() => go(row.case_id, 'record')}>상담 기록하기</Button>
-                  <Button onClick={() => go(row.case_id, 'schedule')}>상담 일정 등록</Button>
+                  {purpose && (
+                    <Button variant="primary" onClick={() => go(row.case_id, purpose.go)}>
+                      {purpose.label}
+                    </Button>
+                  )}
+                  <Button onClick={() => go(row.case_id, 'info')}>당사자 정보</Button>
+                  <Button onClick={() => go(row.case_id, 'briefing')}>15초 다시보기</Button>
+                  {/* 인테이크는 아직 안 쓴 사람에게만 뜬다. 다 쓴 사람에게 또 권하지 않는다. */}
+                  {!row.last_session_seq && (
+                    <Button onClick={() => go(row.case_id, 'intake')}>인테이크 작성하기</Button>
+                  )}
+                  {!purpose && (
+                    <>
+                      <Button onClick={() => go(row.case_id, 'record')}>상담 기록하기</Button>
+                      <Button onClick={() => go(row.case_id, 'schedule')}>상담 일정 등록</Button>
+                    </>
+                  )}
                 </>
               )}
               {/* 내 담당이 아닌 사람은 맡겠다고 손들 수 있다. 확정은 관리자 몫이다
                   (GLOSSARY 배정 규칙 — 실무자의 수락 단계는 없고, 관리자 확정이 곧 효력이다). */}
-              {me && row.assigned_user_id !== me.id && (
+              {me && !row.can_access && (
                 <>
                   <Button
                     disabled={asked[row.case_id] === true}

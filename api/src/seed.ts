@@ -23,7 +23,10 @@ for (const u of TEST_USERS) {
     values (${u.id}, ${await hashPassword(u.id)}, ${u.name}, ${u.role})`;
 }
 
+const [initialWorker] = await sql<Array<{ id: number }>>`select id from users where email = 'test2'`;
+
 const created = await createCase({
+  actorId: initialWorker.id,
   // 합성 자료라도 게이트는 같은 길을 지난다(P1).
   consents: [
     { domain: 'personal_data_collection_use', decision: 'grant' },

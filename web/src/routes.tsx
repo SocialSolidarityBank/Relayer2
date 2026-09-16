@@ -143,8 +143,8 @@ export function Routes() {
    * 정본(CCC preview)의 `.app-shell` 3부 — 머리줄·사이드바·본문 — 을 그대로 쓴다.
    * 묶음 라벨과 항목 이름은 Q 가 준 것이다.
    *
-   * `상담 기록하기`·`당사자 정보`는 **열어 둔 사례가 있을 때만** 당사자 묶음에 따라붙는다.
-   * 누구의 것인지 정해야 열리는 화면이라, 사례 없이 이름만 세워 두면 빈 화면으로 떨어진다.
+   * 일정 묶음의 기록·일정 등록은 사례가 없으면 당사자 선택 화면으로 보낸다.
+   * 당사자 정보는 열어 둔 사례가 있을 때만 당사자 묶음에 따라붙는다.
    */
   const link = (href: string, label: string) => (
     <li key={href}>
@@ -177,6 +177,9 @@ export function Routes() {
             <ul className="navigation-list">
               {link(caseId ? `#/cases/${caseId}/schedule` : '#/pick/schedule', '상담 일정 등록')}
               {link(HOME, '상담 일정 보기')}
+              {/* 기록하기는 늘 선다. 사례를 안 열었으면 누구 것인지 고르는 자리로 보낸다 —
+                  메뉴에서 사라지면 "그 기능이 없다"로 읽힌다. */}
+              {link(caseId ? `#/cases/${caseId}/record` : '#/pick/record', '상담 기록하기')}
             </ul>
           </div>
 
@@ -185,9 +188,6 @@ export function Routes() {
             <ul className="navigation-list">
               {link('#/participants', '당사자 목록')}
               {link('#/participants/new', '당사자 등록')}
-              {/* 기록하기는 늘 선다. 사례를 안 열었으면 누구 것인지 고르는 자리로 보낸다 —
-                  메뉴에서 사라지면 "그 기능이 없다"로 읽힌다. */}
-              {link(caseId ? `#/cases/${caseId}/record` : '#/pick/record', '상담 기록하기')}
               {caseId && link(`#/cases/${caseId}/info`, '당사자 정보')}
             </ul>
           </div>

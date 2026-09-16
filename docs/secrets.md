@@ -45,6 +45,25 @@ OpenAI 키 하나가 죽으면서 두 제품이 같이 멈췄다.
 **AI 키는 선택이다.** 없으면 배포 스크립트가 그냥 건너뛰고 나머지는 정상으로 돈다.
 없는 것을 있는 척하지 않는다 — AI 정리만 503 으로 정확히 실패한다.
 
+### 음성 업로드·전사 설정
+
+`scripts/infisical_get.py`는 아래 고정 이름을 선택적으로 주입한다. 모두 RELAYER2의 같은 `prod /RELAYER2` 경로를 사용한다.
+
+| 이름 | 용도 |
+|---|---|
+| `VOICE_ENABLED` | `1`일 때 음성 업로드 허용 |
+| `VOICE_ROOT` | 배포 교체 후에도 유지되는 기관 음성 저장 경로 |
+| `AZURE_SPEECH_KEY` | RELAYER2가 사용하는 Azure Speech 인증 |
+| `AZURE_SPEECH_REGION` | 해당 Speech 리소스의 지역 |
+| `AZURE_SPEECH_ENDPOINT` | 리소스 전용 HTTPS 엔드포인트. 지역 대신 지정 가능 |
+
+2026-09-16 Q가 기존 키 재사용을 허용하여, `ccc-stt-koreacentral`의 **기존 KEY 2**를 이 경로에 등록했다.
+`AZURE_SPEECH_REGION=koreacentral`, `VOICE_ENABLED=1`도 등록했다. 기존 Azure 키의 재생성이나 CCC 설정 변경은 하지 않았다.
+Azure 인증 HTTP 200과 합성 한국어 음성의 Fast Transcription → 승인 → 숫자 불일치 비교를 검증했다.
+
+이 키는 기존 Speech 리소스를 공유하므로 사용량·요금·키 회전의 영향을 함께 받는다. 향후 KEY 2를 회전하면 RELAYER2도 갱신해야 한다.
+키 값은 출력하거나 별도 파일로 저장하지 않았으며, 실제 사람의 녹음은 검증에 사용하지 않았다. 운영 프로세스 반영 여부는 코드 배포와 별도로 확인한다.
+
 ---
 
 ## 3. 넣는 방법 (웹에서, 5단계)

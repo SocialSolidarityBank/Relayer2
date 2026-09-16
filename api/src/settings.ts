@@ -10,6 +10,7 @@ import { randomBytes, createHash } from 'node:crypto';
 import { sql } from './db.ts';
 import { audit } from './audit.ts';
 import { hashPassword } from './auth.ts';
+import type { Assignee } from './domain/types.ts';
 
 export type Me = {
   id: number;
@@ -56,7 +57,9 @@ export async function deactivate(userId: number): Promise<{ ok: true } | { error
     }
   }
   const [{ count: mine }] = await sql<Array<{ count: string }>>`
-    select count(*) from support_cases where assigned_user_id = ${userId} and status = 'open'`;
+    select count(*) from case_assignments a
+    join support_cases c on c.id = a.case_id
+    where a.user_id = ${userId} and c.status = 'open'`;
   if (Number(mine) > 0) {
     return { error: `아직 맡고 있는 당사자가 ${mine}명 있어요. 다른 실무자에게 넘긴 뒤에 나갈 수 있어요.` };
   }
@@ -129,8 +132,9 @@ export type Worker = {
 export async function listWorkers(): Promise<Worker[]> {
   return sql<Worker[]>`
     select u.id, u.name, u.email, u.role, u.deactivated_at,
-           (select count(*) from support_cases c
-             where c.assigned_user_id = u.id and c.status = 'open')::int as open_cases
+           (select count(*) from case_assignments a
+             join support_cases c on c.id = a.case_id
+             where a.user_id = u.id and c.status = 'open')::int as open_cases
     from users u
     where u.role in ('worker', 'admin')
     order by u.deactivated_at nulls first, u.name`;
@@ -138,22 +142,92 @@ export async function listWorkers(): Promise<Worker[]> {
 
 export type WorkerCase = { id: number; pseudonym: string; program_name: string; status: string };
 
-/** 한 실무자가 맡은 당사자들. 배정을 옮기기 전에 무엇이 따라 움직이는지 보여 준다. */
+/** 한 실무자가 맡은 당사자들. 관리자도 이 목록 밖의 상담 자료는 열 수 없다. */
 export async function workerCases(userId: number): Promise<WorkerCase[]> {
-  return sql`
+  return sql<WorkerCase[]>`
     select c.id, p.pseudonym, c.program_name, c.status
-    from support_cases c join participants p on p.id = c.participant_id
-    where c.assigned_user_id = ${userId}
+    from case_assignments a
+    join support_cases c on c.id = a.case_id
+    join participants p on p.id = c.participant_id
+    where a.user_id = ${userId}
     order by c.status, c.id desc`;
 }
 
-/** 배정 바꾸기. 관리자가 확정하면 즉시 효력이다(GLOSSARY 배정 규칙 — 실무자 수락 단계는 없다). */
-export async function assign(actorId: number, caseId: number, userId: number | null): Promise<void> {
-  await sql`update support_cases set assigned_user_id = ${userId} where id = ${caseId}`;
-  await sql`
-    update assignment_requests set decided_at = now(), decided_by = ${actorId}, decision = 'approved'
-    where case_id = ${caseId} and decided_at is null and requested_by = ${userId}`;
-  await audit({ actorId, action: 'case.assign', caseId, fields: [`assignee=${userId ?? 'none'}`] });
+export type AssignmentCase = {
+  id: number;
+  pseudonym: string;
+  program_name: string;
+  status: string;
+  assignees: Assignee[];
+};
+
+/** 관리자 배정 화면. 가명·사업·상태·담당자만 — 상담 내용은 없다. */
+export async function listAssignments(): Promise<AssignmentCase[]> {
+  return sql<AssignmentCase[]>`
+    select c.id, p.pseudonym, c.program_name, c.status,
+           (select coalesce(jsonb_agg(jsonb_build_object('id', u.id, 'name', u.name) order by u.name), '[]'::jsonb)
+              from case_assignments a join users u on u.id = a.user_id
+             where a.case_id = c.id) as assignees
+    from support_cases c join participants p on p.id = c.participant_id
+    order by c.status, c.id desc`;
+}
+
+/**
+ * 배정 **전체 집합** 바꾸기. 빈 배열은 모두 해제다.
+ * 사례 행을 잡고 지우고 다시 넣는다 — 둘 사이를 다른 요청이 볼 수 없다.
+ */
+export async function assign(
+  actorId: number,
+  caseId: number,
+  userIds: number[],
+): Promise<{ ok: true } | { error: string }> {
+  const ids = [...new Set(userIds)];
+  const result = await sql.begin(async (tx) => {
+    const [target] = await tx<Array<{ id: number }>>`
+      select id from support_cases where id = ${caseId} for update`;
+    if (!target) return { error: '없는 사례예요.' } as const;
+
+    if (ids.length > 0) {
+      const users = await tx<Array<{ id: number }>>`
+        select id from users
+        where id = any(${ids}) and role in ('worker', 'admin') and deactivated_at is null`;
+      if (users.length !== ids.length) return { error: '활성 실무자만 배정할 수 있어요.' } as const;
+    }
+
+    await tx`delete from case_assignments where case_id = ${caseId}`;
+    for (const userId of ids) {
+      await tx`insert into case_assignments (case_id, user_id, assigned_by)
+        values (${caseId}, ${userId}, ${actorId})`;
+    }
+
+    // 배정에서 빠진 사람이 발급한 링크도 함께 끊는다. 그 사람이 링크·코드를 기억하면
+    // 로그인 없이 계속 기본정보와 일정을 열 수 있으므로, 직원 권한만 빼서는 제거가 아니다.
+    // 남아 있는 담당자가 만든 링크는 건드리지 않는다.
+    await tx`
+      update participant_access pa set revoked_at = now()
+      where pa.case_id = ${caseId} and pa.revoked_at is null
+        and not exists (
+          select 1 from case_assignments a
+          where a.case_id = pa.case_id and a.user_id = pa.created_by
+        )`;
+
+    // 이 배정으로 이루어진 대기 요청은 그 자리에서 결정한다. 이후 배정에서 빼도
+    // 옛 요청을 다시 승인해 몰래 되살릴 수 없게 decided_at 을 박는다.
+    if (ids.length > 0) {
+      await tx`
+        update assignment_requests set decided_at = now(), decided_by = ${actorId}, decision = 'approved'
+        where case_id = ${caseId} and decided_at is null and requested_by = any(${ids})`;
+    }
+    return { ok: true } as const;
+  });
+  if ('error' in result) return result;
+  await audit({
+    actorId,
+    action: 'case.assign',
+    caseId,
+    fields: ids.map((id) => `assignee=${id}`),
+  });
+  return result;
 }
 
 // ── 초대 ──────────────────────────────────────────────────────────────────
@@ -297,38 +371,73 @@ export async function requestAssignment(
   caseId: number,
   reason: string | null,
 ): Promise<{ ok: true } | { error: string }> {
-  const [c] = await sql<Array<{ assigned_user_id: number | null }>>`
-    select assigned_user_id from support_cases where id = ${caseId}`;
-  if (!c) return { error: '없는 사례예요.' };
-  if (c.assigned_user_id === userId) return { error: '이미 맡고 있는 당사자예요.' };
   try {
-    await sql`
-      insert into assignment_requests (case_id, requested_by, reason)
-      values (${caseId}, ${userId}, ${reason})`;
+    const result = await sql.begin(async (tx) => {
+      // 배정 교체와 같은 사례 잠금 아래에서 확인·요청한다. 확인 뒤 배정이 바뀌어
+      // 이미 담당인 사람의 대기 요청이 남고, 제거 뒤 옛 요청으로 되살아나는 틈을 닫는다.
+      const [c] = await tx<Array<{ id: number }>>`
+        select id from support_cases where id = ${caseId} for update`;
+      if (!c) return { error: '없는 사례예요.' } as const;
+      const [member] = await tx<Array<{ user_id: number }>>`
+        select user_id from case_assignments where case_id = ${caseId} and user_id = ${userId}`;
+      if (member) return { error: '이미 맡고 있는 당사자예요.' } as const;
+      await tx`
+        insert into assignment_requests (case_id, requested_by, reason)
+        values (${caseId}, ${userId}, ${reason})`;
+      return { ok: true } as const;
+    });
+    if ('error' in result) return result;
   } catch {
-    return { error: '이 당사자는 이미 요청이 올라가 있어요.' };
+    // 대기 요청 유일 제약은 (사례, 요청자)다. 다른 사람은 같은 사례에 따로 요청할 수 있다.
+    return { error: '이미 요청이 올라가 있어요.' };
   }
   await audit({ actorId: userId, action: 'assignment.request', caseId, fields: [] });
   return { ok: true };
 }
 
+/**
+ * 승인하면 기존 담당을 바꾸지 않고 요청자를 **더한다**.
+ * 요청·사례 행을 한 트랜잭션에서 잡아 같은 요청을 두 번 승인하거나,
+ * 이미 결정된 옛 요청으로 제거된 사람을 되살리지 못하게 한다.
+ */
 export async function decideRequest(
   actorId: number,
   id: number,
   decision: 'approved' | 'rejected',
-): Promise<void> {
-  const [row] = await sql<Array<{ case_id: number; requested_by: number }>>`
-    update assignment_requests set decided_at = now(), decided_by = ${actorId}, decision = ${decision}
-    where id = ${id} and decided_at is null
-    returning case_id, requested_by`;
-  if (!row) return;
-  if (decision === 'approved') {
-    await sql`update support_cases set assigned_user_id = ${row.requested_by} where id = ${row.case_id}`;
-  }
+): Promise<{ ok: true } | { error: string }> {
+  const result = await sql.begin(async (tx) => {
+    const [preview] = await tx<Array<{ case_id: number }>>`
+      select case_id from assignment_requests where id = ${id}`;
+    if (!preview) return { error: '이미 결정했거나 없는 요청이에요.' } as const;
+
+    // 배정 교체와 같은 순서(사례 → 요청)로 잠근다. 반대 순서면 둘이 서로 기다린다.
+    await tx`select id from support_cases where id = ${preview.case_id} for update`;
+    const [row] = await tx<Array<{ case_id: number; requested_by: number }>>`
+      select case_id, requested_by from assignment_requests
+      where id = ${id} and decided_at is null for update`;
+    if (!row) return { error: '이미 결정했거나 없는 요청이에요.' } as const;
+    if (decision === 'approved') {
+      const [active] = await tx<Array<{ id: number }>>`
+        select id from users
+        where id = ${row.requested_by}
+          and role in ('worker', 'admin') and deactivated_at is null`;
+      if (!active) return { error: '활성 실무자만 배정할 수 있어요.' } as const;
+      await tx`
+        insert into case_assignments (case_id, user_id, assigned_by)
+        values (${row.case_id}, ${row.requested_by}, ${actorId})
+        on conflict (case_id, user_id) do nothing`;
+    }
+    await tx`
+      update assignment_requests set decided_at = now(), decided_by = ${actorId}, decision = ${decision}
+      where id = ${id}`;
+    return { ok: true, caseId: row.case_id } as const;
+  });
+  if ('error' in result) return result;
   await audit({
     actorId,
     action: 'assignment.decide',
-    caseId: row.case_id,
+    caseId: result.caseId,
     fields: [`request=${id}`, decision],
   });
+  return { ok: true };
 }

@@ -7,40 +7,55 @@ import { hash, verify } from '@node-rs/argon2';
 import { audit } from './audit.ts';
 import { sql } from './db.ts';
 import { decryptPii } from './pii.ts';
+import { AccessDenied } from './access.ts';
 
 const DEFAULT_DAYS = 14;
 
 export type IssuedAccess = { token: string; code: string; expires_at: string };
 
 /**
- * 링크와 코드를 새로 낸다. 같은 당사자의 이전 링크는 잠근다 —
- * 살아 있는 링크가 여럿이면 누구에게 무엇을 줬는지 알 수 없다.
+ * 링크와 코드를 새로 낸다. **같은 사례**의 이전 링크만 잠근다 —
+ * 다른 사례의 링크는 그 사례 담당자의 것이므로 건드리지 않는다.
  */
 export async function issueAccess(
-  participantId: number,
+  caseId: number,
   actorId: number,
   days = DEFAULT_DAYS,
 ): Promise<IssuedAccess> {
   const token = randomBytes(24).toString('base64url');
   const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
   const expiresAt = new Date(Date.now() + days * 86_400_000).toISOString();
+  const codeHash = await hash(code);
 
   await sql.begin(async (tx) => {
+    // 배정 교체와 같은 사례 행을 잠근다. 확인 뒤 제거가 끝나고 링크가 생기는
+    // 역전이 없어서, 배정에서 빠진 사람이 새 링크를 남기지 못한다.
+    const [scope] = await tx<Array<{ case_id: number; participant_id: number }>>`
+      select id as case_id, participant_id from support_cases
+      where id = ${caseId} for update`;
+    if (!scope) throw new AccessDenied('맡은 당사자가 아니에요.');
+    // 잠금을 기다리는 동안 배정이 바뀌었으면 새 문장으로 현재 배정을 다시 읽는다.
+    const [member] = await tx<Array<{ user_id: number }>>`
+      select user_id from case_assignments where case_id = ${scope.case_id} and user_id = ${actorId}`;
+    if (!member) throw new AccessDenied('맡은 당사자가 아니에요.');
+
     await tx`
       update participant_access set revoked_at = now()
-      where participant_id = ${participantId} and revoked_at is null`;
+      where case_id = ${scope.case_id} and revoked_at is null`;
     await tx`
-      insert into participant_access (participant_id, token, code_hash, expires_at, created_by)
-      values (${participantId}, ${token}, ${await hash(code)}, ${expiresAt}, ${actorId})`;
+      insert into participant_access (participant_id, case_id, token, code_hash, expires_at, created_by)
+      values (${scope.participant_id}, ${scope.case_id}, ${token}, ${codeHash}, ${expiresAt}, ${actorId})`;
   });
 
   return { token, code, expires_at: expiresAt };
 }
 
-export async function revokeAccess(participantId: number): Promise<void> {
+export async function revokeAccess(caseId: number, actorId: number): Promise<void> {
   await sql`
-    update participant_access set revoked_at = now()
-    where participant_id = ${participantId} and revoked_at is null`;
+    update participant_access pa set revoked_at = now()
+    where pa.case_id = ${caseId} and pa.revoked_at is null
+      and exists (select 1 from case_assignments a
+                  where a.case_id = pa.case_id and a.user_id = ${actorId})`;
 }
 
 export type AccessState = {
@@ -50,14 +65,16 @@ export type AccessState = {
   last_opened_at: string | null;
 };
 
-export async function accessState(participantId: number): Promise<AccessState> {
+export async function accessState(caseId: number, actorId: number): Promise<AccessState> {
   const [row] = await sql<
     Array<{ expires_at: string; attempts_left: number; last_opened_at: string | null }>
   >`
-    select expires_at, attempts_left, last_opened_at from participant_access
-    where participant_id = ${participantId} and revoked_at is null
-      and expires_at > now() and attempts_left > 0
-    order by id desc limit 1`;
+    select pa.expires_at, pa.attempts_left, pa.last_opened_at from participant_access pa
+    where pa.case_id = ${caseId} and pa.revoked_at is null
+      and pa.expires_at > now() and pa.attempts_left > 0
+      and exists (select 1 from case_assignments a
+                  where a.case_id = pa.case_id and a.user_id = ${actorId})
+    order by pa.id desc limit 1`;
   return {
     active: Boolean(row),
     expires_at: row?.expires_at ?? null,
@@ -87,15 +104,20 @@ export async function openAccess(token: string, code: string): Promise<OpenResul
     Array<{
       id: number;
       participant_id: number;
+      case_id: number | null;
       code_hash: string;
       expires_at: string;
       attempts_left: number;
       revoked_at: string | null;
+      authorized: boolean;
     }>
-  >`select id, participant_id, code_hash, expires_at, attempts_left, revoked_at
-    from participant_access where token = ${token}`;
+  >`select pa.id, pa.participant_id, pa.case_id, pa.code_hash, pa.expires_at, pa.attempts_left, pa.revoked_at,
+      exists (select 1 from case_assignments a join users u on u.id = a.user_id
+              where a.case_id = pa.case_id and a.user_id = pa.created_by and u.deactivated_at is null) as authorized
+    from participant_access pa where pa.token = ${token}`;
 
-  if (!row || row.revoked_at) return { ok: false, reason: 'not_found' };
+  if (!row || row.revoked_at || row.case_id === null || !row.authorized)
+    return { ok: false, reason: 'not_found' };
   if (new Date(row.expires_at) < new Date()) return { ok: false, reason: 'expired' };
   if (row.attempts_left <= 0) return { ok: false, reason: 'locked' };
 
@@ -106,9 +128,14 @@ export async function openAccess(token: string, code: string): Promise<OpenResul
     return { ok: false, reason: 'wrong_code', attempts_left: left.attempts_left };
   }
 
-  await sql`
-    update participant_access set last_opened_at = now(), attempts_left = 5
-    where id = ${row.id}`;
+  // 코드 검증 중 배정/링크가 해제됐을 수 있다.
+  const [fresh] = await sql<Array<{ id: number }>>`
+    update participant_access pa set last_opened_at = now(), attempts_left = 5
+    where pa.id = ${row.id} and pa.revoked_at is null and pa.expires_at > now()
+      and exists (select 1 from case_assignments a join users u on u.id = a.user_id
+                  where a.case_id = pa.case_id and a.user_id = pa.created_by and u.deactivated_at is null)
+    returning pa.id`;
+  if (!fresh) return { ok: false, reason: 'not_found' };
 
   const [vault] = await sql<Array<{ enc_name: string | null; enc_phone: string | null; enc_email: string | null }>>`
     select enc_name, enc_phone, enc_email from participant_pii where participant_id = ${row.participant_id}`;
@@ -118,7 +145,7 @@ export async function openAccess(token: string, code: string): Promise<OpenResul
   >`
     select s.scheduled_at, s.method, s.place, c.program_name
     from sessions s join support_cases c on c.id = s.case_id
-    where c.participant_id = ${row.participant_id}
+    where c.id = ${row.case_id}
       and s.status = 'planned' and s.scheduled_at >= now()
     order by s.scheduled_at`;
 

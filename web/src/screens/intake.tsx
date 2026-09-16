@@ -1,20 +1,24 @@
-// 인테이크 작성하기 — 공통 뼈대 + 고른 영역 모듈. 사업 모듈은 P2.
-// I-05: 고른 영역의 세부 질문을 실제로 펼친다. 제목·배지만 보여주면 미완이다.
-// I-09: 전체 상담 목표는 사례의 overall_goal 을 쓴다. 비워둘 수 있다.
+// 인테이크 작성하기 — 2026-09-16 수정 요청의 아홉 구획.
+// 1. 상담 일시와 상담 방식 → 세션 필드(held_at·method·place)
+// 2~6. 질문지(intake-questions.ts) → detail
+// 7. 전체 상담 목표 → 사례 overall_goal, 8~9. 수행할 과제·다음에 물어볼 것 → 카드
 import { useEffect, useState } from 'react';
-import { getCase, getIntake, saveIntake, type CaseView } from '../api.ts';
 import {
-  intakeSectionLabel,
+  getCase,
+  getIntake,
+  saveIntake,
+  type CaseView,
+  type ConsultationMethod,
+  type IntakeInput,
+} from '../api.ts';
+import {
+  INTAKE_GROUPS,
   NOT_APPLICABLE_OPTION,
-  NO_RESPONSE_OPTION,
-  STEP1_GROUPS,
-  STEP2_GROUPS,
-  STEP3_GROUPS,
-  STEP4_GROUPS,
+  PREFERRED_METHOD_OPTIONS,
   type IntakeQuestion,
   type IntakeQuestionGroup,
 } from '../intake-questions.ts';
-import { ECONOMY_NUMBER_FIELDS, NEED_AREAS } from '../need-areas.ts';
+import { METHODS } from '../vocab.ts';
 import {
   Button,
   Card,
@@ -29,25 +33,77 @@ import {
   type Line,
 } from '../ui.tsx';
 
-const AREA_QUESTION_KEY = 'difficulty_areas';
-/** 다른 답에 딸린 질문들. 지금은 2순위 지원욕구 하나다. */
-const DEPENDENT_QUESTIONS = [...STEP1_GROUPS, ...STEP2_GROUPS, ...STEP3_GROUPS, ...STEP4_GROUPS]
-  .flatMap((g) => g.questions)
-  .filter((q) => q.excludeChosenOf);
-const EXCLUSIVE_OPTIONS = [NO_RESPONSE_OPTION, NOT_APPLICABLE_OPTION];
+/** 인테이크의 실제 상담 방식 네 선택지(요청 2). 방문은 예정 회차 전용이라 여기선 뺀다. */
+const INTAKE_METHODS = METHODS.filter((m) => m.key !== 'visit');
+
+/** 옛 무응답은 보이지 않지만, 사용자가 새 답을 고르면 함께 저장하지 않는다. */
+const EXCLUSIVE_OPTIONS = [NOT_APPLICABLE_OPTION, '무응답'];
 
 type Answers = Record<string, string | string[]>;
+
+/** `datetime-local` 이 바로 먹는 지역시각 문자열. 지금 시각을 분 단위로 자른다. */
+function localNow(): string {
+  return toLocalInput(new Date().toISOString());
+}
+
+function toLocalInput(iso: string): string {
+  const d = new Date(iso);
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 16);
+}
+
+/** 글이 길어지면 칸이 아래로 늘어난다(요청 7). 불러온 글도 처음부터 다 보이게 한다. */
+function grow(el: HTMLTextAreaElement | null) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = `${el.scrollHeight}px`;
+}
+
+/** 구 문항의 답을 새 문항으로 옮긴다. 모호한 값은 억지로 새 값에 끼우지 않고 원본만 남긴다. */
+function withLegacyMapping(detail: Record<string, unknown>, memo: string | null): Answers {
+  const answers = { ...(detail as Answers) };
+
+  // 과거 수급·심사 중·상충하는 답은 현재 수급 상태로 추정하지 않는다.
+  if (typeof answers.welfare_status !== 'string') {
+    const basic = answers.welfare_basic_livelihood;
+    const near = answers.welfare_near_poverty;
+    if (basic === '수급 중' && near !== '해당') answers.welfare_status = '기초생활보장수급';
+    else if (near === '해당' && basic !== '수급 중') answers.welfare_status = '차상위계층';
+    else if (basic === '비수급' && near === '비해당') answers.welfare_status = '해당 없음';
+  }
+
+  // 명시적으로 기록한 옛 선호 답이 우선한다. 복수 답을 임의로 하나로 줄이지 않는다.
+  if (typeof answers.preferred_counsel_method !== 'string') {
+    const legacy: Record<string, string> = {
+      '대면': '대면',
+      '전화': '전화',
+      '온라인 화상': '화상',
+      '기타': '기타(이메일, SNS 등)',
+    };
+    const preferred = answers.participation_preferred_method;
+    const fromPreferred =
+      typeof preferred === 'string' ? legacy[preferred]
+      : Array.isArray(preferred) && preferred.length === 1 ? legacy[preferred[0]]
+      : undefined;
+    if (fromPreferred) answers.preferred_counsel_method = fromPreferred;
+  }
+
+  // 신청 배경 글 칸이 비어 있고 예전 기록이 memo 에만 있으면(초기 데이터) memo 를 칸에 올린다.
+  // 저장 때 이 칸을 그대로 memo 로 돌려내므로 지우면 memo 도 지워진다.
+  if (answers.application_reason_detail === undefined && typeof memo === 'string') {
+    answers.application_reason_detail = memo;
+  }
+
+  return answers;
+}
 
 function Question({
   question,
   value,
-  options,
   onChange,
 }: {
   question: IntakeQuestion;
   value: string | string[] | undefined;
-  /** 다른 답에 따라 줄어든 선택지. 주지 않으면 질문이 가진 것을 그대로 쓴다. */
-  options?: readonly string[];
   onChange: (next: string | string[]) => void;
 }) {
   if (question.kind === 'text') {
@@ -65,35 +121,32 @@ function Question({
     );
   }
 
-  const choices = options ?? question.options ?? [];
-  const chosen = Array.isArray(value) ? value : value ? [value] : [];
 
-  // 선택지가 열 개를 넘는 한 가지 고르기는 드롭다운이다. 라디오로 늘어놓으면 화면을 덮는다.
-  if (question.dropdown) {
+  if (question.kind === 'textarea') {
     return (
-      <FormField label={question.label} htmlFor={question.key} control="select">
-        <select
+      <FormField label={question.label} htmlFor={question.key} control="textarea">
+        <textarea
           id={question.key}
+          rows={2}
+          ref={grow}
           value={typeof value === 'string' ? value : ''}
+          placeholder={question.hint}
+          onInput={(e) => grow(e.currentTarget)}
           onChange={(e) => onChange(e.target.value)}
-        >
-          <option value="">고르세요</option>
-          {choices.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
+        />
       </FormField>
     );
   }
+
+  const choices = question.options ?? [];
+  const chosen = Array.isArray(value) ? value : value ? [value] : [];
 
   const toggle = (option: string) => {
     if (question.kind === 'select') {
       onChange(chosen[0] === option ? '' : option);
       return;
     }
-    // 무응답·해당 없음은 다른 선택과 함께 고를 수 없다(I-02).
+    // '해당 없음'은 다른 선택과 함께 고를 수 없다.
     if (EXCLUSIVE_OPTIONS.includes(option)) {
       onChange(chosen.includes(option) ? [] : [option]);
       return;
@@ -130,26 +183,54 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
   const [tasks, setTasks] = useState<Line[]>([]);
   const [taskDraft, setTaskDraft] = useState<Line>({ text: '' });
   const [questionDraft, setQuestionDraft] = useState<Line>({ text: '' });
+  // 실제로 진행한 상담의 일시·방식·장소. 선호 상담 방식(detail)과 다른 값이다.
+  const [heldAt, setHeldAt] = useState(localNow());
+  const [method, setMethod] = useState<ConsultationMethod | ''>('');
+  const [place, setPlace] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // 이미 쓴 인테이크가 있으면 그것을 열어 고친다. 첫 회차는 하나뿐이다.
   const [written, setWritten] = useState(false);
-  const [locked, setLocked] = useState<string[]>([]);
 
   useEffect(() => {
+    // 늦게 온 응답이 새 화면을 덮지 않게 한다 — 다른 사례로 넘어간 뒤 이전 사례의
+    // 답이 내려앉아 그대로 저장되는 사고를 막는다.
+    let live = true;
+    setView(null);
+    setError(null);
+    setAnswers({});
+    setOverallGoal('');
+    setTasks([]);
+    setQuestions([]);
+    setTaskDraft({ text: '' });
+    setQuestionDraft({ text: '' });
+    setHeldAt(localNow());
+    setMethod('');
+    setPlace('');
+    setWritten(false);
     void (async () => {
       const [v, intake] = await Promise.all([getCase(caseId), getIntake(caseId)]);
+      if (!live) return;
       setView(v);
       setOverallGoal(intake.overall_goal ?? v.case.overall_goal ?? '');
       setWritten(intake.session_id !== null);
-      setAnswers((intake.detail ?? {}) as Answers);
+      setAnswers(withLegacyMapping(intake.detail ?? {}, intake.memo));
       setTasks(intake.cards.filter((c) => c.kind === 'promise').map((c) => ({ text: c.text })));
       setQuestions(intake.cards.filter((c) => c.kind === 'question').map((c) => ({ text: c.text })));
-      setLocked(intake.cards.filter((c) => c.locked).map((c) => c.text));
-    })();
+      setHeldAt(intake.held_at ? toLocalInput(intake.held_at) : localNow());
+      setMethod(intake.method ?? '');
+      setPlace(intake.place ?? '');
+    })().catch((failure: unknown) => {
+      if (live) setError(failure instanceof Error ? failure.message : '불러오지 못했어요.');
+    });
+    return () => {
+      live = false;
+    };
   }, [caseId]);
 
-  if (!view) return <p className="empty">불러오는 중이에요.</p>;
+  if (!view) {
+    return error ? <ErrorText>{error}</ErrorText> : <p className="empty">불러오는 중이에요.</p>;
+  }
   // 인테이크를 건너뛰고 다른 회차부터 기록한 사례는 여기서 새로 쓰지 못한다.
   if (!written && view.sessions.length > 0)
     return (
@@ -159,40 +240,21 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
       </p>
     );
 
-  const chosenAreas = (answers[AREA_QUESTION_KEY] as string[] | undefined) ?? [];
-  // 고른 영역만 표준 하위영역(선택 2 + 상세 1)을 편다. 정본 세부항목은 need-areas.ts 에 있다.
-  const openAreas = NEED_AREAS.filter((a) => chosenAreas.includes(a.label) && a.subdomains.length > 0);
-  const areaGroup = STEP2_GROUPS[0];
-
   const setAnswer = (key: string, value: string | string[]) =>
-    setAnswers((prev) => {
-      const next = { ...prev, [key]: value };
-      // 1순위를 바꿨는데 2순위가 그 값이면 2순위를 비운다. 목록에서만 빼면 이미 고른 값이 남는다.
-      for (const q of DEPENDENT_QUESTIONS) {
-        if (q.excludeChosenOf === key && next[q.key] === value) next[q.key] = '';
-      }
-      return next;
-    });
-
-  /** 다른 질문에서 이미 고른 값은 선택지에서 뺀다(1순위로 고른 욕구는 2순위에 안 뜬다). */
-  const optionsFor = (q: IntakeQuestion): readonly string[] | undefined => {
-    if (!q.excludeChosenOf) return undefined;
-    const taken = answers[q.excludeChosenOf];
-    if (typeof taken !== 'string' || !taken) return undefined;
-    return (q.options ?? []).filter((o) => o !== taken);
-  };
+    setAnswers((prev) => ({ ...prev, [key]: value }));
 
   const renderGroup = (group: IntakeQuestionGroup) => (
-    <Card title={intakeSectionLabel(group.title)} key={group.title}>
-      {group.questions.map((q) => (
-        <Question
-          key={q.key}
-          question={q}
-          value={answers[q.key]}
-          options={optionsFor(q)}
-          onChange={(v) => setAnswer(q.key, v)}
-        />
-      ))}
+    <Card title={group.title} key={group.title}>
+      {group.questions
+        .filter((q) => !q.visibleWhen || answers[q.visibleWhen.key] === q.visibleWhen.equals)
+        .map((q) => (
+          <Question
+            key={q.key}
+            question={q}
+            value={answers[q.key]}
+            onChange={(v) => setAnswer(q.key, v)}
+          />
+        ))}
     </Card>
   );
 
@@ -200,16 +262,24 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
     setSaving(true);
     setError(null);
     try {
-      await saveIntake(caseId, {
-        memo: (answers.application_reason_detail as string) || undefined,
+      const body: IntakeInput = {
+        // 신청 배경 칸이 곧 memo 다. 비우면 '' 를 보내 memo 도 지운다(생략하면 예전 값이 남는다).
+        memo: (answers.application_reason_detail as string) ?? '',
         overall_goal: overallGoal.trim() || null,
         detail: answers,
-        // I-08: 다음에 물어볼 것은 상담 기록하기와 같은 입력이며 확인할 것 카드가 된다.
+        // 다음에 물어볼 것은 상담 기록하기와 같은 입력이며 확인할 것 카드가 된다.
         cards: [
           ...withDraft(questions, questionDraft).map((q) => ({ kind: 'question', text: q.text, section: 'intake' })),
           ...withDraft(tasks, taskDraft).map((t) => ({ kind: 'promise', text: t.text, section: 'promise' })),
         ],
-      });
+      };
+      if (heldAt) body.held_at = new Date(heldAt).toISOString();
+      // 방식을 고르지 않았으면 보내지 않는다 — 고쳐 쓰기에서 예전 값을 지우지 않는다.
+      if (method && INTAKE_METHODS.some((m) => m.key === method)) {
+        body.method = method;
+        body.place = method === 'in_person' ? place.trim() || null : null;
+      }
+      await saveIntake(caseId, body);
       // 처음 쓴 것이면 일정 잡기로, 고쳐 쓴 것이면 보던 자리(15초 다시보기)로 돌아간다.
       window.location.hash = written ? `#/cases/${caseId}/briefing` : `#/cases/${caseId}/schedule`;
     } catch (e) {
@@ -227,104 +297,77 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
       />
 
       <div className="wire-container">
-        <div className="card-grid two-col">{STEP1_GROUPS.map(renderGroup)}</div>
-
-        <Card title={intakeSectionLabel(areaGroup.title)} hint="고른 영역만 아래에 세부 질문이 열려요.">
-          {areaGroup.questions.map((q) => (
-            <Question
-          key={q.key}
-          question={q}
-          value={answers[q.key]}
-          options={optionsFor(q)}
-          onChange={(v) => setAnswer(q.key, v)}
-        />
-          ))}
-        </Card>
-
-        {openAreas.map((area) => (
-          <Card title={area.label} key={area.key}>
-            {area.subdomains.map((sub) => (
-              <Question
-                key={sub.key}
-                question={{
-                  key: `need_${area.key}_${sub.key}`,
-                  label: sub.title,
-                  kind: 'multi',
-                  options: sub.items,
-                }}
-                value={answers[`need_${area.key}_${sub.key}`]}
-                onChange={(v) => setAnswer(`need_${area.key}_${sub.key}`, v)}
-              />
-            ))}
-            {area.key === 'economy' &&
-              ECONOMY_NUMBER_FIELDS.map((f) => (
-                <Question
-                  key={f.key}
-                  question={{ key: f.key, label: f.label, kind: 'text', hint: f.hint }}
-                  value={answers[f.key]}
-                  onChange={(v) => setAnswer(f.key, v)}
-                />
-              ))}
-            <Question
-              question={{ key: `need_${area.key}_detail`, label: `${area.label} 상세내용`, kind: 'text' }}
-              value={answers[`need_${area.key}_detail`]}
-              onChange={(v) => setAnswer(`need_${area.key}_detail`, v)}
-            />
-          </Card>
-        ))}
-        {chosenAreas.includes('기타') && (
-          <Card title="기타" key="other">
-            <Question
-              question={{ key: 'need_other_detail', label: '기타 상세내용', kind: 'text' }}
-              value={answers.need_other_detail}
-              onChange={(v) => setAnswer('need_other_detail', v)}
-            />
-          </Card>
-        )}
-
-        <div className="card-grid two-col">
-          {STEP3_GROUPS.map(renderGroup)}
-          {STEP4_GROUPS.map(renderGroup)}
-        </div>
-
-        <Card title="전체 상담 목표">
-          <FormField
-            label="전체 상담 목표"
-            htmlFor="overall-goal"
-            hint="비워 두어도 괜찮아요. 나중에 상담 기록하기에서 세우거나 고칠 수 있어요."
-          >
+        {/* 1. 실제로 진행한 상담의 일시·방식·장소. 장소는 대면일 때만 나온다(요청 2). */}
+        <Card title="상담 일시와 상담 방식">
+          <FormField label="상담 일시" htmlFor="held-at">
             <input
-              id="overall-goal"
-              type="text"
-              value={overallGoal}
-              onChange={(e) => setOverallGoal(e.target.value)}
+              id="held-at"
+              type="datetime-local"
+              value={heldAt}
+              onChange={(e) => setHeldAt(e.target.value)}
             />
           </FormField>
+          <ChoiceGroup legend="상담 방식">
+            {INTAKE_METHODS.map((m) => (
+              <Choice
+                key={m.key}
+                type="radio"
+                name="method"
+                label={m.label}
+                checked={method === m.key}
+                onChange={() => setMethod(method === m.key ? '' : m.key)}
+              />
+            ))}
+          </ChoiceGroup>
+          {method === 'in_person' && (
+            <FormField label="상담 장소" htmlFor="place">
+              <input id="place" type="text" value={place} onChange={(e) => setPlace(e.target.value)} />
+            </FormField>
+          )}
         </Card>
 
-        <Card title="수행할 과제" hint="저장하면 다음 상담의 확인할 과제로 올라가요. 적어 두면 `추가`를 누르지 않아도 저장돼요.">
-          <LineList
-            id="intake-task"
-            label="수행할 과제"
-            placeholder="예: 채무 내역서 떼어 오기"
-            lines={tasks}
-            draft={taskDraft}
-            onDraft={setTaskDraft}
-            onChange={setTasks}
-          />
-        </Card>
+        {/* 2~9 구획. 두 열로 나란히 놓되 DOM 순서는 구획 순서 그대로다. */}
+        <div className="card-grid two-col">
+          {INTAKE_GROUPS.map(renderGroup)}
 
-        <Card title="다음에 물어볼 것" hint="저장하면 1회차 15초 다시보기의 오늘 물어볼 것으로 올라가요.">
-          <LineList
-            id="intake-question"
-            label="다음에 물어볼 것"
-            placeholder="예: 통원 주기가 어떻게 되는지"
-            lines={questions}
-            draft={questionDraft}
-            onDraft={setQuestionDraft}
-            onChange={setQuestions}
-          />
-        </Card>
+          <Card title="전체 상담 목표">
+            <FormField
+              label="전체 상담 목표"
+              htmlFor="overall-goal"
+            >
+              <input
+                id="overall-goal"
+                type="text"
+                value={overallGoal}
+                onChange={(e) => setOverallGoal(e.target.value)}
+              />
+            </FormField>
+          </Card>
+
+          <Card title="수행할 과제">
+            <LineList
+              id="intake-task"
+              label="수행할 과제"
+              placeholder="예: 채무 내역서 떼어 오기"
+              lines={tasks}
+              draft={taskDraft}
+              onDraft={setTaskDraft}
+              onChange={setTasks}
+            />
+          </Card>
+
+          <Card title="다음에 물어볼 것">
+            <LineList
+              id="intake-question"
+              label="다음에 물어볼 것"
+              placeholder="예: 통원 주기가 어떻게 되는지"
+              lines={questions}
+              draft={questionDraft}
+              onDraft={setQuestionDraft}
+              onChange={setQuestions}
+            />
+          </Card>
+        </div>
 
         <FormActions>
           {error && <ErrorText>{error}</ErrorText>}

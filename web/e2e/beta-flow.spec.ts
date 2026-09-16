@@ -21,6 +21,15 @@ test('등록부터 15초 다시보기까지 한 바퀴', async ({ page }) => {
   // ── 당사자 등록 ─────────────────────────────────────────────
   // 로그인하면 홈은 일정이다
   await expect(page.getByRole('heading', { name: '일정', exact: true })).toBeVisible();
+  const scheduleMenu = page.locator('.navigation-group', {
+    has: page.locator('.navigation-section-title', { hasText: '일정' }),
+  });
+  const participantMenu = page.locator('.navigation-group', {
+    has: page.locator('.navigation-section-title', { hasText: '당사자' }),
+  });
+  await expect(participantMenu.getByRole('link', { name: '상담 기록하기' })).toHaveCount(0);
+  await scheduleMenu.getByRole('link', { name: '상담 기록하기' }).click();
+  await expect(page.getByRole('heading', { name: '누구의 상담을 기록할까요' })).toBeVisible();
   await page.goto('/#/participants/new');
   await page.locator('#name').fill(NAME);
   await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
@@ -32,13 +41,13 @@ test('등록부터 15초 다시보기까지 한 바퀴', async ({ page }) => {
   // ── 인테이크 작성하기 ───────────────────────────────────────
   await expect(page.getByRole('heading', { name: '인테이크 작성하기' })).toBeVisible();
 
-  // 고른 영역만 세부 질문이 열린다(I-05).
-  const areaSection = page.locator('section.wire-card', { hasText: '현재 어려움 관련 영역' });
-  await expect(page.locator('section.wire-card .wire-card-title', { hasText: '경제' })).toHaveCount(0);
-  await areaSection.getByRole('checkbox', { name: '경제', exact: true }).check();
-  const economySection = page.locator('section.wire-card').filter({ has: page.getByRole('heading', { name: '경제', exact: true }) });
-  await expect(economySection).toBeVisible();
-  await economySection.getByRole('checkbox', { name: '부채', exact: true }).check();
+  // 수급자 여부에 따라 해당 급여의 복수 선택이 열린다.
+  await expect(page.getByRole('checkbox', { name: '생계급여', exact: true })).toHaveCount(0);
+  await page.getByRole('radio', { name: '기초생활보장수급', exact: true }).check();
+  await page.getByRole('checkbox', { name: '생계급여', exact: true }).check();
+  await page.getByRole('checkbox', { name: '주거급여', exact: true }).check();
+  await expect(page.getByRole('checkbox', { name: '생계급여', exact: true })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: '주거급여', exact: true })).toBeChecked();
 
   await page.locator('#overall-goal').fill(OVERALL_GOAL);
   const intakeQuestions = page.locator('section.wire-card', { hasText: '다음에 물어볼 것' });
@@ -55,7 +64,7 @@ test('등록부터 15초 다시보기까지 한 바퀴', async ({ page }) => {
   await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
 
   // ── 2회차 상담 기록하기 ─────────────────────────────────────
-  await page.getByRole('button', { name: '상담 기록하기' }).click();
+  await scheduleMenu.getByRole('link', { name: '상담 기록하기' }).click();
   await expect(page.getByRole('heading', { name: '상담 기록하기' })).toBeVisible();
 
   // 인테이크에서 만든 질문이 레일에 올라와 있다.
@@ -144,14 +153,9 @@ test('예정 회차가 없어도 상담 기록하기에서 일시를 적고 기�
   await expect(page.getByRole('heading', { name: '상담 일정 등록' })).toBeVisible();
   await page.getByRole('link', { name: '상담 기록하기' }).click();
 
-  const when = page.locator('section.wire-card', { hasText: '상담 일시와 상담 방식' });
-  await expect(when).toBeVisible();
   await page.locator('#held-at').fill('2026-09-20T14:00');
   await page.getByRole('radio', { name: '전화' }).check();
   await page.locator('#memo').fill('예고 없이 전화가 와서 그 자리에서 상담함');
-  // 국가 표준 영역이 그대로 저장되는지. 서버가 옛 9영역 목록을 들고 있으면 여기서 500 이 난다.
-  await page.locator('#change-area').selectOption({ label: '생활환경' });
-  await page.locator('#change-input').fill('월세 계약을 6개월 연장함');
   await page.getByRole('button', { name: '저장' }).click();
 
   // 2회차로 저장되고, 다시보기가 그 회차를 가리킨다
@@ -619,7 +623,7 @@ test('스키마에 안 맞는 요청은 400 으로 답한다', async ({ page, re
   const cookie = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
 
   // 개발 서버는 /api 를 API 로 넘긴다(web/src/api.ts:44).
-  const res = await request.post('/api/cases', {
+  const res = await request.post(`${process.env.PLAYWRIGHT_API_PREFIX ?? '/api'}/cases`, {
     headers: { cookie, 'content-type': 'application/json' },
     data: { name: '검증', program_name: 'x', consents: [{ domain: '없는_영역', decision: 'grant' }] },
   });

@@ -26,7 +26,8 @@ import { buildMismatches, type MismatchView } from './domain/mismatch-view.ts';
 import { openCards, resolveOutcomes, type OutcomeSubmission } from './domain/cards.ts';
 import { carryOverOnRecord } from './domain/goals.ts';
 import { buildSessionLine } from './domain/session-line.ts';
-import type { Card, CardOutcome, Session, SupportCase } from './domain/types.ts';
+import type { Assignee, Card, CardOutcome, Session, SupportCase } from './domain/types.ts';
+import { NotFound } from './access.ts';
 
 const ANIMALS = [
   'swallow', 'otter', 'heron', 'badger', 'marten', 'crane', 'gecko', 'finch', 'ibex', 'lynx',
@@ -62,10 +63,9 @@ export async function createCase(input: {
   address?: string;
   program_name: string;
   sessions_planned?: number;
-  assigned_user_id?: number;
   /** 등록 화면에서 받은 동의. 영역마다 동의·거부를 그 자리에서 사건으로 남긴다(P1). */
   consents?: Array<{ domain: ConsentDomain; decision: ConsentDecision }>;
-  actorId?: number;
+  actorId: number;
 }): Promise<{ case_id: number; participant_id: number; pseudonym: string }> {
   return await sql.begin(async (tx) => {
     const pseudonym = await nextPseudonym(tx as unknown as typeof sql);
@@ -75,16 +75,20 @@ export async function createCase(input: {
       values (${participant.id}, ${encryptPii(input.name)}, ${encryptPii(input.phone)},
               ${encryptPii(input.email)}, ${encryptPii(input.birth)}, ${encryptPii(input.address)}, ${KEY_VERSION})`;
     const [c] = await tx<{ id: number }[]>`
-      insert into support_cases (participant_id, program_name, sessions_planned, assigned_user_id)
-      values (${participant.id}, ${input.program_name}, ${input.sessions_planned ?? null}, ${input.assigned_user_id ?? null})
+      insert into support_cases (participant_id, program_name, sessions_planned)
+      values (${participant.id}, ${input.program_name}, ${input.sessions_planned ?? null})
       returning id`;
+    // 등록한 사람이 첫 담당이다(2026-09-16 Q). 맡은 사람만 사례를 여는 규칙이라
+    // 배정 없이 만들면 만든 사람조차 못 여는 사례가 생긴다.
+    await tx`insert into case_assignments (case_id, user_id, assigned_by)
+      values (${c.id}, ${input.actorId}, ${input.actorId})`;
     for (const consent of input.consents ?? []) {
       await tx`
         insert into consent_events
           (participant_id, case_id, domain, decision, purpose, copy_version, copy_hash, effective_at, recorded_by)
         values (${participant.id}, ${c.id}, ${consent.domain}, ${consent.decision},
                 ${CONSENT_COPY[consent.domain].purpose}, ${COPY_VERSION}, ${copyHash(consent.domain)},
-                ${new Date().toISOString()}, ${input.actorId ?? null})`;
+                ${new Date().toISOString()}, ${input.actorId})`;
     }
     return { case_id: c.id, participant_id: participant.id, pseudonym };
   });
@@ -92,6 +96,10 @@ export async function createCase(input: {
 
 export type IntakeView = {
   session_id: number | null;
+  /** 실제로 상담한 일시·방식·장소. detail.preferred_counsel_method(선호 방식)와는 다른 값이다. */
+  held_at: string | null;
+  method: string | null;
+  place: string | null;
   memo: string | null;
   detail: Record<string, unknown>;
   overall_goal: string | null;
@@ -103,11 +111,22 @@ export type IntakeView = {
 export async function getIntake(caseId: number): Promise<IntakeView | null> {
   const [supportCase] = await sql<SupportCase[]>`select * from support_cases where id = ${caseId}`;
   if (!supportCase) return null;
-  const [session] = await sql<Array<{ id: number; memo: string | null; detail: Record<string, unknown> }>>`
-    select id, memo, detail from sessions where case_id = ${caseId} and kind = 'intake'`;
+  const [session] = await sql<Array<{
+    id: number;
+    held_at: string | null;
+    method: string | null;
+    place: string | null;
+    memo: string | null;
+    detail: Record<string, unknown>;
+  }>>`
+    select id, held_at, method, place, memo, detail
+    from sessions where case_id = ${caseId} and kind = 'intake'`;
   if (!session) {
     return {
       session_id: null,
+      held_at: null,
+      method: null,
+      place: null,
       memo: null,
       detail: {},
       overall_goal: decryptText(supportCase.overall_goal),
@@ -119,6 +138,9 @@ export async function getIntake(caseId: number): Promise<IntakeView | null> {
     from cards c where c.source_session_id = ${session.id} order by c.id`;
   return {
     session_id: session.id,
+    held_at: session.held_at,
+    method: session.method,
+    place: session.place,
     memo: decryptText(session.memo),
     detail: decryptJson(session.detail),
     overall_goal: decryptText(supportCase.overall_goal),
@@ -129,33 +151,68 @@ export async function getIntake(caseId: number): Promise<IntakeView | null> {
 /**
  * 인테이크 작성하기. 전체 상담 목표는 비워둘 수 있다.
  * 이미 쓴 인테이크가 있으면 **고쳐 쓴다** — 첫 회차는 하나뿐이라 새로 만들지 않는다.
+ * 빠진 칸은 지우지 않고 두고, 들고 온 칸만 바꾼다 — 옛 화면의 답이나 화면에서 빠진
+ * 항목(사실·판단 카드, 폐기된 질문)이 저장할 때마다 사라지면 안 된다.
  * 다른 회차에서 결과가 찍힌 카드(확인함·못 함 따위)는 지우지 않는다. 그 이력까지 사라진다.
  */
 export async function saveIntake(
   caseId: number,
-  input: { held_at?: string; memo?: string; overall_goal?: string | null; detail?: Record<string, unknown>; cards?: NewCardInput[] },
+  input: {
+    held_at?: string;
+    method?: string;
+    place?: string | null;
+    memo?: string;
+    overall_goal?: string | null;
+    detail?: Record<string, unknown>;
+    cards?: NewCardInput[];
+  },
 ): Promise<{ session_id: number }> {
   // 상담 자유 글에는 건강·채무 같은 민감정보가 섞인다. 동의 없이 저장하지 않는다(P1).
   await assertConsent(caseId, 'sensitive_information_processing');
   return await sql.begin(async (tx) => {
-    const [intake] = await tx<{ id: number }[]>`
-      select id from sessions where case_id = ${caseId} and kind = 'intake'`;
+    // 첫 인테이크 저장은 회차를 만든다 — 일정 등록과 같은 이유로 사례 행을 먼저 잠근다.
+    await tx`select id from support_cases where id = ${caseId} for update`;
+    const [intake] = await tx<{
+      id: number;
+      held_at: string | null;
+      method: string | null;
+      place: string | null;
+      memo: string | null;
+      detail: Record<string, unknown>;
+    }[]>`
+      select id, held_at, method, place, memo, detail
+      from sessions where case_id = ${caseId} and kind = 'intake'`;
 
     let sessionId: number;
     if (intake) {
       sessionId = intake.id;
+      // 실제 상담 방식이 대면이 아니면 장소는 없다 — 이전에 남은 장소도 지운다.
+      const method = input.method === undefined ? intake.method : input.method;
+      const place =
+        method === 'in_person' ? (input.place === undefined ? intake.place : input.place) : null;
+      // detail 은 겹쳐 쓴다 — 화면에서 빠진 옛 질문의 답(폐기된 키)은 그대로 남긴다.
+      // 들고 온 값이 있으면 풀어서 겹친 뒤 다시 암호화한다.
+      const detail =
+        input.detail === undefined
+          ? intake.detail
+          : encryptJson({ ...decryptJson(intake.detail), ...input.detail });
       await tx`
         update sessions set
-          memo = ${encryptText(input.memo)},
-          detail = ${tx.json(encryptJson(input.detail))}
+          held_at = ${input.held_at ?? intake.held_at},
+          method = ${method},
+          place = ${place},
+          memo = ${input.memo === undefined ? intake.memo : encryptText(input.memo)},
+          detail = ${tx.json(detail)}
         where id = ${sessionId}`;
     } else {
       const [other] = await tx<{ id: number }[]>`
         select id from sessions where case_id = ${caseId} limit 1`;
       if (other) throw new Error('이미 다른 회차가 있어요. 인테이크는 첫 회차예요.');
       const [created] = await tx<{ id: number }[]>`
-        insert into sessions (case_id, seq, kind, status, held_at, memo, detail)
+        insert into sessions (case_id, seq, kind, status, held_at, method, place, memo, detail)
         values (${caseId}, 1, 'intake', 'done', ${input.held_at ?? new Date().toISOString()},
+                ${input.method ?? null},
+                ${input.method === 'in_person' ? (input.place ?? null) : null},
                 ${encryptText(input.memo)}, ${tx.json(encryptJson(input.detail))})
         returning id`;
       sessionId = created.id;
@@ -165,18 +222,25 @@ export async function saveIntake(
       await setOverallGoal(tx as unknown as typeof sql, caseId, input.overall_goal);
     }
 
-    // 결과가 찍힌 카드는 남기고, 나머지는 지운 뒤 지금 화면의 목록을 다시 넣는다.
-    const locked = await tx<Array<{ kind: string; text: string }>>`
-      select c.kind, c.text from cards c
-      where c.source_session_id = ${sessionId}
-        and exists (select 1 from card_outcomes o where o.card_id = c.id)`;
-    await tx`
-      delete from cards c
-      where c.source_session_id = ${sessionId}
-        and not exists (select 1 from card_outcomes o where o.card_id = c.id)`;
-    const keep = new Set(locked.map((c) => `${c.kind}\u0000${c.text}`));
-    const fresh = (input.cards ?? []).filter((c) => !keep.has(`${c.kind}\u0000${c.text}`));
-    await insertCards(tx as unknown as typeof sql, caseId, sessionId, fresh);
+    // 카드 목록을 들고 왔을 때만 갈아 끼운다 — 안 들고 오면(옛 화면) 있는 그대로 둔다.
+    if (input.cards !== undefined) {
+      // 인테이크 화면이 고치는 것은 과제·질문뿐이다. 사실·판단 카드는 화면에 없으니
+      // 지우지 않고 남긴다 — 결과가 찍힌 카드도 마찬가지다.
+      const kept = await tx<Array<{ kind: string; text: string }>>`
+        select c.kind, c.text from cards c
+        where c.source_session_id = ${sessionId}
+          and (c.kind in ('fact', 'judgment')
+               or exists (select 1 from card_outcomes o where o.card_id = c.id))`;
+      await tx`
+        delete from cards c
+        where c.source_session_id = ${sessionId}
+          and c.kind in ('promise', 'question')
+          and not exists (select 1 from card_outcomes o where o.card_id = c.id)`;
+      // 남은 카드 본문은 암호문이다 — 들고 온 평문과 견주려면 먼저 풀어야 한다.
+      const keep = new Set(kept.map((c) => `${c.kind}\u0000${decryptText(c.text) ?? ''}`));
+      const fresh = input.cards.filter((c) => !keep.has(`${c.kind}\u0000${c.text}`));
+      await insertCards(tx as unknown as typeof sql, caseId, sessionId, fresh);
+    }
     return { session_id: sessionId };
   });
 }
@@ -240,6 +304,12 @@ export async function recordSession(
     const cards = await tx<Card[]>`select * from cards where case_id = ${target.case_id}`;
     const outcomes = await tx<CardOutcome[]>`
       select o.* from card_outcomes o join cards c on c.id = o.card_id where c.case_id = ${target.case_id}`;
+    // 요청이 들고 온 card_id 도 대상 사례 안에 있어야 한다. FK 만 믿으면 맡은 사례 A를
+    // 저장하면서 남의 사례 B 카드에 결과를 붙이는 우회가 열린다.
+    const caseCardIds = new Set(cards.map((card) => card.id));
+    if ((input.outcomes ?? []).some((outcome) => !caseCardIds.has(outcome.card_id))) {
+      throw new NotFound('카드를 찾지 못했어요.');
+    }
 
     // 이미 저장한 회차를 고쳐 쓰는 경우, 이 회차가 남긴 결과는 빼고 "이 회차 전에 열려 있던 카드"를
     // 다시 센다. 그러지 않으면 지난번에 완료로 닫은 카드가 목록에서 빠져 미확인이 남지 않는다.
@@ -247,21 +317,36 @@ export async function recordSession(
     const outcomesBefore = wasDone ? outcomes.filter((o) => o.session_id !== sessionId) : outcomes;
 
     // 고쳐 쓰기: 이 회차가 만든 카드 중 **결과가 붙지 않은 것**만 갈아 끼운다(인테이크와 같은 규칙).
-    if (wasDone) {
+    // 카드 목록을 들고 왔을 때만 지운다 — 안 들고 오면 있는 그대로 둔다.
+    // 사실 카드는 기록 화면에 없으므로(달라진 것 칸 폐지) 지우지 않는다.
+    // 인테이크라면 판단 카드도 화면에 없으므로 과제·질문만 고친다.
+    if (wasDone && input.cards !== undefined) {
       await tx`
         delete from cards c
         where c.source_session_id = ${sessionId}
+          and c.kind <> 'fact'
+          and (${target.kind} <> 'intake' or c.kind <> 'judgment')
           and not exists (select 1 from card_outcomes o where o.card_id = c.id)`;
     }
 
     const carry = carryOverOnRecord(target, sessions);
+    // 빠진 칸은 지우지 않고 둔다. 방식이 대면이 아니면 장소는 없다 — 남은 장소도 지운다.
+    const method = input.method === undefined ? target.method : input.method;
+    const place =
+      method === 'in_person' ? (input.place === undefined ? target.place : input.place) : null;
+    // detail 은 겹쳐 쓴다 — 안 들고 오면 있는 그대로, 들고 오면 풀어서 겹친 뒤 다시 암호화한다.
+    // 겹치지 않으면 인테이크의 숨은 답이 기록 저장 한 번에 지워진다.
+    const detail =
+      input.detail === undefined
+        ? target.detail
+        : encryptJson({ ...decryptJson(target.detail), ...input.detail });
     await tx`update sessions set
         status = 'done',
-        held_at = ${input.held_at ?? new Date().toISOString()},
+        held_at = ${input.held_at ?? target.held_at ?? new Date().toISOString()},
         memo = ${encryptText(input.memo)},
-        method = ${input.method ?? target.method},
-        place = ${input.place ?? null},
-        detail = ${tx.json(input.detail ?? {})},
+        method = ${method},
+        place = ${place},
+        detail = ${tx.json(detail)},
         next_goal_text = ${encryptText(input.next_goal_text)},
         created_by = coalesce(created_by, ${input.actorId ?? null}),
         is_closing = ${input.is_closing ?? false},
@@ -280,8 +365,9 @@ export async function recordSession(
       (await tx<Array<{ id: number }>>`select id from cards where source_session_id = ${sessionId}`).map((c) => c.id),
     );
     const kept = cards.filter((c) => keptIds.has(c.id));
+    // 남은 카드 본문은 암호문이다 — 들고 온 평문과 견주려면 먼저 풀어야 한다.
     const fresh = (input.cards ?? []).filter(
-      (c) => !kept.some((k) => k.kind === c.kind && k.text === c.text),
+      (c) => !kept.some((k) => k.kind === c.kind && decryptText(k.text) === c.text),
     );
     await insertCards(tx as unknown as typeof sql, target.case_id, sessionId, fresh);
 
@@ -469,7 +555,9 @@ export async function getConsents(caseId: number): Promise<ConsentView | null> {
   if (!supportCase) return null;
   const events = await sql<ConsentEventRow[]>`
     select id, domain, decision, copy_version, copy_hash, effective_at
-    from consent_events where participant_id = ${supportCase.participant_id} order by id`;
+    from consent_events
+    where participant_id = ${supportCase.participant_id} and case_id = ${caseId}
+    order by id`;
   // 기능이 꺼진 영역은 목록에 두지 않는다 — 받을 이유가 없는 동의를 화면에 띄우지 않는다.
   return activeDomains().map((domain) => {
     const mine = events.filter((e) => e.domain === domain);
@@ -615,14 +703,15 @@ export async function closeCase(
 
 export type ParticipantRow = {
   case_id: number;
-  participant_id: number;
+  participant_id: number | null;
   pseudonym: string;
   name: string | null;
   program_name: string;
   status: 'open' | 'closed';
-  // 담당 실무자. 없으면 아직 아무도 맡지 않은 사람이다(2026-09-16 Q 배정 요청).
-  assigned_user_id: number | null;
-  assignee_name: string | null;
+  /** 이 사례를 맡은 사람들. 없으면 아직 아무도 맡지 않은 사람이다. */
+  assignees: Assignee[];
+  /** 내가 이 사례를 맡았는가. false 면 이름·회차·일정은 비어 있다. */
+  can_access: boolean;
   last_session_seq: number | null;
   next_scheduled_at: string | null;
 };
@@ -630,24 +719,44 @@ export type ParticipantRow = {
 /**
  * 당사자 목록. 이름은 금고 암호문이라 **서버에서 이름으로 검색할 수 없다** —
  * 복호화해서 내려보내고 거르는 일은 화면이 한다. 기관 하나 규모라 이 대가를 받아들인다.
+ *
+ * **맡지 않은 사례는 가명·사업·상태·담당 이름만 낸다.** 실명·회차·일정은 임상 정보다 —
+ * 목록이 뒷문이 되지 않게 서버에서 지운다(2026-09-16 Q).
  */
-export async function listParticipants(): Promise<ParticipantRow[]> {
-  const rows = await sql<Array<Omit<ParticipantRow, 'name'> & { enc_name: string | null }>>`
+export async function listParticipants(actorId: number): Promise<ParticipantRow[]> {
+  const rows = await sql<
+    Array<Omit<ParticipantRow, 'name' | 'assignees' | 'can_access'> & {
+      enc_name: string | null;
+      assignees: Assignee[] | null;
+      can_access: boolean;
+    }>
+  >`
     select c.id as case_id,
            p.id as participant_id,
            p.pseudonym,
            v.enc_name,
            c.program_name,
            c.status,
-           c.assigned_user_id,
-           (select name from users u where u.id = c.assigned_user_id) as assignee_name,
+           (select coalesce(jsonb_agg(jsonb_build_object('id', u.id, 'name', u.name) order by u.name), '[]'::jsonb)
+              from case_assignments a join users u on u.id = a.user_id
+             where a.case_id = c.id) as assignees,
+           exists (select 1 from case_assignments a
+                    where a.case_id = c.id and a.user_id = ${actorId}) as can_access,
            (select max(seq) from sessions s where s.case_id = c.id and s.status = 'done') as last_session_seq,
            (select min(scheduled_at) from sessions s where s.case_id = c.id and s.status = 'planned') as next_scheduled_at
     from support_cases c
     join participants p on p.id = c.participant_id
     left join participant_pii v on v.participant_id = p.id
     order by c.opened_at desc`;
-  return rows.map(({ enc_name, ...row }) => ({ ...row, name: decryptPii(enc_name) }));
+  return rows.map(({ enc_name, can_access, last_session_seq, next_scheduled_at, ...row }) => ({
+    ...row,
+    participant_id: can_access ? row.participant_id : null,
+    assignees: row.assignees ?? [],
+    can_access,
+    name: can_access ? decryptPii(enc_name) : null,
+    last_session_seq: can_access ? last_session_seq : null,
+    next_scheduled_at: can_access ? next_scheduled_at : null,
+  }));
 }
 
 export type ScheduleRow = {
@@ -665,8 +774,11 @@ export type ScheduleRow = {
   open_questions: number;
 };
 
-/** 다가오는 상담. 홈 화면의 재료다. 열린 과제·질문 수를 함께 센다(일정 화면의 `할 일` 띠). */
-export async function listSchedules(from: string, to: string): Promise<ScheduleRow[]> {
+/**
+ * 다가오는 상담. 홈 화면의 재료다. 열린 과제·질문 수를 함께 센다(일정 화면의 `할 일` 띠).
+ * **내가 맡은 사례만** 보인다 — 관리자도 예외가 없다(2026-09-16 Q).
+ */
+export async function listSchedules(actorId: number, from: string, to: string): Promise<ScheduleRow[]> {
   const rows = await sql<Array<Omit<ScheduleRow, 'name'> & { enc_name: string | null }>>`
     select s.id as session_id, s.case_id, s.seq, s.scheduled_at, s.method, s.place, s.plan_memo,
            p.pseudonym, v.enc_name, c.program_name
@@ -675,7 +787,10 @@ export async function listSchedules(from: string, to: string): Promise<ScheduleR
     join participants p on p.id = c.participant_id
     left join participant_pii v on v.participant_id = p.id
     where s.status = 'planned' and s.scheduled_at between ${from} and ${to}
+      and exists (select 1 from case_assignments a
+                   where a.case_id = c.id and a.user_id = ${actorId})
     order by s.scheduled_at`;
+
   const out: ScheduleRow[] = [];
   for (const { enc_name, ...row } of rows) {
     const loaded = await loadCase(row.case_id);
@@ -735,19 +850,23 @@ export async function getBriefing(caseId: number, seq?: number): Promise<Briefin
  */
 export async function getMismatches(sessionId: number): Promise<MismatchView> {
   const [session] = await sql<Session[]>`select * from sessions where id = ${sessionId}`;
-  if (!session) return { voice_vs_written: [], across_sessions: [] };
+  if (!session) return buildMismatches({ written: null, transcript: null, transcriptStatus: null, previous: null, current: { seq: 0 } });
 
   const [prev] = await sql<Array<{ seq: number; memo: string | null }>>`
     select seq, memo from sessions
     where case_id = ${session.case_id} and seq < ${session.seq} and memo is not null
     order by seq desc limit 1`;
 
-  const [tr] = await sql<Array<{ text: string }>>`
-    select text from transcripts where session_id = ${sessionId} order by id desc limit 1`;
+  // 새 초안이 있으면 이전 승인본으로 조용히 되돌아가지 않는다.
+  const [tr] = await sql<Array<{ text: string; status: 'draft' | 'approved'; deleted_at: string | null }>>`
+    select t.text, t.status, r.deleted_at from transcripts t
+    join recordings r on r.id = t.recording_id
+    where t.session_id = ${sessionId} order by t.id desc limit 1`;
 
   return buildMismatches({
     written: decryptText(session.memo),
-    transcript: tr ? decryptText(tr.text) : null,
+    transcript: tr && !tr.deleted_at ? decryptText(tr.text) : null,
+    transcriptStatus: tr && !tr.deleted_at ? tr.status : null,
     previous: prev ? { seq: prev.seq, text: decryptText(prev.memo) ?? '' } : null,
     current: { seq: session.seq },
   });

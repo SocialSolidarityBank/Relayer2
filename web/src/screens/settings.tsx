@@ -11,7 +11,7 @@
  * 기관에 있는 것(`실무자 초대하기`·`실무자 목록`)과 이 사람을 맡은 것(`담당 배정하기`)은
  * 다르다. 방금 초대한 사람은 아무도 안 맡았는데 `담당자`라 부르면 화면이 거짓말한다.
  */
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import {
   addProgram,
   assignCase,
@@ -23,6 +23,7 @@ import {
   getOrg,
   getProfile,
   listInvites,
+  listAssignmentCases,
   listPrograms,
   listRequests,
   listWorkers,
@@ -32,6 +33,7 @@ import {
   saveOrg,
   saveProfile,
   workerCases,
+  type AssignmentCase,
   type Connections,
   type ConsentCopy,
   type Invite,
@@ -47,6 +49,8 @@ import {
   Badge,
   Button,
   Card,
+  Choice,
+  ChoiceGroup,
   ConsentDetail,
   DataRows,
   Empty,
@@ -56,7 +60,6 @@ import {
   FormActions,
   Item,
   PageHeader,
-  Select,
 } from '../ui.tsx';
 import { setTheme, themeChoice, type ThemeChoice } from '../theme.ts';
 import { AUDIT_DAYS, AUDIT_KIND_TABS, AuditScreen } from './audit.tsx';
@@ -373,33 +376,109 @@ function LeavePane() {
 function AssignPane({ me }: { me: { id: number } }) {
   const [workers, setWorkers] = useState<Worker[] | null>(null);
   const [reqs, setReqs] = useState<RequestRow[]>([]);
-  const [who, setWho] = useState<number | null>(null);
-  const [cases, setCases] = useState<WorkerCase[]>([]);
-  const [moveTo, setMoveTo] = useState<Record<number, string>>({});
+  const [dir, setDir] = useState<AssignmentCase[] | null>(null);
+  const [dirError, setDirError] = useState('');
+  const [openCase, setOpenCase] = useState<number | null>(null);
+  const [picked, setPicked] = useState<number[]>([]);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  // 늦게 온 목록 응답이 새 것을 덮지 못하게 번호를 매긴다.
+  const dirSeq = useRef(0);
+
+  const loadDir = async () => {
+    const seq = ++dirSeq.current;
+    try {
+      const rows = await listAssignmentCases();
+      if (seq === dirSeq.current) {
+        setDir(rows);
+        setDirError('');
+      }
+    } catch (e) {
+      if (seq === dirSeq.current)
+        setDirError(e instanceof Error ? e.message : '불러오지 못했어요');
+    }
+  };
 
   const reload = async () => {
-    setWorkers(await listWorkers());
-    setReqs(await listRequests());
+    try {
+      const [staff, requests] = await Promise.all([listWorkers(), listRequests()]);
+      setWorkers(staff);
+      setReqs(requests);
+      await loadDir();
+    } catch (e) {
+      setDirError(e instanceof Error ? e.message : '배정 정보를 불러오지 못했어요.');
+    }
   };
   useEffect(() => {
     void reload();
   }, []);
-  useEffect(() => {
-    if (who) void workerCases(who).then(setCases);
-    else setCases([]);
-  }, [who]);
 
   const live = (workers ?? []).filter((w) => !w.deactivated_at);
-  // 남이 올린 대기 요청은 내가 확정할 것이고, 내가 올린 것은 결과를 기다리는 것이다.
   const toApprove = reqs.filter((r) => !r.decided_at && r.requester_id !== me.id);
   const mine = reqs.filter((r) => r.requester_id === me.id);
+
+  const decide = async (id: number, decision: 'approved' | 'rejected') => {
+    setSaving(true);
+    setSaveError('');
+    try {
+      await decideRequest(id, decision);
+      await reload();
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : '배정 요청을 처리하지 못했어요.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openEditor = (c: AssignmentCase) => {
+    if (openCase === c.id) {
+      setOpenCase(null);
+      return;
+    }
+    setOpenCase(c.id);
+    setPicked(c.assignees.map((a) => a.id));
+    setConfirmClear(false);
+    setSaveError('');
+  };
+
+  const toggle = (id: number) => {
+    setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+    setConfirmClear(false);
+  };
+
+  const save = async (caseId: number, userIds: number[]) => {
+    setSaving(true);
+    setSaveError('');
+    try {
+      await assignCase(caseId, userIds);
+      if (openCase === caseId) setOpenCase(null);
+      setConfirmClear(false);
+      await reload();
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : '저장하지 못했어요');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const trySave = (c: AssignmentCase) => {
+    // 아무도 고르지 않은 채 저장하면 담당이 전부 거둬진다 — 되돌릴 수 없으니
+    // 같은 자리에서 한 번 더 묻는다(브라우저 confirm 은 이 화면에 없다).
+    if (picked.length === 0 && c.assignees.length > 0 && !confirmClear) {
+      setConfirmClear(true);
+      return;
+    }
+    void save(c.id, picked);
+  };
 
   return (
     <>
       {/* 승인할 것과 내가 올린 것을 한자리에 둔다(2026-09-16 Q) —
           관리자도 당사자를 맡는 사람이라 둘이 같이 있어야 흐름이 끊기지 않는다. */}
       <Card title="담당 배정 요청">
-        <h3 className="wire-subhead">승인할 배정 요청</h3>
+        {saveError && <ErrorText>{saveError}</ErrorText>}
+        <h3 className="wire-subhead">승인할 배정 요청 목록</h3>
         {toApprove.length === 0 ? (
           <Empty>대기 중인 요청이 없어요.</Empty>
         ) : (
@@ -412,11 +491,12 @@ function AssignPane({ me }: { me: { id: number } }) {
                   <>
                     <Button
                       variant="primary"
-                      onClick={() => void decideRequest(r.id, 'approved').then(reload)}
+                      disabled={saving}
+                      onClick={() => void decide(r.id, 'approved')}
                     >
                       배정하기
                     </Button>
-                    <Button onClick={() => void decideRequest(r.id, 'rejected').then(reload)}>거절</Button>
+                    <Button disabled={saving} onClick={() => void decide(r.id, 'rejected')}>거절</Button>
                   </>
                 }
               />
@@ -439,7 +519,11 @@ function AssignPane({ me }: { me: { id: number } }) {
                       {r.decision === 'approved' ? '배정됨' : '거절됨'}
                     </Badge>
                   ) : (
-                    <Badge tone="blue">기다리는 중</Badge>
+                    <>
+                      <Badge tone="blue">기다리는 중</Badge>
+                      <Button disabled={saving} onClick={() => void decide(r.id, 'approved')}>배정 확정</Button>
+                      <Button disabled={saving} onClick={() => void decide(r.id, 'rejected')}>요청 취소</Button>
+                    </>
                   )
                 }
               />
@@ -448,60 +532,65 @@ function AssignPane({ me }: { me: { id: number } }) {
         )}
       </Card>
 
+      {/* 사례를 먼저 고르고, 그 안에서 담당을 여럿 고른다. 목록에는 가명·사업·담당
+          이름만 온다 — 관리자라도 맡지 않은 사례의 임상 내용은 서버가 안 준다. */}
       <Card title="담당 실무자 배정">
-        <Field label="실무자" htmlFor="as-who" control="select">
-          <select id="as-who" value={who ?? ''} onChange={(e) => setWho(e.target.value ? Number(e.target.value) : null)}>
-            <option value="">고르기</option>
-            {live.map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.name} · 맡은 당사자 {w.open_cases}명
-              </option>
-            ))}
-          </select>
-        </Field>
-        {who !== null &&
-          (cases.length === 0 ? (
-            <Empty>맡고 있는 당사자가 없어요.</Empty>
-          ) : (
-            cases.map((c) => (
-              <div className="wire-repeat-card" key={c.id}>
-                <Item
-                  title={`${c.pseudonym} · ${c.program_name}`}
-                  desc={c.status === 'open' ? '진행 중' : '종결'}
-                  action={
-                    <>
-                      <Select
-                        aria-label="넘길 실무자"
-                        value={moveTo[c.id] ?? ''}
-                        onChange={(v) => setMoveTo({ ...moveTo, [c.id]: v })}
-                      >
-                        <option value="">넘길 실무자</option>
-                        {live
-                          .filter((w) => w.id !== who)
-                          .map((w) => (
-                            <option key={w.id} value={w.id}>
-                              {w.name}
-                            </option>
-                          ))}
-                      </Select>
-                      <Button
-                        variant="primary"
-                        disabled={!moveTo[c.id]}
-                        onClick={() =>
-                          void assignCase(c.id, Number(moveTo[c.id]))
-                            .then(() => workerCases(who))
-                            .then(setCases)
-                            .then(reload)
-                        }
-                      >
-                        넘기기
-                      </Button>
-                    </>
-                  }
-                />
-              </div>
-            ))
-          ))}
+        {dirError ? (
+          <>
+            <ErrorText>{dirError}</ErrorText>
+            <FormActions>
+              <Button onClick={() => void reload()}>다시 불러오기</Button>
+            </FormActions>
+          </>
+        ) : dir === null || workers === null ? (
+          <Empty>불러오는 중이에요.</Empty>
+        ) : dir.length === 0 ? (
+          <Empty>등록된 사례가 없어요.</Empty>
+        ) : (
+          dir.map((c) => (
+            <div className="wire-repeat-card" key={c.id}>
+              <Item
+                title={`${c.pseudonym} · ${c.program_name}`}
+                desc={`${c.status === 'open' ? '진행 중' : '종결'} · ${
+                  c.assignees.length > 0 ? `담당 ${c.assignees.map((a) => a.name).join(', ')}` : '담당 없음'
+                }`}
+                action={
+                  <Button disabled={saving} onClick={() => openEditor(c)}>
+                    {openCase === c.id ? '접기' : '담당 고르기'}
+                  </Button>
+                }
+              />
+              {openCase === c.id && (
+                <>
+                  <ChoiceGroup legend="담당할 사람">
+                    {live.map((w) => (
+                      <Choice
+                        key={w.id}
+                        type="checkbox"
+                        label={`${w.name} · ${w.email}`}
+                        hint={w.role === 'admin' ? '관리자' : undefined}
+                        checked={picked.includes(w.id)}
+                        onChange={() => toggle(w.id)}
+                      />
+                    ))}
+                  </ChoiceGroup>
+                  {confirmClear && (
+                    <ErrorText>아무도 고르지 않으면 이 사례의 담당이 모두 거둬져요.</ErrorText>
+                  )}
+                  {saveError && <ErrorText>{saveError}</ErrorText>}
+                  <FormActions>
+                    <Button variant="primary" disabled={saving} onClick={() => trySave(c)}>
+                      {confirmClear ? '모두 제외하기' : '저장하기'}
+                    </Button>
+                    <Button disabled={saving} onClick={() => setOpenCase(null)}>
+                      닫기
+                    </Button>
+                  </FormActions>
+                </>
+              )}
+            </div>
+          ))
+        )}
       </Card>
     </>
   );
