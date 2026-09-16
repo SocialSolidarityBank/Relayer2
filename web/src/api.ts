@@ -221,17 +221,27 @@ export const approveDraft = (
   body: { summary?: string; changes?: string[]; tasks?: string[]; questions?: string[] },
 ) => json<Draft>(`/sessions/${sessionId}/draft/approve`, { method: 'POST', body: JSON.stringify(body) });
 
+export type AuditKind = '열람' | '기록' | '운영';
+
 export type AuditRow = {
   id: number;
   at: string;
   action: string;
+  kind: AuditKind;
+  /** 사람 말로 쓴 사건 이름. 서버가 정한다 — 화면마다 다르게 부르지 않게. */
+  label: string;
   fields: string[];
   actor_name: string | null;
+  by_participant: boolean;
+  /** 누구의 것인가. 이름은 감사 표에 없고 볼 때 금고에서 꺼낸다. */
+  subject: string | null;
   pseudonym: string | null;
   case_id: number | null;
+  program_name: string | null;
 };
 
-export const listAudit = () => json<AuditRow[]>('/audit');
+export const listAudit = (kind?: AuditKind) =>
+  json<AuditRow[]>(`/audit${kind ? `?kind=${encodeURIComponent(kind)}` : ''}`);
 
 export type DocumentRow = {
   id: number;

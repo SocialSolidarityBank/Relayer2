@@ -16,7 +16,7 @@ import {
   SttUnavailable,
 } from './stt.ts';
 import { AiUnavailable, approveDraft, draftSession, latestDraft } from './ai.ts';
-import { audit, listAudit } from './audit.ts';
+import { audit, listAudit, AUDIT_KIND_LIST } from './audit.ts';
 import { accessState, issueAccess, openAccess, revokeAccess } from './participant-access.ts';
 import { CONSENT_COPY, CONSENT_DECISIONS, CONSENT_DOMAINS, copyHash } from './consent.ts';
 import { LIFE_AREAS } from './domain/types.ts';
@@ -398,7 +398,13 @@ app.get('/documents/:id', async (c) => {
 app.get('/audit', async (c) => {
   // 열람 기록은 관리자만 본다(GLOSSARY §6-7 설정 › 열람 기록).
   if (c.get('actor').role !== 'admin') return c.json({ error: '관리자만 볼 수 있어요.' }, 403);
-  return c.json(await listAudit());
+  const kind = c.req.query('kind');
+  const rows = await listAudit({
+    kind: AUDIT_KIND_LIST.find((k) => k === kind),
+  });
+  // 이 화면은 이름을 꺼내 보여 준다. 그러니 이 화면을 연 것도 남는다.
+  await audit({ actorId: c.get('actor').id, action: 'audit.view', fields: ['name'] });
+  return c.json(rows);
 });
 
 app.post('/cases/:id/close', async (c) => {
@@ -410,24 +416,16 @@ app.post('/cases/:id/close', async (c) => {
   );
 });
 
-app.get('/participants', async (c) => {
-  const rows = await service.listParticipants();
-  // 목록에 실은 PII 는 이름뿐이다. 실은 사람 수가 아니라 조회 1건으로 남긴다.
-  if (rows.some((r) => r.name)) {
-    await audit({ actorId: c.get('actor').id, action: 'participants.list', fields: ['name'] });
-  }
-  return c.json(rows);
-});
+// 목록 조회는 감사에 남기지 않는다(2026-09-16 Q). 화면을 여는 것마다 한 줄이면
+// 기록이 아니라 소음이다 — 실측으로 700줄 가운데 676줄이 목록 조회였다.
+// 누구의 무엇을 봤는지는 사례를 열 때 남는다.
+app.get('/participants', async (c) => c.json(await service.listParticipants()));
 
 app.get('/schedules', async (c) => {
   const now = new Date();
   const from = c.req.query('from') ?? new Date(now.getTime() - 86_400_000).toISOString();
   const to = c.req.query('to') ?? new Date(now.getTime() + 30 * 86_400_000).toISOString();
-  const rows = await service.listSchedules(from, to);
-  if (rows.some((r) => r.name)) {
-    await audit({ actorId: c.get('actor').id, action: 'schedule.list', fields: ['name'] });
-  }
-  return c.json(rows);
+  return c.json(await service.listSchedules(from, to));
 });
 
 app.get('/cases/:id/briefing', async (c) => {
