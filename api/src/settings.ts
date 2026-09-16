@@ -220,29 +220,48 @@ export async function signUpWithInvite(input: {
   password: string;
   name: string;
 }): Promise<{ userId: number } | { error: string }> {
-  const invite = await peekInvite(input.token);
-  if (!invite) return { error: '쓸 수 없는 초대예요. 기한이 지났거나 이미 쓰였어요.' };
-
   const [dup] = await sql<Array<{ id: number }>>`select id from users where email = ${input.email}`;
   if (dup) return { error: '이미 쓰는 아이디예요.' };
 
-  const [user] = await sql<Array<{ id: number }>>`
-    insert into users (email, password_hash, name, role)
-    values (${input.email}, ${await hashPassword(input.password)}, ${input.name}, ${invite.role})
-    returning id`;
-  await acceptInvite(input.token, user.id);
-  return { userId: user.id };
-}
+  // 해싱은 트랜잭션 밖에서. Argon2 는 수백 밀리초가 걸리고, 그동안 초대 행을 잡고 있으면
+  // 같은 링크를 연 다른 사람이 그만큼 기다린다.
+  const passwordHash = await hashPassword(input.password);
 
-export async function acceptInvite(token: string, userId: number): Promise<boolean> {
-  const [row] = await sql<Array<{ id: number; role: string }>>`
-    update invites set accepted_at = now(), accepted_by = ${userId}
-    where token_hash = ${hashToken(token)} and accepted_at is null and revoked_at is null and expires_at > now()
-    returning id, role`;
-  if (!row) return false;
-  await sql`update users set role = ${row.role} where id = ${userId}`;
-  await audit({ actorId: userId, action: 'invite.accept', fields: [`invite=${row.id}`, `role=${row.role}`] });
-  return true;
+  /**
+   * **초대를 먼저 잡고 계정을 만든다**(2026-09-16 검수).
+   *
+   * 전에는 초대가 살아 있는지 확인하고 계정을 만든 뒤 초대를 소비했다. 그 사이에 같은 링크를
+   * 연 두 사람이 둘 다 "살아 있음"을 읽으면 **계정이 둘 생기고 둘 다 로그인됐다** —
+   * 한 번 쓰는 링크가 두 사람을 들인 것이다.
+   *
+   * 이제 한 트랜잭션에서 초대 행을 `for update` 로 잡고, 소비에 성공한 요청만 계정을 만든다.
+   */
+  try {
+    return await sql.begin(async (tx) => {
+      const [invite] = await tx<Array<{ id: number; role: 'worker' | 'admin' }>>`
+        select id, role from invites
+        where token_hash = ${hashToken(input.token)}
+          and accepted_at is null and revoked_at is null and expires_at > now()
+        for update`;
+      if (!invite) return { error: '쓸 수 없는 초대예요. 기한이 지났거나 이미 쓰였어요.' };
+
+      const [user] = await tx<Array<{ id: number }>>`
+        insert into users (email, password_hash, name, role)
+        values (${input.email}, ${passwordHash}, ${input.name}, ${invite.role})
+        returning id`;
+      await tx`
+        update invites set accepted_at = now(), accepted_by = ${user.id} where id = ${invite.id}`;
+      await audit({
+        actorId: user.id,
+        action: 'invite.accept',
+        fields: [`invite=${invite.id}`, `role=${invite.role}`],
+      });
+      return { userId: user.id };
+    });
+  } catch {
+    // 같은 아이디를 동시에 만들면 유일 제약에 걸린다. 초대는 롤백되어 다시 쓸 수 있다.
+    return { error: '이미 쓰는 아이디예요.' };
+  }
 }
 
 // ── 배정 요청(실무자) ──────────────────────────────────────────────────────

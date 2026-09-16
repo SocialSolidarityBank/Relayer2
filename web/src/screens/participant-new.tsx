@@ -14,20 +14,24 @@ export function ParticipantNewScreen() {
   // 목록은 설정 › 기관 정보 관리에서 관리자가 만든다.
   const [programs, setPrograms] = useState<Program[] | null>(null);
   const [program, setProgram] = useState('');
+  // 선행 목록 둘. **한 번 실패하면 버튼이 영원히 잠기므로** 다시 받을 길을 둔다(2026-09-16 검수).
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [reloadAt, setReloadAt] = useState(0);
   useEffect(() => {
-    void listPrograms().then((rows) => {
-      setPrograms(rows);
-      if (rows.length === 1) setProgram(rows[0].name);
-    });
-  }, []);
+    setLoadFailed(false);
+    void Promise.all([listPrograms(), getConsentCopy()])
+      .then(([rows, list]) => {
+        setPrograms(rows);
+        if (rows.length === 1) setProgram(rows[0].name);
+        setCopies(list);
+      })
+      .catch(() => setLoadFailed(true));
+  }, [reloadAt]);
   const [planned, setPlanned] = useState('');
   // 동의는 영역마다 따로 받는다. 한 번에 묶어 받지 않는다(P1).
   // **문안은 서버에서 받는다** — 화면이 복사해 두면 서버가 바뀌어도 옛 글로 동의를 받는다(2026-09-16 검수).
   const [copies, setCopies] = useState<ConsentCopy[]>([]);
   const [granted, setGranted] = useState<Record<string, boolean>>({});
-  useEffect(() => {
-    void getConsentCopy().then(setCopies);
-  }, []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -107,6 +111,15 @@ export function ParticipantNewScreen() {
 
         {/* 문안 전체를 보여 주고 받는다. 접어 둔 것을 펴면 무엇을 받고 얼마나 두고
             거부하면 어떻게 되는지가 나온다 — 해시에 묶인 내용 그대로다. */}
+        {loadFailed && (
+          <Card title="불러오지 못했어요">
+            <FormActions>
+              <ErrorText>사업 목록과 동의 문안을 받지 못했어요.</ErrorText>
+              <Button onClick={() => setReloadAt(Date.now())}>다시 불러오기</Button>
+            </FormActions>
+          </Card>
+        )}
+
         <Card title="동의">
           {copies.map((c) => (
             <div className="wire-repeat-card" key={c.domain}>

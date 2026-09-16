@@ -2,6 +2,7 @@
 // 근거: web/src/styles/wire.css(=CCC wire-styles.ts), web/src/styles/shell.css(=CCC layout.tsx).
 import { useEffect, useState, type ReactNode } from 'react';
 import { LIFE_AREAS } from './areas.ts';
+import { API_FAILED } from './api.ts';
 
 /**
  * 네 방향 공용 꺽쇠. 12px 슬롯 안의 한 SVG 경로를 회전해 방향만 바꾼다.
@@ -394,3 +395,27 @@ export const ErrorText = ({ children }: { children: ReactNode }) => (
     {children}
   </p>
 );
+
+/**
+ * 부르기가 실패했을 때 뜨는 줄(2026-09-16 검수).
+ *
+ * 화면들이 실패를 안 잡아 `불러오는 중이에요` 에서 멈추는 일이 있었다. 멈춘 화면은
+ * 고장과 구별되지 않는다 — **무엇이 잘못됐는지 말하고 다시 할 길을 준다.**
+ * 화면마다 catch 를 다는 것이 정석이고, 이것은 그 전에 두는 안전선이다.
+ */
+export function ApiFailureBanner() {
+  const [message, setMessage] = useState<string | null>(null);
+  useEffect(() => {
+    const on = (e: Event) => setMessage(e instanceof CustomEvent ? String(e.detail) : '요청이 실패했어요.');
+    window.addEventListener(API_FAILED, on);
+    return () => window.removeEventListener(API_FAILED, on);
+  }, []);
+  if (!message) return null;
+  return (
+    <div className="api-failure" role="alert">
+      <span>{message}</span>
+      <Button onClick={() => window.location.reload()}>다시 불러오기</Button>
+      <Button onClick={() => setMessage(null)}>닫기</Button>
+    </div>
+  );
+}

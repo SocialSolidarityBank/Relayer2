@@ -81,15 +81,28 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
   // 저장해 둔 회차를 고쳐 쓰는 중이면 그 회차. 새로 쓰는 중이면 null.
   const [editing, setEditing] = useState<SessionRecord | null>(null);
   const [saving, setSaving] = useState(false);
+  /**
+   * 예정 회차가 없어 이 화면이 방금 연 회차(2026-09-16 검수).
+   *
+   * 저장은 두 걸음이다 — 회차를 열고, 거기에 기록한다. 둘째가 실패했는데 첫째를 기억하지
+   * 않으면 다시 누를 때마다 **빈 예정 회차가 하나씩 쌓인다.** 동의가 없어 409 가 나는
+   * 자리에서 실제로 그렇게 됐다.
+   */
+  const [openedId, setOpenedId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // 늦게 온 응답이 새 화면을 덮지 않게 한다(2026-09-16 검수). 고쳐 쓰기 요청이 날아간 뒤
+    // `상담 기록하기` 로 넘어가면, 먼저 끝난 새 화면 위에 이전 응답이 내려앉아
+    // `editing` 을 지난 회차로 되돌린다 — 그대로 저장하면 그 회차를 덮어쓴다.
+    let live = true;
     void (async () => {
       const [b, v, rec] = await Promise.all([
         getBriefing(caseId),
         getCase(caseId),
         editingId ? getSessionRecord(editingId) : Promise.resolve(null),
       ]);
+      if (!live) return;
       setBriefing(b);
       setView(v);
       setOverallGoal(rec?.overall_goal ?? v.case.overall_goal ?? '');
@@ -123,13 +136,33 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
         return;
       }
 
+      // **고쳐 쓰던 회차를 반드시 놓는다**(2026-09-16 검수). 이 화면은 고쳐 쓰기와 새 기록이
+      // 같은 부품이라, 고쳐 쓰기를 열어 둔 채 `상담 기록하기` 로 넘어오면 `editing` 이 남는다.
+      // 그러면 새로 쓴 글이 PATCH 로 **지난 회차를 덮어쓴다** — 지운 기록은 돌아오지 않는다.
+      setEditing(null);
+
       // 기록 대상은 다가오는 예정 회차다. 상담 일정 등록이 곧 그 회차를 만든다.
       const planned = v.sessions.filter((s) => s.status === 'planned').sort((a, b2) => a.seq - b2.seq)[0];
+      // 고쳐 쓰다 넘어온 경우 앞 회차 글이 그대로 남아 있다. 칸을 전부 비우고 새로 세운다.
+      // `추가` 를 안 누른 초안 줄(taskDraft 등)도 비운다 — 저장할 때 함께 실려 간다.
+      setMemo('');
+      setNextGoal('');
+      setTasks([]);
+      setQuestions([]);
+      setChanges([]);
+      setOpinion('');
+      setOutcomes({});
+      setTaskDraft({ text: '' });
+      setQuestionDraft({ text: '' });
+      setChangeDraft({ text: '' });
       setPlace(planned?.place ?? '');
       setIsClosing(planned?.is_closing ?? false);
-      if (planned?.method) setMethod(planned.method as NewSessionInput['method']);
-      if (planned?.scheduled_at) setHeldAt(toLocalInput(planned.scheduled_at));
+      setMethod((planned?.method as NewSessionInput['method']) ?? 'in_person');
+      setHeldAt(planned?.scheduled_at ? toLocalInput(planned.scheduled_at) : localNow());
     })();
+    return () => {
+      live = false;
+    };
   }, [caseId, editingId]);
 
   if (!briefing || !view) return <p className="empty">불러오는 중이에요.</p>;
@@ -155,17 +188,18 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
     setSaving(true);
     setError(null);
     try {
-      // 예정 회차가 없으면 지금 적은 일시로 회차를 먼저 연다.
-      const targetId =
-        session?.id ??
-        (
-          await planSession(caseId, {
-            scheduled_at: new Date(heldAt).toISOString(),
-            method,
-            place: inPerson && place ? place : undefined,
-            is_closing: isClosing,
-          })
-        ).session_id;
+      // 예정 회차가 없으면 지금 적은 일시로 회차를 먼저 연다. 방금 연 것이 있으면 그것을 쓴다.
+      let targetId = session?.id ?? openedId;
+      if (!targetId) {
+        const opened = await planSession(caseId, {
+          scheduled_at: new Date(heldAt).toISOString(),
+          method,
+          place: inPerson && place ? place : undefined,
+          is_closing: isClosing,
+        });
+        targetId = opened.session_id;
+        setOpenedId(targetId);
+      }
 
       await recordSession(targetId, {
         held_at: new Date(heldAt).toISOString(),

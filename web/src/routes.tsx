@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { applyTheme, followSystemTheme, initialTheme, type Theme } from './theme.ts';
 import { getMe, logout, Unauthorized, type Me } from './api.ts';
 import { AccessScreen } from './screens/access.tsx';
-import { BackLink } from './ui.tsx';
+import { ApiFailureBanner, BackLink } from './ui.tsx';
 import { InviteScreen } from './screens/invite.tsx';
 import { SettingsScreen, visibleGroups } from './screens/settings.tsx';
 import { BriefingScreen } from './screens/briefing.tsx';
@@ -107,7 +107,14 @@ export function Routes() {
 
     // 저장해 둔 회차 고쳐 쓰기. 기록 화면을 그대로 쓰되 대상 회차를 준다.
     const editing = hash.match(/^#\/cases\/(\d+)\/sessions\/(\d+)\/edit$/);
-    if (editing) return <RecordScreen caseId={Number(editing[1])} sessionId={Number(editing[2])} />;
+    if (editing)
+      return (
+        <RecordScreen
+          key={`edit-${editing[2]}`}
+          caseId={Number(editing[1])}
+          sessionId={Number(editing[2])}
+        />
+      );
 
     const reviewing = hash.match(/^#\/cases\/(\d+)\/sessions\/(\d+)\/review$/);
     if (reviewing) return <ReviewScreen caseId={Number(reviewing[1])} sessionId={Number(reviewing[2])} />;
@@ -116,7 +123,8 @@ export function Routes() {
     if (byCase) {
       const caseId = Number(byCase[1]);
       if (byCase[2] === 'briefing') return <BriefingScreen caseId={caseId} />;
-      if (byCase[2] === 'record') return <RecordScreen caseId={caseId} />;
+            // `key` 로 갈아 끼운다. 고쳐 쓰기와 새 기록이 같은 부품이라 상태가 새면 남의 회차를 덮는다.
+      if (byCase[2] === 'record') return <RecordScreen key={`new-${caseId}`} caseId={caseId} />;
       if (byCase[2] === 'intake') return <IntakeScreen caseId={caseId} />;
       if (byCase[2] === 'info') return <ParticipantInfoScreen caseId={caseId} />;
       if (byCase[2] === 'close') return <CloseScreen caseId={caseId} />;
@@ -197,6 +205,7 @@ export function Routes() {
 
       {/* 뒤로 가기는 본문 위 한 자리다(정본 .page-backbar). 돌아갈 곳이 없으면 안 그린다. */}
       <div className="content-column">
+        <ApiFailureBanner />
         <BackLink />
         <div className="page-content">{screen}</div>
       </div>

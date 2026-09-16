@@ -43,16 +43,44 @@ export class Unauthorized extends Error {}
 /** 개발은 vite 프록시(`/api`), 배포는 한 프로세스라 같은 출처 그대로다. */
 const BASE = import.meta.env.DEV ? '/api' : '';
 
+/**
+ * 부르다 실패한 사실을 셸에 알린다(2026-09-16 검수).
+ *
+ * 화면 스무 곳이 `void getX().then(setX)` 꼴이라 실패하면 `setX` 가 안 불리고
+ * **`불러오는 중이에요` 에서 영원히 멈춘다.** 화면마다 catch 를 다는 것이 정석이지만,
+ * 그 전에 **무엇이 잘못됐는지 사람이 알 수 있어야 한다** — 멈춘 화면은 고장과 구별되지 않는다.
+ *
+ * 로그인 만료(401)는 여기서 알리지 않는다. 그건 셸이 로그인 화면으로 바꿔 답한다.
+ */
+export const API_FAILED = 'relayer:api-failed';
+
+const announce = (message: string): void => {
+  window.dispatchEvent(new CustomEvent(API_FAILED, { detail: message }));
+};
+
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    credentials: 'same-origin',
-    headers: init?.body ? { 'content-type': 'application/json' } : undefined,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      ...init,
+      credentials: 'same-origin',
+      headers: init?.body ? { 'content-type': 'application/json' } : undefined,
+    });
+  } catch {
+    // 네트워크가 끊겼거나 서버가 죽었다. 둘 다 사람이 할 일은 같다 — 잠시 뒤 다시.
+    announce('서버에 닿지 못했어요. 잠시 뒤 다시 해 주세요.');
+    throw new Error('서버에 닿지 못했어요.');
+  }
   if (!res.ok) {
     const message = (await res.json().catch(() => ({}))).error;
     // 401 의 사연은 서버가 안다(만료인지, 당사자 계정인지). 화면이 문구를 지어내지 않는다.
     if (res.status === 401) throw new Unauthorized(message ?? '로그인이 필요해요.');
+    // **화면이 알아들을 수 있는 거절은 배너를 띄우지 않는다.** 동의가 없어 막힌 것(409)이나
+    // 잘못 적은 것(400)은 그 자리에서 무엇을 해야 하는지 말해 주고, 배너가 같은 말을 또 하면
+    // 한 사실이 두 번 보인다. 배너는 **까닭을 화면이 모르는 실패**만 맡는다.
+    if (res.status >= 500 || res.status === 403 || res.status === 404) {
+      announce(message ?? `요청이 실패했어요 (${res.status}).`);
+    }
     throw new Error(message ?? `${res.status}`);
   }
   return (await res.json()) as T;

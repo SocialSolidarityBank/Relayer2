@@ -8,7 +8,7 @@ import { buildSessionLine } from './session-line.ts';
 
 export type CheckStatus = {
   state: 'checked' | 'not_checked' | 'checking';
-  reason: 'ai_disabled' | 'no_recording' | 'pending' | null;
+  reason: 'ai_disabled' | 'pending' | null;
   through_session_seq: number | null;
 };
 

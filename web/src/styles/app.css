@@ -58,3 +58,14 @@ body { margin: 0; }
    카드를 쪼개면 두 묶음이 한 일이라는 사실이 흐려진다. */
 .wire-subhead { margin: var(--space-4) 0 var(--space-2); font-size: var(--text-sm); font-weight: 600; color: var(--sub); }
 .wire-card-body > .wire-subhead:first-child { margin-top: 0; }
+
+/* 부르기 실패 줄(2026-09-16). 본문 위 한 자리이고, 닫기 전까지 남는다 —
+   지나가는 토스트로 두면 자리를 비운 사이에 사라져 사람은 멈춘 화면만 본다. */
+.api-failure {
+  display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;
+  width: 100%; max-width: var(--page-max); margin-inline: auto;
+  padding: var(--space-3) var(--page-pad-x);
+  color: var(--ink); font-size: var(--text-sm);
+  border-bottom: 1px solid var(--risk);
+}
+.api-failure > span { margin-right: auto; }

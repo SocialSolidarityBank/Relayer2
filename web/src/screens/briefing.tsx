@@ -15,7 +15,6 @@ const METHOD_LABEL: Record<string, string> = {
 
 const AI_OFF_LABEL: Record<string, string> = {
   ai_disabled: 'AI 확인 안 함',
-  no_recording: '녹음이 없어 확인 못 함',
   pending: '확인 중',
 };
 

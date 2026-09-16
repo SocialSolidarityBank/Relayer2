@@ -338,6 +338,9 @@ app.post('/sessions/:id/draft/approve', async (c) => {
   const body = z
     .object({
       summary: z.string().optional(),
+      // `changes` 가 빠져 있었다(2026-09-16 검수). zod 가 조용히 버려서, 사람이 고친
+      // `달라진 것` 이 사라지고 AI 가 쓴 옛 문장이 승인됐다 — 고친 줄 알고 넘어간 기록이다.
+      changes: z.array(z.string()).optional(),
       tasks: z.array(z.string()).optional(),
       questions: z.array(z.string()).optional(),
     })
