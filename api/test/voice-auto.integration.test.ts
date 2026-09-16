@@ -1,7 +1,7 @@
 // 자동 전사(2026-09-16 Q). 업로드는 즉시 끝나고 전사는 뒤에서 돈다. 결과는 녹음 행의 상태다.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sql } from '../src/db.ts';
-import { failStaleTranscriptions, SPEECH_MAX_BYTES } from '../src/stt.ts';
+import { autoTranscribeLoad, failStaleTranscriptions, SPEECH_MAX_BYTES } from '../src/stt.ts';
 import { azureFetch, enabled, fixture, req, silentWav, upload, waitTranscribeState } from './voice-fixture.ts';
 
 beforeEach(() => {
@@ -35,6 +35,36 @@ describe.skipIf(!enabled)('auto transcription', () => {
       recordings: 1,
       transcript: 'draft',
     });
+  });
+
+  it('never sends more than the concurrency cap to the provider at once, and still finishes every upload', async () => {
+    // 제공자 응답을 손으로 풀어 준다 — 시계가 아니라 대기열 상태로 겹침을 잰다.
+    const held: Array<() => void> = [];
+    vi.stubGlobal('fetch', (() =>
+      new Promise<Response>((resolve) => {
+        held.push(() =>
+          resolve(new Response(JSON.stringify({ combinedPhrases: [{ text: '말함.' }], phrases: [] }), {
+            status: 200, headers: { 'content-type': 'application/json' },
+          })),
+        );
+      })) as unknown as typeof fetch);
+    const { worker, case_id } = await fixture();
+    const { session_id } = await (await req(`/cases/${case_id}/sessions/start`, worker, 'POST', {})).json();
+    const ids: number[] = [];
+    for (let i = 0; i < 6; i++) ids.push((await (await upload(session_id, worker, silentWav(6000 + i * 2))).json()).id);
+    expect(autoTranscribeLoad()).toEqual({ in_flight: 2, waiting: 4 });
+
+    // 하나씩 풀 때마다 제공자에 나가 있는 요청은 상한을 넘지 않는다.
+    let released = 0;
+    while (released < 6) {
+      expect(held.length - released).toBeLessThanOrEqual(2);
+      held[released]();
+      released += 1;
+      // 다음 대기자가 제공자에 닿을 때까지는 상태 폴링으로 기다린다(고정 sleep 아님).
+      await waitTranscribeState(ids[released - 1]);
+    }
+    for (const id of ids) expect(await waitTranscribeState(id)).toBe('done');
+    expect(autoTranscribeLoad()).toEqual({ in_flight: 0, waiting: 0 });
   });
 
   it('retries 429 with Retry-After and lands the draft once the provider recovers', async () => {

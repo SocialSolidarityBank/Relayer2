@@ -435,15 +435,40 @@ const setTranscribeState = (recordingId: number, state: TranscribeState, note: s
   sql`update recordings set transcribe_state = ${state}, transcribe_note = ${note} where id = ${recordingId}`;
 
 /**
+ * 자동 전사 동시 처리 상한. 회차 여러 개를 한꺼번에 올리면(테스트 세트 적재, 이관) 제공자가 429 를 낸다 —
+ * 한 프로세스가 동시에 보내는 수를 묶어 두면 재시도가 줄고 뒤 녹음도 밀리기만 하지 실패하지 않는다.
+ * 잡 큐가 아니다: 프로세스 안 대기열이라 죽으면 pending 이 남고, 다음에 뜰 때 failed 로 바꾼다.
+ */
+const AUTO_TRANSCRIBE_CONCURRENCY = Number(process.env.STT_CONCURRENCY ?? 2);
+let inFlight = 0;
+const waiting: Array<() => void> = [];
+const acquire = (): Promise<void> =>
+  new Promise((resolve) => {
+    if (inFlight < AUTO_TRANSCRIBE_CONCURRENCY) {
+      inFlight += 1;
+      resolve();
+    } else waiting.push(resolve);
+  });
+const release = (): void => {
+  const next = waiting.shift();
+  if (next) next();
+  else inFlight -= 1;
+};
+/** 지금 돌고 있거나 기다리는 자동 전사 수. 테스트와 운영 점검용. */
+export const autoTranscribeLoad = (): { in_flight: number; waiting: number } => ({ in_flight: inFlight, waiting: waiting.length });
+
+/**
  * 업로드 응답 뒤에 도는 자동 전사. 결과는 녹음 행의 상태로만 남는다.
- * 잡 큐가 없다 — 프로세스가 죽으면 pending 이 남고, 다음에 뜰 때 failed 로 바꾼다(failStaleTranscriptions).
  */
 async function runAutoTranscribe(recordingId: number, actorId: number): Promise<void> {
+  await acquire();
   try {
     await draftTranscript(recordingId, actorId);
   } catch (err) {
     // 상태는 draftTranscript 가 이미 적었다. 여기서는 조용히 끝낸다 — 응답은 벌써 나갔다.
     console.error(`[전사] 녹음 ${recordingId} 자동 전사 실패: ${err instanceof Error ? err.message : err}`);
+  } finally {
+    release();
   }
 }
 
