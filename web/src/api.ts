@@ -136,6 +136,8 @@ export type ScheduleRow = {
   open_questions: number;
 };
 
+export type SessionTranscriptState = 'none' | 'pending' | 'draft' | 'approved' | 'failed' | 'skipped';
+
 export type CaseDetail = {
   case: {
     id: number;
@@ -158,6 +160,10 @@ export type CaseDetail = {
     memo: string | null;
     today_goal_text: string | null;
     ai_summary: { summary: string; changes: string[]; fact_changes: FactChange[] } | null;
+    /** 수기가 있는가. 녹음만 하고 아직 안 적은 회차는 false — 화면이 '수기 미작성'을 그린다. */
+    written: boolean;
+    /** 녹음·전사 상태. 여러 녹음이면 가장 최근 녹음 기준. */
+    voice: { recordings: number; transcript: SessionTranscriptState };
   }>;
   goal_revisions: Array<{ text: string | null; created_at: string }>;
   open_cards: Array<{ id: number; kind: string; text: string; source_session_seq?: number | null }>;
@@ -433,6 +439,19 @@ export type NewSessionInput = {
 
 export const planSession = (caseId: number, body: NewSessionInput) =>
   json<{ session_id: number; seq: number }>(`/cases/${caseId}/sessions`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+/**
+ * 상담 시작(2026-09-16 Q). 수기 첫 입력이든 녹음 시작이든 그 순간 회차가 생긴다.
+ * 예정 회차 id 를 주면 그 회차를 기록됨으로 바꾸고, 없으면 새 회차를 만든다. 내용은 나중에 채운다.
+ */
+export const startSession = (
+  caseId: number,
+  body: { session_id?: number; method?: ConsultationMethod; is_closing?: boolean } = {},
+) =>
+  json<{ session_id: number; seq: number }>(`/cases/${caseId}/sessions/start`, {
     method: 'POST',
     body: JSON.stringify(body),
   });

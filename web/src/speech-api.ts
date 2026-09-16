@@ -43,6 +43,8 @@ export type SpeechStatus = {
   formats: string[];
 };
 
+export type TranscribeState = 'pending' | 'done' | 'failed' | 'skipped';
+
 export type Recording = {
   id: number;
   session_id: number;
@@ -52,6 +54,10 @@ export type Recording = {
   deleted_at: string | null;
   created_at: string;
   content_type: string;
+  /** 전사 진행 상태. 전사문 자체는 transcripts 에 따로 쌓인다. */
+  transcribe_state: TranscribeState;
+  /** 실패·건너뜀 이유 한 줄. 본문은 담지 않는다. */
+  transcribe_note: string | null;
 };
 
 export type TranscriptSegment = { text: string; offset_ms: number; duration_ms: number };

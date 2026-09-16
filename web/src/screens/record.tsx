@@ -1,12 +1,12 @@
-// 상담 기록하기 — 사용자 피드백에 따른 다섯 구획. 필수 입력은 오늘 상담 내용이다.
+// 상담 기록하기 — 사용자 피드백에 따른 다섯 구획. 수기 없이 녹음만 있는 회차도 기록이다.
 // 구획이 곧 카드 분류다. 실무자는 문장마다 분류를 고르지 않는다.
 // 레이아웃은 CCC 기록 레일 계약: wire-container rail-grid record-grid > .record-side + .record-main.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   getBriefing,
   getCase,
   getSessionRecord,
-  planSession,
+  startSession,
   recordSession,
   type Briefing,
   type CaseView,
@@ -31,7 +31,7 @@ import {
   type Line,
 } from '../ui.tsx';
 import { METHODS } from '../vocab.ts';
-import { SessionAudio } from './session-audio.tsx';
+import { RecordingPanel, SessionAudio } from './session-audio.tsx';
 
 /** `datetime-local` 이 바로 먹는 지역시각 문자열. 지금 시각을 분 단위로 자른다. */
 function localNow(): string {
@@ -81,13 +81,15 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
   const [editing, setEditing] = useState<SessionRecord | null>(null);
   const [saving, setSaving] = useState(false);
   /**
-   * 예정 회차가 없어 이 화면이 방금 연 회차(2026-09-16 검수).
-   *
-   * 저장은 두 걸음이다 — 회차를 열고, 거기에 기록한다. 둘째가 실패했는데 첫째를 기억하지
-   * 않으면 다시 누를 때마다 **빈 예정 회차가 하나씩 쌓인다.** 동의가 없어 409 가 나는
-   * 자리에서 실제로 그렇게 됐다.
+   * 시작이 곧 회차(2026-09-16 인계). 수기 첫 입력이든 녹음 시작이든 그 순간 회차가 생긴다.
+   * `startedId` 는 sessions/start 로 열린(기록됨) 회차다. 예정 회차를 열어 시작했으면 그 id.
+   * ref 에도 둔다 — setState 가 반영되기 전 같은 틱의 두 번째 부르기가 회차를 또 만들면 안 된다.
    */
-  const [openedId, setOpenedId] = useState<number | null>(null);
+  const [startedId, setStartedId] = useState<number | null>(null);
+  const startedRef = useRef<number | null>(null);
+  const startingRef = useRef<Promise<number> | null>(null);
+  /** 위 녹음 패널에서 전사문이 바뀌면 올라간다 — 불일치 카드가 다시 읽는 신호. */
+  const [voiceStamp, setVoiceStamp] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -183,23 +185,47 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
       else delete next[card_id];
       return next;
     });
+  /**
+   * 회차 id 를 돌려준다. 없으면 sessions/start 로 만든다 — 수기 첫 입력·녹음 시작·
+   * 파일 올리기가 모두 이 한 길을 지난다. 두 번 부르지 않는다(계약).
+   */
+  const ensureSession = (): Promise<number> => {
+    if (editing) return Promise.resolve(editing.session_id);
+    if (startedRef.current !== null) return Promise.resolve(startedRef.current);
+    if (startingRef.current) return startingRef.current;
+    const planned = view?.sessions.filter((s) => s.status === 'planned').sort((a, b2) => a.seq - b2.seq)[0];
+    const p = startSession(caseId, {
+      session_id: planned?.id,
+      method,
+      is_closing: isClosing,
+    }).then((opened) => {
+      startedRef.current = opened.session_id;
+      setStartedId(opened.session_id);
+      return opened.session_id;
+    });
+    startingRef.current = p;
+    void p.catch(() => {
+      // 실패하면 다음 시도가 다시 부를 수 있게 연다.
+      startingRef.current = null;
+    });
+    return p;
+  };
+
+  const accessLost = () => {
+    setBriefing(null);
+    setView(null);
+    setError('담당 배정이 해제되어 상담 기록을 열 수 없어요.');
+  };
 
   const save = async () => {
     setSaving(true);
     setError(null);
     try {
-      // 예정 회차가 없으면 지금 적은 일시로 회차를 먼저 연다. 방금 연 것이 있으면 그것을 쓴다.
-      let targetId = session?.id ?? openedId;
-      if (!targetId) {
-        const opened = await planSession(caseId, {
-          scheduled_at: new Date(heldAt).toISOString(),
-          method,
-          place: inPerson && place ? place : undefined,
-          is_closing: isClosing,
-        });
-        targetId = opened.session_id;
-        setOpenedId(targetId);
-      }
+      // 수기 첫 입력이 연 회차가 아직 응답 중이면 그 한 요청을 기다린다. 예정 회차 id 로
+      // 먼저 PATCH 해 start 와 순서를 뒤집지 않는다.
+      let targetId = editing?.session_id ?? startedRef.current;
+      if (!targetId && startingRef.current) targetId = await startingRef.current;
+      if (!targetId) targetId = session?.id ?? (await ensureSession());
 
       await recordSession(targetId, {
         held_at: new Date(heldAt).toISOString(),
@@ -240,6 +266,13 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
         meta={`${briefing.participant_card.name ?? briefing.participant_card.pseudonym} · ${
           briefing.participant_card.program_name
         } · ${seq}회차`}
+      />
+      {/* 시작이 곧 회차 — 녹음·올리기·수기 첫 입력이 회차를 연다(2026-09-16 인계). */}
+      <RecordingPanel
+        sessionId={session?.id ?? startedId}
+        ensureSession={ensureSession}
+        onAccessLost={accessLost}
+        onTranscriptChange={() => setVoiceStamp((v) => v + 1)}
       />
 
       <div className="wire-container rail-grid record-grid" data-grid="true">
@@ -330,6 +363,7 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
         </aside>
 
         <main className="record-main">
+
           {/* 일시·방식·장소는 한 묶음이다. 장소는 대면일 때만 나오고 방식 바로 아래에 붙는다(요구 14). */}
           <Card title="1. 오늘 상담 내용">
             <Field label="상담 일시" htmlFor="held-at" required>
@@ -358,13 +392,19 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
               </Field>
             )}
 
-            <Field label="오늘 상담 내용" htmlFor="memo" control="textarea" required>
+            <Field label="오늘 상담 내용" htmlFor="memo" control="textarea">
               <textarea
                 id="memo"
                 rows={5}
                 aria-label="오늘 상담 내용"
                 value={memo}
-                onChange={(e) => setMemo(e.target.value)}
+                onChange={(e) => {
+                  setMemo(e.target.value);
+                  // 수기 첫 입력도 상담의 시작이다 — 회차가 없으면 여기서 만든다.
+                  void ensureSession().catch((err: unknown) =>
+                    setError(err instanceof Error ? err.message : '회차를 열지 못했어요.'),
+                  );
+                }}
                 placeholder="오늘 나눈 이야기를 적어 주세요."
               />
             </Field>
@@ -426,20 +466,17 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
             </Field>
           </Card>
 
-          {(session?.id ?? openedId) ? (
+          {(session?.id ?? startedId) ? (
             <SessionAudio
-              key={session?.id ?? openedId}
-              sessionId={(session?.id ?? openedId)!}
+              key={session?.id ?? startedId}
+              sessionId={(session?.id ?? startedId)!}
               writtenChanged={memo !== (editing?.memo ?? '')}
-              onAccessLost={() => {
-                setBriefing(null);
-                setView(null);
-                setError('담당 배정이 해제되어 상담 기록을 열 수 없어요.');
-              }}
+              voiceStamp={voiceStamp}
+              onAccessLost={accessLost}
             />
           ) : (
             <Fold title="음성·수기 기록 불일치">
-              <Empty>상담 회차를 저장한 뒤 음성을 업로드할 수 있어요.</Empty>
+              <Empty>녹음을 시작하거나 상담 내용을 적으면 회차가 생겨요.</Empty>
             </Fold>
           )}
 
@@ -447,7 +484,7 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
             {error && <ErrorText>{error}</ErrorText>}
             <Button
               variant="primary"
-              disabled={!memo.trim() || (!session && !heldAt) || saving}
+              disabled={(!memo.trim() && !startedId && !editing) || !heldAt || saving}
               onClick={() => void save()}
             >
               {/* 고쳐 쓰기 화면에서도 저장 버튼은 `저장`이다. 들어올 때 누른 버튼과 이름이 같으면
