@@ -3,33 +3,51 @@
 //
 // 값을 새로 정하지 않는다. CCC 가 정한 다크 값(DESIGN §11)을 그대로 쓴다.
 
+/** 화면에 실제로 칠하는 두 값. */
 export type Theme = 'light' | 'dark';
+
+/**
+ * 사람이 고르는 세 값(2026-09-16 Q). `system` 은 **고르지 않기를 고른 것**이라
+ * 저장은 하되 칠할 때는 그 순간의 기기 설정으로 바꿔 쓴다.
+ */
+export type ThemeChoice = Theme | 'system';
 
 const KEY = 'relayer-theme';
 
-/**
- * 고른 테마가 없으면 **기기 설정을 따른다**. 밤에 쓰는 사람에게 흰 화면을 들이밀지 않는다.
- * 한 번 고르면 그 선택이 기기 설정을 이긴다 — 사람이 고른 것이 더 구체적인 뜻이다.
- */
-export function initialTheme(): Theme {
+const systemTheme = (): Theme =>
+  window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+
+/** 저장된 선택. 없으면 `system` — 밤에 쓰는 사람에게 흰 화면을 들이밀지 않는다. */
+export function themeChoice(): ThemeChoice {
   const saved = localStorage.getItem(KEY);
-  if (saved === 'light' || saved === 'dark') return saved;
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  return saved === 'light' || saved === 'dark' || saved === 'system' ? saved : 'system';
+}
+
+export function initialTheme(): Theme {
+  const choice = themeChoice();
+  return choice === 'system' ? systemTheme() : choice;
+}
+
+/** 고른 값을 적어 두고 그 자리에서 칠한다. */
+export function setTheme(choice: ThemeChoice): Theme {
+  localStorage.setItem(KEY, choice);
+  const theme = choice === 'system' ? systemTheme() : choice;
+  applyTheme(theme);
+  return theme;
 }
 
 export function applyTheme(theme: Theme): void {
   document.documentElement.setAttribute('data-theme', theme);
-  localStorage.setItem(KEY, theme);
 }
 
 /**
- * 아직 고른 적이 없는 사람만 기기 설정 변화를 따라간다.
+ * `system` 을 고른 사람만 기기 설정 변화를 따라간다.
  * 직접 고른 사람의 화면을 OS 가 밤이 됐다고 바꿔 버리면 안 된다.
  */
 export function followSystemTheme(onChange: (theme: Theme) => void): () => void {
   const mq = window.matchMedia('(prefers-color-scheme: dark)');
   const handler = (e: MediaQueryListEvent) => {
-    if (localStorage.getItem(KEY)) return;
+    if (themeChoice() !== 'system') return;
     onChange(e.matches ? 'dark' : 'light');
   };
   mq.addEventListener('change', handler);

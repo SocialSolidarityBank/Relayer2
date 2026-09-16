@@ -72,6 +72,8 @@ export type ParticipantRow = {
   name: string | null;
   program_name: string;
   status: 'open' | 'closed';
+  assigned_user_id: number | null;
+  assignee_name: string | null;
   last_session_seq: number | null;
   next_scheduled_at: string | null;
 };
@@ -350,3 +352,93 @@ export const recordSession = (sessionId: number, body: RecordInput) =>
     method: 'PATCH',
     body: JSON.stringify(body),
   });
+
+// ── 설정하기(2026-09-16 Q) ────────────────────────────────────────────────
+
+export type Profile = {
+  id: number;
+  email: string;
+  name: string;
+  role: string;
+  phone: string | null;
+  contact_email: string | null;
+};
+export type Org = { name: string; reg_no: string | null; address: string | null; phone: string | null };
+export type Program = { id: number; name: string; retired_at: string | null; cases: number };
+export type Worker = {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  deactivated_at: string | null;
+  open_cases: number;
+};
+export type Invite = {
+  id: number;
+  role: string;
+  note: string | null;
+  created_at: string;
+  expires_at: string;
+  accepted_at: string | null;
+  revoked_at: string | null;
+};
+export type RequestRow = {
+  id: number;
+  case_id: number;
+  pseudonym: string;
+  program_name: string;
+  requester: string;
+  reason: string | null;
+  created_at: string;
+  decided_at: string | null;
+  decision: string | null;
+};
+export type Connections = {
+  ai: { connected: boolean; provider: string; model: string; env: string };
+  stt: { connected: boolean; provider: string; region: string | null; env: string };
+  db: { connected: boolean; checked_at: string; env: string };
+};
+
+export const getProfile = () => json<Profile>('/settings/profile');
+export const saveProfile = (body: { name: string; phone: string | null; contact_email: string | null }) =>
+  json<Profile>('/settings/profile', { method: 'PATCH', body: JSON.stringify(body) });
+export const deactivateMe = () => json<{ ok: true }>('/settings/deactivate', { method: 'POST' });
+
+export const getOrg = () => json<Org>('/settings/org');
+export const saveOrg = (body: Org) => json<Org>('/settings/org', { method: 'PUT', body: JSON.stringify(body) });
+
+export const listPrograms = (all = false) => json<Program[]>(`/settings/programs${all ? '?all=1' : ''}`);
+export const addProgram = (name: string) =>
+  json<Program[]>('/settings/programs', { method: 'POST', body: JSON.stringify({ name }) });
+export const retireProgram = (id: number) => json<Program[]>(`/settings/programs/${id}`, { method: 'DELETE' });
+
+export const listWorkers = () => json<Worker[]>('/settings/workers');
+export type WorkerCase = { id: number; pseudonym: string; program_name: string; status: string };
+export const workerCases = (id: number) => json<WorkerCase[]>(`/settings/workers/${id}/cases`);
+export const assignCase = (case_id: number, user_id: number | null) =>
+  json<{ ok: true }>('/settings/assign', { method: 'POST', body: JSON.stringify({ case_id, user_id }) });
+
+export const listInvites = () => json<Invite[]>('/settings/invites');
+export const createInvite = (role: 'worker' | 'admin', note: string | null) =>
+  json<{ token: string; invite: Invite }>('/settings/invites', {
+    method: 'POST',
+    body: JSON.stringify({ role, note }),
+  });
+export const revokeInvite = (id: number) => json<Invite[]>(`/settings/invites/${id}`, { method: 'DELETE' });
+
+export const listRequests = () => json<RequestRow[]>('/settings/requests');
+export const requestAssignment = (case_id: number, reason: string | null) =>
+  json<{ ok: true }>('/settings/requests', { method: 'POST', body: JSON.stringify({ case_id, reason }) });
+export const decideRequest = (id: number, decision: 'approved' | 'rejected') =>
+  json<{ ok: true }>(`/settings/requests/${id}`, { method: 'POST', body: JSON.stringify({ decision }) });
+
+export type ConsentCopy = { domain: string; label: string; body: string; purpose: string; hash: string };
+export const getConsentCopy = () => json<ConsentCopy[]>('/settings/consent-copy');
+
+export const getConnections = () => json<Connections>('/settings/connections');
+
+export const peekInvite = (token: string) => json<{ role: string }>(`/auth/invite/${token}`);
+export const signUpWithInvite = (
+  token: string,
+  body: { email: string; password: string; name: string },
+) => json<{ ok: true }>(`/auth/invite/${token}`, { method: 'POST', body: JSON.stringify(body) });

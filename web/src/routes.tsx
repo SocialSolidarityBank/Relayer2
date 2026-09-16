@@ -5,6 +5,8 @@ import { applyTheme, followSystemTheme, initialTheme, type Theme } from './theme
 import { getMe, logout, Unauthorized, type Me } from './api.ts';
 import { AccessScreen } from './screens/access.tsx';
 import { AuditScreen } from './screens/audit.tsx';
+import { InviteScreen } from './screens/invite.tsx';
+import { SETTINGS_MODULES, SettingsScreen, type SettingsModule } from './screens/settings.tsx';
 import { BriefingScreen } from './screens/briefing.tsx';
 import { CloseScreen } from './screens/close.tsx';
 import { HomeScreen } from './screens/home.tsx';
@@ -61,18 +63,46 @@ export function Routes() {
 
   // 당사자 열람은 로그인 앞에 선다. 링크와 코드로만 열리고, 실무자 화면과 섞이지 않는다.
   const asParticipant = hash.match(/^#\/access\/([A-Za-z0-9_-]+)$/);
-  if (asParticipant) return <AccessScreen token={asParticipant[1]} />;
+  // 초대장도 로그인 앞이다. 아직 계정이 없는 사람이 보는 화면이라 셸을 씌우지 않는다.
+  const invited = hash.match(/^#\/invite\/([A-Za-z0-9_-]+)$/);
+  if (invited)
+    return (
+      <div className="wire-shell">
+        <div className="page-content">
+          <InviteScreen token={invited[1]} onDone={() => void getMe().then(setMe)} />
+        </div>
+      </div>
+    );
+
+  if (asParticipant)
+    return (
+      <div className="wire-shell">
+        <div className="page-content">
+          <AccessScreen token={asParticipant[1]} />
+        </div>
+      </div>
+    );
 
   if (me === 'loading') return <p className="empty">불러오는 중이에요.</p>;
-  if (!me) return <LoginScreen onDone={() => void getMe().then(setMe)} />;
+  if (!me)
+    return (
+      <div className="wire-shell">
+        <div className="page-content">
+          <LoginScreen onDone={() => void getMe().then(setMe)} />
+        </div>
+      </div>
+    );
 
   const screen = (() => {
     if (hash === HOME) return <HomeScreen />;
-    if (hash === '#/participants') return <ParticipantsScreen />;
+    if (hash === '#/participants') return <ParticipantsScreen me={me} />;
     // 사례를 안 고른 채 상담 기록하기·상담 일정 등록을 누르면 여기로 온다.
     if (hash === '#/pick/record') return <ParticipantsScreen pickFor="record" />;
     if (hash === '#/pick/schedule') return <ParticipantsScreen pickFor="schedule" />;
-    if (hash === '#/audit') return <AuditScreen />;
+    if (hash === '#/settings/audit' || hash === '#/audit') return <AuditScreen />;
+    const inSettings = hash.match(/^#\/settings\/([a-z]+)$/);
+    if (inSettings) return <SettingsScreen module={inSettings[1] as SettingsModule} me={me} />;
+    if (hash === '#/settings') { window.location.hash = '#/settings/profile'; return null; }
     if (hash === '#/participants/new') return <ParticipantNewScreen />;
 
     // 저장해 둔 회차 고쳐 쓰기. 기록 화면을 그대로 쓰되 대상 회차를 준다.
@@ -98,32 +128,30 @@ export function Routes() {
   })();
 
 
+  /**
+   * 사이드바 셸(2026-09-16 Q "사람들이 헷갈려 한다").
+   *
+   * 한 줄에 아홉 개가 늘어선 가로 메뉴는 무엇이 무엇의 갈래인지 못 보여 준다.
+   * 정본(CCC preview)의 `.app-shell` 3부 — 머리줄·사이드바·본문 — 을 그대로 쓴다.
+   * 묶음 라벨과 항목 이름은 Q 가 준 것이다.
+   *
+   * `상담 기록하기`·`당사자 정보`는 **열어 둔 사례가 있을 때만** 당사자 묶음에 따라붙는다.
+   * 누구의 것인지 정해야 열리는 화면이라, 사례 없이 이름만 세워 두면 빈 화면으로 떨어진다.
+   */
+  const link = (href: string, label: string) => (
+    <li key={href}>
+      <a className="navigation-link" href={href} data-current={hash === href || undefined}>
+        <span>{label}</span>
+      </a>
+    </li>
+  );
+
   return (
-    <>
-      <nav className="app-nav">
-        <a href={HOME}>일정</a>
-        <a href="#/participants">당사자 목록</a>
-        <a href="#/participants/new">당사자 등록</a>
-        {/* 열람 기록은 관리자만. 실무자 화면에 없는 것이 맞다(GLOSSARY §6-7). */}
-        {me.role === 'admin' && <a href="#/audit">열람 기록</a>}
-        {/* 상담 기록하기·상담 일정 등록은 **누구의 것인지 정해야** 열린다.
-            사례가 이미 정해져 있으면 그리로 바로 가고, 아니면 당사자를 고르는 자리로 보낸다.
-            메뉴에서 사라지게 두면 "그 기능이 없다"로 읽힌다.
-            15초 다시보기와 인테이크 작성하기는 메뉴가 아니다 — 당사자 카드 안에 있다. */}
-        <a href={caseId ? `#/cases/${caseId}/record` : '#/pick/record'}>상담 기록하기</a>
-        <a href={caseId ? `#/cases/${caseId}/schedule` : '#/pick/schedule'}>상담 일정 등록</a>
-        {caseId && <a href={`#/cases/${caseId}/info`}>당사자 정보</a>}
-        <span className="app-nav-me">
-          {me.name}
-          {/* 다크 토큰은 이미 이식돼 있었다. 없던 것은 켜는 장치뿐이라 그것만 붙인다. */}
-          <button
-            type="button"
-            className="app-nav-logout"
-            aria-pressed={theme === 'dark'}
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-          >
-            {theme === 'dark' ? '밝게' : '어둡게'}
-          </button>
+    <div className="app-shell">
+      <header className="app-header">
+        <span className="app-header-brand">릴레이어</span>
+        <div className="header-actions">
+          <span className="app-nav-me">{me.name}</span>
           <button
             type="button"
             className="app-nav-logout"
@@ -131,9 +159,44 @@ export function Routes() {
           >
             로그아웃
           </button>
-        </span>
-      </nav>
-      {screen}
-    </>
+        </div>
+      </header>
+
+      <aside className="sidebar">
+        <div className="navigation-groups">
+          <div className="navigation-group">
+            <p className="navigation-section-title">일정</p>
+            <ul className="navigation-list">
+              {link(caseId ? `#/cases/${caseId}/schedule` : '#/pick/schedule', '상담 일정 등록')}
+              {link(HOME, '상담 일정 보기')}
+            </ul>
+          </div>
+
+          <div className="navigation-group">
+            <p className="navigation-section-title">당사자</p>
+            <ul className="navigation-list">
+              {link('#/participants', '당사자 목록')}
+              {link('#/participants/new', '당사자 등록')}
+              {caseId && link(`#/cases/${caseId}/record`, '상담 기록하기')}
+              {caseId && link(`#/cases/${caseId}/info`, '당사자 정보')}
+            </ul>
+          </div>
+
+          <div className="navigation-group">
+            <p className="navigation-section-title">설정</p>
+            <ul className="navigation-list">
+              {/* 공통은 누구나. 관리자 몫은 관리자에게만 보인다(GLOSSARY §6-7).
+                  실무자에게는 그 자리에 `배정 요청하기` 하나가 선다. */}
+              {SETTINGS_MODULES.filter((m) => !m.admin || me.role === 'admin').map((m) =>
+                link(`#/settings/${m.key}`, m.label),
+              )}
+              {me.role !== 'admin' && link('#/settings/request', '실무자 배정 요청하기')}
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <div className="page-content">{screen}</div>
+    </div>
   );
 }

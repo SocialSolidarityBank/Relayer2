@@ -8,10 +8,6 @@ import { Routes } from './routes.tsx';
 
 createRoot(document.getElementById('root') as HTMLElement).render(
   <StrictMode>
-    <div className="wire-shell">
-      <div className="page-content">
-        <Routes />
-      </div>
-    </div>
+    <Routes />
   </StrictMode>,
 );

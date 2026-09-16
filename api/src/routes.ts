@@ -18,9 +18,11 @@ import {
 import { AiUnavailable, approveDraft, draftSession, latestDraft } from './ai.ts';
 import { audit, listAudit } from './audit.ts';
 import { accessState, issueAccess, openAccess, revokeAccess } from './participant-access.ts';
-import { CONSENT_DECISIONS, CONSENT_DOMAINS } from './consent.ts';
+import { CONSENT_COPY, CONSENT_DECISIONS, CONSENT_DOMAINS, copyHash } from './consent.ts';
 import { LIFE_AREAS } from './domain/types.ts';
 import * as service from './service.ts';
+import * as settings from './settings.ts';
+import { sql } from './db.ts';
 
 // 영역은 국가 표준 10종+기타 하나뿐이다(SPEC §8). 여기에 목록을 또 적으면 이번처럼 어긋난다.
 const area = z.enum(LIFE_AREAS);
@@ -87,6 +89,26 @@ app.post('/auth/login', async (c) => {
   }
   c.header('set-cookie', issueCookie(result.actor.id));
   return c.json(result.actor);
+});
+
+app.get('/auth/invite/:token', async (c) => {
+  const found = await settings.peekInvite(c.req.param('token'));
+  if (!found) return c.json({ error: '쓸 수 없는 초대예요. 기한이 지났거나 이미 쓰였어요.' }, 404);
+  return c.json(found);
+});
+
+app.post('/auth/invite/:token', async (c) => {
+  const body = z
+    .object({
+      email: z.string().trim().min(2, '아이디를 적어 주세요.'),
+      password: z.string().min(4, '비밀번호는 네 자 이상이어야 해요.'),
+      name: z.string().trim().min(1, '이름을 적어 주세요.'),
+    })
+    .parse(await c.req.json());
+  const out = await settings.signUpWithInvite({ token: c.req.param('token'), ...body });
+  if ('error' in out) return c.json(out, 409);
+  c.header('set-cookie', issueCookie(out.userId));
+  return c.json({ ok: true });
 });
 
 app.post('/auth/logout', (c) => {
@@ -418,4 +440,160 @@ app.get('/cases/:id/briefing', async (c) => {
     await audit({ actorId: c.get('actor').id, action: 'case.briefing', caseId, fields: ['name'] });
   }
   return c.json(found);
+});
+
+// ── 설정하기(2026-09-16 Q) ────────────────────────────────────────────────
+// 공통은 본인, 나머지는 관리자. 화면에서 감추는 것은 안내일 뿐이라 여기서 다시 막는다.
+
+const adminOnly = (c: { get: (k: 'actor') => { role: string } }) => c.get('actor').role !== 'admin';
+const DENY = { error: '관리자만 할 수 있어요.' } as const;
+
+// 초대장 확인·가입은 로그인 앞에 선다. 인증 미들웨어보다 위에 둘 자리가 없어
+// `/auth` 아래로 보낸다 — 그 경로는 이미 열려 있다.
+app.get('/settings/profile', async (c) => c.json(await settings.getProfile(c.get('actor').id)));
+
+app.patch('/settings/profile', async (c) => {
+  const body = z
+    .object({
+      name: z.string().trim().min(1, '이름을 적어 주세요.'),
+      phone: z.string().trim().nullable().default(null),
+      contact_email: z.string().trim().nullable().default(null),
+    })
+    .parse(await c.req.json());
+  return c.json(await settings.updateProfile(c.get('actor').id, body));
+});
+
+app.post('/settings/deactivate', async (c) => {
+  const out = await settings.deactivate(c.get('actor').id);
+  if ('error' in out) return c.json(out, 409);
+  // 나간 사람의 쿠키는 그 자리에서 끊는다.
+  c.header('set-cookie', clearCookie());
+  return c.json(out);
+});
+
+app.get('/settings/org', async (c) => c.json(await settings.getOrg()));
+
+app.put('/settings/org', async (c) => {
+  if (adminOnly(c)) return c.json(DENY, 403);
+  const body = z
+    .object({
+      name: z.string().trim(),
+      reg_no: z.string().trim().nullable().default(null),
+      address: z.string().trim().nullable().default(null),
+      phone: z.string().trim().nullable().default(null),
+    })
+    .parse(await c.req.json());
+  return c.json(await settings.updateOrg(c.get('actor').id, body));
+});
+
+// 사업 목록은 누구나 읽는다 — 당사자 등록에서 고르는 선택지다.
+app.get('/settings/programs', async (c) => c.json(await settings.listPrograms(c.req.query('all') === '1')));
+
+app.post('/settings/programs', async (c) => {
+  if (adminOnly(c)) return c.json(DENY, 403);
+  const { name } = z.object({ name: z.string().trim().min(1, '사업 이름을 적어 주세요.') }).parse(await c.req.json());
+  return c.json(await settings.addProgram(c.get('actor').id, name));
+});
+
+app.delete('/settings/programs/:id', async (c) => {
+  if (adminOnly(c)) return c.json(DENY, 403);
+  return c.json(await settings.retireProgram(c.get('actor').id, Number(c.req.param('id'))));
+});
+
+app.get('/settings/workers', async (c) => c.json(await settings.listWorkers()));
+
+app.get('/settings/workers/:id/cases', async (c) =>
+  c.json(await settings.workerCases(Number(c.req.param('id')))),
+);
+
+app.post('/settings/assign', async (c) => {
+  if (adminOnly(c)) return c.json(DENY, 403);
+  const body = z
+    .object({ case_id: z.number().int().positive(), user_id: z.number().int().positive().nullable() })
+    .parse(await c.req.json());
+  await settings.assign(c.get('actor').id, body.case_id, body.user_id);
+  return c.json({ ok: true });
+});
+
+app.get('/settings/invites', async (c) => {
+  if (adminOnly(c)) return c.json(DENY, 403);
+  return c.json(await settings.listInvites());
+});
+
+app.post('/settings/invites', async (c) => {
+  if (adminOnly(c)) return c.json(DENY, 403);
+  const body = z
+    .object({ role: z.enum(['worker', 'admin']), note: z.string().trim().nullable().default(null) })
+    .parse(await c.req.json());
+  return c.json(await settings.createInvite(c.get('actor').id, body.role, body.note));
+});
+
+app.delete('/settings/invites/:id', async (c) => {
+  if (adminOnly(c)) return c.json(DENY, 403);
+  return c.json(await settings.revokeInvite(c.get('actor').id, Number(c.req.param('id'))));
+});
+
+app.get('/settings/requests', async (c) => {
+  const me = c.get('actor');
+  // 관리자는 전부 본다. 실무자는 자기 것만 — 남이 누구를 맡겠다고 했는지는 그의 일이 아니다.
+  return c.json(await settings.listRequests(me.role === 'admin' ? null : me.id));
+});
+
+app.post('/settings/requests', async (c) => {
+  const body = z
+    .object({ case_id: z.number().int().positive(), reason: z.string().trim().nullable().default(null) })
+    .parse(await c.req.json());
+  const out = await settings.requestAssignment(c.get('actor').id, body.case_id, body.reason);
+  if ('error' in out) return c.json(out, 409);
+  return c.json(out);
+});
+
+app.post('/settings/requests/:id', async (c) => {
+  if (adminOnly(c)) return c.json(DENY, 403);
+  const { decision } = z.object({ decision: z.enum(['approved', 'rejected']) }).parse(await c.req.json());
+  await settings.decideRequest(c.get('actor').id, Number(c.req.param('id')), decision);
+  return c.json({ ok: true });
+});
+
+/**
+ * 연결 상태 — AI·전사·데이터베이스가 지금 붙어 있는지.
+ *
+ * **키를 화면으로 보내지 않는다.** 붙었는지 여부와 어느 제공자인지까지다.
+ * 설정 자체(키 넣기)는 아직 없다 — 기관 서버의 환경 변수로 넣는다. 그 사실을 화면이 말한다.
+ */
+/**
+ * 지금 쓰는 동의 문안. **읽기만 한다** — 문안은 코드가 정본이다(`consent.ts`).
+ * 화면에서 고치게 하면 글자 하나에 이미 받은 동의가 전부 `확인 필요`로 떨어진다.
+ */
+app.get('/settings/consent-copy', async (c) => {
+  if (adminOnly(c)) return c.json(DENY, 403);
+  return c.json(
+    CONSENT_DOMAINS.map((domain) => ({
+      domain,
+      label: CONSENT_COPY[domain].label,
+      body: CONSENT_COPY[domain].copy,
+      purpose: CONSENT_COPY[domain].purpose,
+      hash: copyHash(domain).slice(0, 12),
+    })),
+  );
+});
+
+app.get('/settings/connections', async (c) => {
+  if (adminOnly(c)) return c.json(DENY, 403);
+  const [{ now }] = await sql<Array<{ now: string }>>`select now()`;
+  return c.json({
+    ai: {
+      connected: Boolean(process.env.OPENAI_API_KEY),
+      provider: process.env.AI_PROVIDER ?? 'openai',
+      model: process.env.AI_MODEL ?? 'gpt-5.5',
+      env: 'OPENAI_API_KEY',
+    },
+    stt: {
+      connected: Boolean(process.env.AZURE_SPEECH_KEY),
+      provider: 'azure',
+      region: process.env.AZURE_SPEECH_REGION ?? null,
+      env: 'AZURE_SPEECH_KEY',
+    },
+    db: { connected: true, checked_at: now, env: 'DATABASE_URL' },
+  });
 });

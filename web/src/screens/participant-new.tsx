@@ -1,10 +1,10 @@
 // 당사자 등록 — 당사자 + PII 금고 + 참여 사업 하나를 한 번에 만든다(GLOSSARY §2).
 // 정본 화면 이름이다. `사례 등록`이라는 이름은 존재하지 않는다.
-import { useState } from 'react';
-import { createCase, CONSENT_DOMAINS, type ConsentDomain } from '../api.ts';
+import { useEffect, useState } from 'react';
+import { createCase, listPrograms, CONSENT_DOMAINS, type ConsentDomain, type Program } from '../api.ts';
 import { Button, Card, Choice, ErrorText, Field, FormActions, PageHeader } from '../ui.tsx';
 
-const DEFAULT_PROGRAM = '함께온기금 울타리대출';
+
 
 /** 문안은 정본(CCC S7)이다. 화면에서 줄이거나 바꾸지 않는다 — 바꾸면 해시가 달라진다. */
 const CONSENT_COPY: Record<ConsentDomain, { label: string; copy: string; required?: boolean }> = {
@@ -23,7 +23,16 @@ export function ParticipantNewScreen() {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
-  const [program, setProgram] = useState(DEFAULT_PROGRAM);
+  // 사업은 **고르기만** 한다(2026-09-16 Q). 직접 치면 같은 사업이 두 이름으로 갈린다.
+  // 목록은 설정 › 기관 정보 관리에서 관리자가 만든다.
+  const [programs, setPrograms] = useState<Program[] | null>(null);
+  const [program, setProgram] = useState('');
+  useEffect(() => {
+    void listPrograms().then((rows) => {
+      setPrograms(rows);
+      if (rows.length === 1) setProgram(rows[0].name);
+    });
+  }, []);
   const [planned, setPlanned] = useState('');
   // 동의는 영역마다 따로 받는다. 한 번에 묶어 받지 않는다(P1).
   const [granted, setGranted] = useState<Record<string, boolean>>({});
@@ -73,8 +82,24 @@ export function ParticipantNewScreen() {
         </Card>
 
         <Card title="참여 사업" hint="한 상담은 사업 하나만 다뤄요. 다른 사업은 사례를 따로 열어요.">
-          <Field label="사업 이름" htmlFor="program" required>
-            <input id="program" type="text" value={program} onChange={(e) => setProgram(e.target.value)} />
+          <Field
+            label="사업"
+            htmlFor="program"
+            required
+            hint={
+              programs !== null && programs.length === 0
+                ? '아직 사업이 없어요. 관리자가 설정 › 기관 정보 관리에서 먼저 만들어야 해요.'
+                : '설정 › 기관 정보 관리에서 관리자가 목록을 관리해요.'
+            }
+          >
+            <select id="program" value={program} onChange={(e) => setProgram(e.target.value)}>
+              <option value="">고르기</option>
+              {(programs ?? []).map((p) => (
+                <option key={p.id} value={p.name}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
           </Field>
           <Field label="예정 회차 수" htmlFor="planned" hint="선택 · 예: 6">
             <input

@@ -1,0 +1,650 @@
+/**
+ * 설정하기(2026-09-16 Q). 한 화면 안에서 묶음을 갈아 끼운다.
+ *
+ * `#/settings/<모듈>` 이 주소다. 사이드바가 모듈별로 링크를 세우므로, 어디에 있는지가
+ * 왼쪽에서 늘 보인다 — 화면 안에 또 목록을 두면 메뉴가 두 겹이 된다.
+ *
+ * 이름 규율: 화면의 `담당자` 표기는 전부 `실무자`다(GLOSSARY 요구 17).
+ */
+import { useEffect, useState } from 'react';
+import {
+  addProgram,
+  assignCase,
+  createInvite,
+  deactivateMe,
+  decideRequest,
+  getConnections,
+  getConsentCopy,
+  getOrg,
+  getProfile,
+  listInvites,
+  listPrograms,
+  listRequests,
+  listWorkers,
+  retireProgram,
+  revokeInvite,
+  saveOrg,
+  saveProfile,
+  workerCases,
+  type Connections,
+  type ConsentCopy,
+  type Invite,
+  type Org,
+  type Profile,
+  type Program,
+  type RequestRow,
+  type Worker,
+  type WorkerCase,
+} from '../api.ts';
+import { Badge, Button, Card, DataRows, Empty, ErrorText, Field, FormActions, Item, PageHeader } from '../ui.tsx';
+import { setTheme, themeChoice, type ThemeChoice } from '../theme.ts';
+
+const date = (s: string) => new Date(s).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
+
+/** 설정 모듈들. 사이드바와 이 화면이 같은 목록을 쓴다 — 이름이 갈리지 않게. */
+export const SETTINGS_MODULES = [
+  { key: 'profile', label: '내 정보', admin: false },
+  { key: 'theme', label: '화면 테마', admin: false },
+  { key: 'leave', label: '계정 삭제하기', admin: false },
+  { key: 'assign', label: '실무자 배정하기', admin: true },
+  { key: 'invite', label: '실무자 초대하기', admin: true },
+  { key: 'workers', label: '실무자 목록', admin: true },
+  { key: 'org', label: '기관 정보 관리', admin: true },
+  { key: 'consent', label: '동의서 관리', admin: true },
+  { key: 'audit', label: '열람 기록 관리', admin: true },
+  { key: 'connections', label: 'API 연결 관리', admin: true },
+] as const;
+
+export type SettingsModule = (typeof SETTINGS_MODULES)[number]['key'] | 'request';
+
+export function SettingsScreen({
+  module,
+  me,
+}: {
+  module: SettingsModule;
+  me: { id: number; name: string; role: string };
+}) {
+  const label =
+    module === 'request' ? '실무자 배정 요청하기' : (SETTINGS_MODULES.find((m) => m.key === module)?.label ?? '설정하기');
+  const needsAdmin = SETTINGS_MODULES.find((m) => m.key === module)?.admin;
+
+  return (
+    <>
+      <PageHeader title={label} />
+      {needsAdmin && me.role !== 'admin' ? (
+        <Card title="관리자만 볼 수 있어요">
+          <Empty>이 설정은 기관 관리자가 다뤄요. 필요하면 관리자에게 말씀해 주세요.</Empty>
+        </Card>
+      ) : module === 'profile' ? (
+        <ProfilePane />
+      ) : module === 'theme' ? (
+        <ThemePane />
+      ) : module === 'leave' ? (
+        <LeavePane />
+      ) : module === 'assign' ? (
+        <AssignPane />
+      ) : module === 'invite' ? (
+        <InvitePane />
+      ) : module === 'workers' ? (
+        <WorkersPane />
+      ) : module === 'org' ? (
+        <OrgPane />
+      ) : module === 'consent' ? (
+        <ConsentPane />
+      ) : module === 'connections' ? (
+        <ConnectionsPane />
+      ) : (
+        <RequestPane me={me} />
+      )}
+    </>
+  );
+}
+
+// ── 공통 ──────────────────────────────────────────────────────────────────
+
+function ProfilePane() {
+  const [p, setP] = useState<Profile | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    void getProfile().then(setP);
+  }, []);
+  if (!p) return <Empty>불러오는 중이에요.</Empty>;
+
+  const save = async () => {
+    setErr(null);
+    try {
+      setP(await saveProfile({ name: p.name, phone: p.phone, contact_email: p.contact_email }));
+      setSaved(true);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : '저장하지 못했어요.');
+    }
+  };
+
+  return (
+    <Card title="내 정보" hint="로그인 아이디는 바꿀 수 없어요. 지난 기록이 누구의 것인지 흐려지기 때문이에요.">
+      <DataRows
+        rows={[
+          ['로그인 아이디', p.email],
+          ['역할', p.role === 'admin' ? '관리자' : '실무자'],
+        ]}
+      />
+      <Field label="이름" htmlFor="pf-name">
+        <input id="pf-name" value={p.name} onChange={(e) => setP({ ...p, name: e.target.value })} />
+      </Field>
+      <Field label="연락처" htmlFor="pf-phone" hint="예: 010-1234-5678">
+        <input id="pf-phone" value={p.phone ?? ''} onChange={(e) => setP({ ...p, phone: e.target.value })} />
+      </Field>
+      <Field label="이메일" htmlFor="pf-mail" hint="알림과 초대를 받을 곳이에요.">
+        <input
+          id="pf-mail"
+          value={p.contact_email ?? ''}
+          onChange={(e) => setP({ ...p, contact_email: e.target.value })}
+        />
+      </Field>
+      <FormActions>
+        {err && <ErrorText>{err}</ErrorText>}
+        {saved && !err && <span className="wire-hint">저장했어요.</span>}
+        <Button variant="primary" onClick={() => void save()}>
+          저장하기
+        </Button>
+      </FormActions>
+    </Card>
+  );
+}
+
+const THEMES: ReadonlyArray<[ThemeChoice, string, string]> = [
+  ['light', '밝게', '흰 바탕. 밝은 사무실에서 읽기 좋아요.'],
+  ['dark', '어둡게', '어두운 바탕. 밤이나 조명이 낮은 곳에서 눈이 덜 부셔요.'],
+  ['system', '기기 설정 따라', '기기가 밤에 어두워지면 같이 어두워져요.'],
+];
+
+function ThemePane() {
+  const [t, setT] = useState<ThemeChoice>(themeChoice());
+  return (
+    <Card title="화면 테마" hint="이 기기에서만 적용돼요. 다른 기기에서는 따로 고르면 돼요.">
+      {THEMES.map(([key, label, desc]) => (
+        <div className="wire-repeat-card" key={key}>
+          <Item
+            title={label}
+            desc={desc}
+            action={
+              <Button
+                variant={t === key ? 'primary' : 'secondary'}
+                onClick={() => {
+                  setTheme(key);
+                  setT(key);
+                }}
+              >
+                {t === key ? '쓰는 중' : '고르기'}
+              </Button>
+            }
+          />
+        </div>
+      ))}
+    </Card>
+  );
+}
+
+function LeavePane() {
+  const [confirm, setConfirm] = useState('');
+  const [err, setErr] = useState<string | null>(null);
+  const go = async () => {
+    setErr(null);
+    try {
+      await deactivateMe();
+      window.location.reload();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : '나가지 못했어요.');
+    }
+  };
+  return (
+    <Card
+      title="계정 삭제하기"
+      hint="로그인만 막혀요. 내가 남긴 상담 기록은 사례의 것이라 지워지지 않아요 — 지우면 누가 기록했는지가 빈칸이 돼요."
+    >
+      <Field label="확인" htmlFor="leave-c" hint="정말 나가려면 아래 칸에 `나가기` 라고 적어 주세요.">
+        <input id="leave-c" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+      </Field>
+      <FormActions>
+        {err && <ErrorText>{err}</ErrorText>}
+        <Button variant="danger" disabled={confirm !== '나가기'} onClick={() => void go()}>
+          계정 삭제하기
+        </Button>
+      </FormActions>
+    </Card>
+  );
+}
+
+// ── 관리자 ────────────────────────────────────────────────────────────────
+
+function AssignPane() {
+  const [workers, setWorkers] = useState<Worker[] | null>(null);
+  const [reqs, setReqs] = useState<RequestRow[]>([]);
+  const [who, setWho] = useState<number | null>(null);
+  const [cases, setCases] = useState<WorkerCase[]>([]);
+  const [moveTo, setMoveTo] = useState<Record<number, string>>({});
+
+  const reload = async () => {
+    setWorkers(await listWorkers());
+    setReqs(await listRequests());
+  };
+  useEffect(() => {
+    void reload();
+  }, []);
+  useEffect(() => {
+    if (who) void workerCases(who).then(setCases);
+    else setCases([]);
+  }, [who]);
+
+  const live = (workers ?? []).filter((w) => !w.deactivated_at);
+  const pending = reqs.filter((r) => !r.decided_at);
+
+  return (
+    <>
+      <Card title="올라온 배정 요청" hint="실무자가 맡겠다고 손든 당사자예요. 관리자가 확정하면 바로 효력이 생겨요.">
+        {pending.length === 0 ? (
+          <Empty>대기 중인 요청이 없어요.</Empty>
+        ) : (
+          pending.map((r) => (
+            <div className="wire-repeat-card" key={r.id}>
+              <Item
+                title={`${r.pseudonym} · ${r.program_name}`}
+                desc={`${r.requester} · ${date(r.created_at)}${r.reason ? ` · ${r.reason}` : ''}`}
+                action={
+                  <>
+                    <Button
+                      variant="primary"
+                      onClick={() => void decideRequest(r.id, 'approved').then(reload)}
+                    >
+                      배정하기
+                    </Button>
+                    <Button onClick={() => void decideRequest(r.id, 'rejected').then(reload)}>거절</Button>
+                  </>
+                }
+              />
+            </div>
+          ))
+        )}
+      </Card>
+
+      <Card title="실무자가 바뀔 때" hint="실무자를 고르면 맡고 있는 당사자가 나와요. 한 사람씩 다른 실무자에게 넘겨요.">
+        <Field label="실무자" htmlFor="as-who">
+          <select id="as-who" value={who ?? ''} onChange={(e) => setWho(e.target.value ? Number(e.target.value) : null)}>
+            <option value="">고르기</option>
+            {live.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name} · 맡은 당사자 {w.open_cases}명
+              </option>
+            ))}
+          </select>
+        </Field>
+        {who !== null &&
+          (cases.length === 0 ? (
+            <Empty>맡고 있는 당사자가 없어요.</Empty>
+          ) : (
+            cases.map((c) => (
+              <div className="wire-repeat-card" key={c.id}>
+                <Item
+                  title={`${c.pseudonym} · ${c.program_name}`}
+                  desc={c.status === 'open' ? '진행 중' : '종결'}
+                  action={
+                    <>
+                      <select
+                        value={moveTo[c.id] ?? ''}
+                        onChange={(e) => setMoveTo({ ...moveTo, [c.id]: e.target.value })}
+                      >
+                        <option value="">넘길 실무자</option>
+                        {live
+                          .filter((w) => w.id !== who)
+                          .map((w) => (
+                            <option key={w.id} value={w.id}>
+                              {w.name}
+                            </option>
+                          ))}
+                      </select>
+                      <Button
+                        variant="primary"
+                        disabled={!moveTo[c.id]}
+                        onClick={() =>
+                          void assignCase(c.id, Number(moveTo[c.id]))
+                            .then(() => workerCases(who))
+                            .then(setCases)
+                            .then(reload)
+                        }
+                      >
+                        넘기기
+                      </Button>
+                    </>
+                  }
+                />
+              </div>
+            ))
+          ))}
+      </Card>
+    </>
+  );
+}
+
+function InvitePane() {
+  const [rows, setRows] = useState<Invite[] | null>(null);
+  const [role, setRole] = useState<'worker' | 'admin'>('worker');
+  const [note, setNote] = useState('');
+  const [link, setLink] = useState<string | null>(null);
+
+  useEffect(() => {
+    void listInvites().then(setRows);
+  }, []);
+
+  const make = async () => {
+    const { token } = await createInvite(role, note.trim() || null);
+    setLink(`${window.location.origin}${window.location.pathname}#/invite/${token}`);
+    setNote('');
+    setRows(await listInvites());
+  };
+
+  return (
+    <>
+      <Card
+        title="초대 링크 만들기"
+        hint="링크를 건네면 그 사람이 이 워크스페이스에 들어와요. 7일 뒤 만료돼요."
+      >
+        <Field label="역할" htmlFor="iv-role">
+          <select id="iv-role" value={role} onChange={(e) => setRole(e.target.value as 'worker' | 'admin')}>
+            <option value="worker">실무자</option>
+            <option value="admin">관리자</option>
+          </select>
+        </Field>
+        <Field label="메모" htmlFor="iv-note" hint="누구에게 주는 링크인지 적어 두면 나중에 찾기 쉬워요.">
+          <input id="iv-note" value={note} onChange={(e) => setNote(e.target.value)} />
+        </Field>
+        <FormActions>
+          <Button variant="primary" onClick={() => void make()}>
+            링크 만들기
+          </Button>
+        </FormActions>
+        {link && (
+          <div className="wire-repeat-card">
+            <p className="wire-hint">
+              <strong>지금 한 번만 보여요.</strong> 창을 닫으면 다시 볼 수 없어요.
+            </p>
+            <code style={{ wordBreak: 'break-all' }}>{link}</code>
+            <FormActions>
+              <Button onClick={() => void navigator.clipboard.writeText(link)}>복사하기</Button>
+            </FormActions>
+          </div>
+        )}
+      </Card>
+
+      <Card title="보낸 초대">
+        {rows === null ? (
+          <Empty>불러오는 중이에요.</Empty>
+        ) : rows.length === 0 ? (
+          <Empty>보낸 초대가 없어요.</Empty>
+        ) : (
+          rows.map((v) => {
+            const state = v.accepted_at
+              ? '들어옴'
+              : v.revoked_at
+                ? '취소함'
+                : new Date(v.expires_at) < new Date()
+                  ? '기한 지남'
+                  : '기다리는 중';
+            return (
+              <div className="wire-repeat-card" key={v.id}>
+                <Item
+                  title={`${v.role === 'admin' ? '관리자' : '실무자'}${v.note ? ` · ${v.note}` : ''}`}
+                  desc={`${date(v.created_at)} 만듦 · ${date(v.expires_at)}까지 · ${state}`}
+                  action={
+                    state === '기다리는 중' ? (
+                      <Button onClick={() => void revokeInvite(v.id).then(setRows)}>취소하기</Button>
+                    ) : undefined
+                  }
+                />
+              </div>
+            );
+          })
+        )}
+      </Card>
+    </>
+  );
+}
+
+function WorkersPane() {
+  const [rows, setRows] = useState<Worker[] | null>(null);
+  const [open, setOpen] = useState<number | null>(null);
+  const [cases, setCases] = useState<WorkerCase[]>([]);
+  useEffect(() => {
+    void listWorkers().then(setRows);
+  }, []);
+  useEffect(() => {
+    if (open) void workerCases(open).then(setCases);
+  }, [open]);
+
+  return (
+    <Card title="실무자 목록" hint="이름을 누르면 맡고 있는 당사자가 나와요.">
+      {rows === null ? (
+        <Empty>불러오는 중이에요.</Empty>
+      ) : (
+        rows.map((w) => (
+          <div className="wire-repeat-card" key={w.id}>
+            <Item
+              title={
+                <>
+                  {w.name} {w.role === 'admin' && <Badge tone="lavender">관리자</Badge>}
+                  {w.deactivated_at && <Badge>나감</Badge>}
+                </>
+              }
+              desc={`${w.email} · 맡은 당사자 ${w.open_cases}명`}
+              action={
+                <Button onClick={() => setOpen(open === w.id ? null : w.id)}>
+                  {open === w.id ? '접기' : '당사자 보기'}
+                </Button>
+              }
+            />
+            {open === w.id &&
+              (cases.length === 0 ? (
+                <Empty>맡고 있는 당사자가 없어요.</Empty>
+              ) : (
+                <DataRows
+                  rows={cases.map((c) => [
+                    c.pseudonym,
+                    `${c.program_name} · ${c.status === 'open' ? '진행 중' : '종결'}`,
+                  ])}
+                />
+              ))}
+          </div>
+        ))
+      )}
+    </Card>
+  );
+}
+
+function OrgPane() {
+  const [org, setOrg] = useState<Org | null>(null);
+  const [programs, setPrograms] = useState<Program[] | null>(null);
+  const [name, setName] = useState('');
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    void getOrg().then(setOrg);
+    void listPrograms(true).then(setPrograms);
+  }, []);
+  if (!org) return <Empty>불러오는 중이에요.</Empty>;
+
+  return (
+    <>
+      <Card title="기관 정보" hint="서면 문서와 보고서에 이 이름이 쓰여요.">
+        <Field label="기관 이름" htmlFor="og-name">
+          <input id="og-name" value={org.name} onChange={(e) => setOrg({ ...org, name: e.target.value })} />
+        </Field>
+        <Field label="사업자·고유번호" htmlFor="og-reg">
+          <input id="og-reg" value={org.reg_no ?? ''} onChange={(e) => setOrg({ ...org, reg_no: e.target.value })} />
+        </Field>
+        <Field label="주소" htmlFor="og-addr">
+          <input id="og-addr" value={org.address ?? ''} onChange={(e) => setOrg({ ...org, address: e.target.value })} />
+        </Field>
+        <Field label="대표 전화" htmlFor="og-tel">
+          <input id="og-tel" value={org.phone ?? ''} onChange={(e) => setOrg({ ...org, phone: e.target.value })} />
+        </Field>
+        <FormActions>
+          {saved && <span className="wire-hint">저장했어요.</span>}
+          <Button
+            variant="primary"
+            onClick={() => void saveOrg(org).then(setOrg).then(() => setSaved(true))}
+          >
+            저장하기
+          </Button>
+        </FormActions>
+      </Card>
+
+      <Card
+        title="사업 목록"
+        hint="당사자를 등록할 때 여기서 고르게 돼요. 직접 칠 수 없어요 — 그래야 같은 사업이 두 이름으로 갈리지 않아요."
+      >
+        {programs === null ? (
+          <Empty>불러오는 중이에요.</Empty>
+        ) : (
+          programs.map((p) => (
+            <div className="wire-repeat-card" key={p.id}>
+              <Item
+                title={
+                  <>
+                    {p.name} {p.retired_at && <Badge>내림</Badge>}
+                  </>
+                }
+                desc={`당사자 ${p.cases}명`}
+                action={
+                  p.retired_at ? (
+                    <Button onClick={() => void addProgram(p.name).then(setPrograms)}>다시 쓰기</Button>
+                  ) : (
+                    <Button onClick={() => void retireProgram(p.id).then(setPrograms)}>내리기</Button>
+                  )
+                }
+              />
+            </div>
+          ))
+        )}
+        <Field label="사업 더하기" htmlFor="pg-new" hint="이미 있는 이름을 적으면 내렸던 사업이 다시 올라와요.">
+          <input id="pg-new" value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <FormActions>
+          <Button
+            variant="primary"
+            disabled={!name.trim()}
+            onClick={() =>
+              void addProgram(name.trim())
+                .then(setPrograms)
+                .then(() => setName(''))
+            }
+          >
+            더하기
+          </Button>
+        </FormActions>
+      </Card>
+    </>
+  );
+}
+
+/**
+ * 동의서 관리 — 문안은 코드에 박혀 있다(`api/src/consent.ts`).
+ *
+ * **문안을 화면에서 고치게 하지 않는다.** 동의는 문안 해시에 묶여 있어, 글자 하나가 바뀌면
+ * 이미 받은 동의가 전부 `확인 필요`로 떨어진다. 그 일이 실수로 일어나서는 안 된다.
+ * 여기서는 지금 쓰는 문안이 무엇인지 보여 준다.
+ */
+function ConsentPane() {
+  const [rows, setRows] = useState<ConsentCopy[] | null>(null);
+  useEffect(() => {
+    void getConsentCopy().then(setRows);
+  }, []);
+  return (
+    <Card
+      title="동의서 관리"
+      hint="지금 쓰는 문안이에요. 화면에서 고칠 수 없어요 — 글자 하나만 바뀌어도 이미 받은 동의가 전부 다시 받아야 하는 상태가 되기 때문이에요."
+    >
+      {rows === null ? (
+        <Empty>불러오는 중이에요.</Empty>
+      ) : rows.length === 0 ? (
+        <Empty>문안을 불러오지 못했어요.</Empty>
+      ) : (
+        rows.map((r) => (
+          <div className="wire-repeat-card" key={r.domain}>
+            <Item title={r.label} desc={`${r.body} · 문안 지문 ${r.hash}`} />
+          </div>
+        ))
+      )}
+    </Card>
+  );
+}
+
+function ConnectionsPane() {
+  const [c, setC] = useState<Connections | null>(null);
+  useEffect(() => {
+    void getConnections().then(setC);
+  }, []);
+  if (!c) return <Empty>불러오는 중이에요.</Empty>;
+
+  const row = (title: string, ok: boolean, desc: string, env: string) => (
+    <div className="wire-repeat-card">
+      <Item
+        title={
+          <>
+            {title} {ok ? <Badge tone="mint">붙어 있어요</Badge> : <Badge>안 붙었어요</Badge>}
+          </>
+        }
+        desc={`${desc} · 기관 서버의 ${env} 로 넣어요`}
+      />
+    </div>
+  );
+
+  return (
+    <Card
+      title="API 연결 관리"
+      hint="열쇠는 기관 서버의 환경 변수로 넣어요. 화면에서 넣게 하면 그 값이 브라우저와 기록을 거쳐 흐르기 때문이에요."
+    >
+      {row('AI 연결', c.ai.connected, `${c.ai.provider} · ${c.ai.model}`, c.ai.env)}
+      {row('STT 연결', c.stt.connected, `${c.stt.provider}${c.stt.region ? ` · ${c.stt.region}` : ''}`, c.stt.env)}
+      {row('데이터베이스 연결', c.db.connected, `방금 확인함 · ${new Date(c.db.checked_at).toLocaleString('ko-KR')}`, c.db.env)}
+    </Card>
+  );
+}
+
+// ── 실무자 ────────────────────────────────────────────────────────────────
+
+function RequestPane({ me }: { me: { id: number } }) {
+  const [rows, setRows] = useState<RequestRow[] | null>(null);
+  useEffect(() => {
+    void listRequests().then(setRows);
+  }, [me.id]);
+  return (
+    <Card
+      title="내가 올린 배정 요청"
+      hint="당사자 목록에서 `내가 맡기` 를 누르면 여기에 올라와요. 관리자가 확정하면 바로 담당이 돼요."
+    >
+      {rows === null ? (
+        <Empty>불러오는 중이에요.</Empty>
+      ) : rows.length === 0 ? (
+        <Empty>올린 요청이 없어요.</Empty>
+      ) : (
+        rows.map((r) => (
+          <div className="wire-repeat-card" key={r.id}>
+            <Item
+              title={`${r.pseudonym} · ${r.program_name}`}
+              desc={`${date(r.created_at)} 올림${r.reason ? ` · ${r.reason}` : ''}`}
+              action={
+                r.decided_at ? (
+                  <Badge tone={r.decision === 'approved' ? 'mint' : undefined}>
+                    {r.decision === 'approved' ? '배정됨' : '거절됨'}
+                  </Badge>
+                ) : (
+                  <Badge tone="blue">기다리는 중</Badge>
+                )
+              }
+            />
+          </div>
+        ))
+      )}
+    </Card>
+  );
+}

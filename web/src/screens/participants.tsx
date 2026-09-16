@@ -5,7 +5,7 @@
 //
 // 이름은 금고 암호문이라 서버가 검색하지 못한다. 받아 온 목록을 화면에서 거른다(기관 하나 규모).
 import { useEffect, useMemo, useState } from 'react';
-import { listParticipants, type ParticipantRow } from '../api.ts';
+import { listParticipants, requestAssignment, type ParticipantRow } from '../api.ts';
 import { Button, Card, Empty, Field, Fold, FormActions, PageHeader } from '../ui.tsx';
 
 const dateLabel = (iso: string): string => {
@@ -29,9 +29,18 @@ const PURPOSE: Record<Exclude<PickFor, null>, { title: string; go: string; label
   schedule: { title: '누구의 일정을 잡을까요', go: 'schedule', label: '상담 일정 등록' },
 };
 
-export function ParticipantsScreen({ pickFor = null }: { pickFor?: PickFor }) {
+export function ParticipantsScreen({
+  pickFor = null,
+  me,
+}: {
+  pickFor?: PickFor;
+  me?: { id: number; role: string };
+}) {
   const [rows, setRows] = useState<ParticipantRow[] | null>(null);
   const [q, setQ] = useState('');
+  // 배정 요청을 올린 뒤 그 자리에서 알려 준다. 목록을 떠나 설정까지 가서야 결과를 보면
+  // "눌린 건가" 하고 다시 누르게 된다.
+  const [asked, setAsked] = useState<Record<number, string>>({});
 
   useEffect(() => {
     void listParticipants().then(setRows);
@@ -80,7 +89,7 @@ export function ParticipantsScreen({ pickFor = null }: { pickFor?: PickFor }) {
           <Fold
             key={row.case_id}
             title={row.name ?? row.pseudonym}
-            desc={sessionLabel(row)}
+            desc={`${sessionLabel(row)}${row.assignee_name ? ` · 담당 ${row.assignee_name}` : ' · 담당 없음'}`}
             // 찾아서 하나만 남았으면 펼쳐 둔다. 한 명을 보려고 또 누르게 하지 않는다.
             open={shown.length === 1}
           >
@@ -101,6 +110,25 @@ export function ParticipantsScreen({ pickFor = null }: { pickFor?: PickFor }) {
                   <Button onClick={() => go(row.case_id, 'record')}>상담 기록하기</Button>
                   <Button onClick={() => go(row.case_id, 'schedule')}>상담 일정 등록</Button>
                 </>
+              )}
+              {/* 내 담당이 아닌 사람은 맡겠다고 손들 수 있다. 확정은 관리자 몫이다
+                  (GLOSSARY 배정 규칙 — 실무자의 수락 단계는 없고, 관리자 확정이 곧 효력이다). */}
+              {me && row.assigned_user_id !== me.id && (
+                <Button
+                  disabled={Boolean(asked[row.case_id])}
+                  onClick={() =>
+                    void requestAssignment(row.case_id, null)
+                      .then(() => setAsked({ ...asked, [row.case_id]: '요청했어요' }))
+                      .catch((e: unknown) =>
+                        setAsked({
+                          ...asked,
+                          [row.case_id]: e instanceof Error ? e.message : '올리지 못했어요',
+                        }),
+                      )
+                  }
+                >
+                  {asked[row.case_id] ?? '내가 맡기'}
+                </Button>
               )}
             </FormActions>
           </Fold>

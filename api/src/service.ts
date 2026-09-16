@@ -608,6 +608,9 @@ export type ParticipantRow = {
   name: string | null;
   program_name: string;
   status: 'open' | 'closed';
+  // 담당 실무자. 없으면 아직 아무도 맡지 않은 사람이다(2026-09-16 Q 배정 요청).
+  assigned_user_id: number | null;
+  assignee_name: string | null;
   last_session_seq: number | null;
   next_scheduled_at: string | null;
 };
@@ -624,6 +627,8 @@ export async function listParticipants(): Promise<ParticipantRow[]> {
            v.enc_name,
            c.program_name,
            c.status,
+           c.assigned_user_id,
+           (select name from users u where u.id = c.assigned_user_id) as assignee_name,
            (select max(seq) from sessions s where s.case_id = c.id and s.status = 'done') as last_session_seq,
            (select min(scheduled_at) from sessions s where s.case_id = c.id and s.status = 'planned') as next_scheduled_at
     from support_cases c
