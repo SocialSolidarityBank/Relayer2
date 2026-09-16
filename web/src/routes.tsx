@@ -150,7 +150,7 @@ export function Routes() {
    * 묶음 라벨과 항목 이름은 Q 가 준 것이다.
    *
    * 일정 묶음의 기록·일정 등록은 사례가 없으면 당사자 선택 화면으로 보낸다.
-   * 당사자 정보는 열어 둔 사례가 있을 때만 당사자 묶음에 따라붙는다.
+   * 당사자 정보는 메뉴에 서지 않는다(2026-09-17 Q) — 당사자 목록의 카드로 들어간다.
    *
    * 아이콘은 CCC 글리프를 그대로 쓴다(2026-09-17 Q). 같은 대상의 보기와 등록은 더하기
    * 유무로 가른다 — 당사자 목록(사람)·당사자 등록(사람+더하기), 일정 보기(시계)·일정
@@ -217,7 +217,6 @@ export function Routes() {
             <ul className="navigation-list">
               {link('#/participants', '당사자 목록', 'participants')}
               {link('#/participants/new', '당사자 등록', 'participant-add')}
-              {caseId && link(`#/cases/${caseId}/info`, '당사자 정보', 'participants')}
             </ul>
           </div>
 

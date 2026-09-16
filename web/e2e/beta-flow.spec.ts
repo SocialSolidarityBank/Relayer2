@@ -1,7 +1,7 @@
 // 베타 관문 1 — 당사자 등록 → 인테이크 작성하기 → 상담 일정 등록 → 2회차 상담 기록하기 →
 // 15초 다시보기가 확인할 과제·오늘 물어볼 것·오늘 상담 목표를 출처 회차 번호와 함께 보여 준다.
 // 합성 자료만 쓴다. 실행마다 새 당사자를 만들어 이전 데이터에 기대지 않는다.
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 const stamp = Date.now();
 const NAME = `E2E 합성${stamp}`;
@@ -9,6 +9,14 @@ const QUESTION = '임대차 계약 만료일이 언제인지';
 const TASK = '채무 내역서 준비하기';
 const NEXT_GOAL = '내역서를 함께 본다';
 const OVERALL_GOAL = '연체를 정리하고 생활을 안정시킨다';
+
+/** 당사자 정보는 메뉴에 없다(2026-09-17 Q) — 목록의 카드로 들어간다. 시험은 지금 사례 주소로 바로 간다. */
+const openInfo = async (page: Page) => {
+  const caseId = /#\/cases\/(\d+)\//.exec(page.url())?.[1];
+  if (!caseId) throw new Error(`사례 화면이 아니다: ${page.url()}`);
+  await page.goto(`/#/cases/${caseId}/info`);
+  await page.waitForURL(/\/info$/);
+};
 
 test('등록부터 15초 다시보기까지 한 바퀴', async ({ page }) => {
   // ── 로그인 ──────────────────────────────────────────────────
@@ -193,8 +201,8 @@ test('상담 종결은 회차를 만들지 않고 미완료 과제를 그대로 
   await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
 
   // 당사자 정보 › 정보 탭에서 종결로 들어간다
-  await page.getByRole('link', { name: '당사자 정보' }).click();
-  await page.getByRole('tab', { name: '정보' }).click();
+  await openInfo(page);
+  await page.getByRole('tab', { name: '내 정보' }).click();
   await page.locator('.wire-container').getByRole('button', { name: '상담 종결' }).click();
   await page.waitForURL(/\/close$/);
   await expect(page.getByRole('heading', { name: '종결 사유' })).toBeVisible();
@@ -261,7 +269,7 @@ test('종결 상담으로 저장하면 종결 화면으로 이어진다', async 
   await expect(page.getByRole('heading', { name: '종결 사유' })).toBeVisible();
   await page.getByRole('radio', { name: '목표 달성' }).check();
   await page.getByRole('button', { name: '종결 확정' }).click();
-  await expect(page.getByRole('tab', { name: '정보' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '내 정보' })).toBeVisible();
 });
 
 // 당사자는 비밀번호가 맞아도 들어오지 못한다. 열람은 실무자가 보낸 링크와 코드다(GLOSSARY §3).
@@ -301,7 +309,7 @@ test('인테이크를 다시 열어 고쳐 쓴다', async ({ page }) => {
 
   // 다시 열면 적어 둔 것이 그대로 있다.
   // 한 번 쓴 인테이크는 메뉴에 없다 — 회차별 요약에서 고쳐 쓴다.
-  await page.getByRole('link', { name: '당사자 정보' }).click();
+  await openInfo(page);
   await page.waitForURL(/\/info$/);
   await page
     .locator('section.wire-card')
@@ -322,7 +330,7 @@ test('인테이크를 다시 열어 고쳐 쓴다', async ({ page }) => {
   await expect(page.locator('.wire-container')).toContainText('고쳐 적은 목표');
 
   // 회차가 늘지 않았다 — 고쳐 쓰기는 새 회차를 만들지 않는다
-  await page.getByRole('link', { name: '당사자 정보' }).click();
+  await openInfo(page);
   const sessions = page
     .locator('section.wire-card')
     .filter({ has: page.getByRole('heading', { name: '회차별 요약' }) });
@@ -366,7 +374,7 @@ test('회차를 고쳐 쓰고, 적어만 둔 줄도 저장된다', async ({ page
   await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
 
   // 당사자 정보 › 회차별 요약에서 그 회차를 고쳐 쓴다
-  await page.getByRole('link', { name: '당사자 정보' }).click();
+  await openInfo(page);
   const summary = page
     .locator('section.wire-card')
     .filter({ has: page.getByRole('heading', { name: '회차별 요약' }) });
@@ -384,7 +392,7 @@ test('회차를 고쳐 쓰고, 적어만 둔 줄도 저장된다', async ({ page
 
   // 완료로 바꿨으니 확인할 과제에서 빠지고, 회차는 늘지 않는다
   await expect(page.locator('.wire-container')).not.toContainText(task);
-  await page.getByRole('link', { name: '당사자 정보' }).click();
+  await openInfo(page);
   await expect(summary).toContainText('2회차');
   await expect(summary).not.toContainText('3회차');
 });
@@ -413,8 +421,8 @@ test('민감정보 동의가 없으면 기록을 저장하지 못하고, 받으�
   await expect(page.getByText('민감정보 처리 동의가 없어요', { exact: false })).toBeVisible();
 
   // 당사자 정보 › 정보 탭에서 동의를 받는다
-  await page.getByRole('link', { name: '당사자 정보' }).click();
-  await page.getByRole('tab', { name: '정보' }).click();
+  await openInfo(page);
+  await page.getByRole('tab', { name: '내 정보' }).click();
   const consent = page
     .locator('section.wire-card')
     .filter({ has: page.getByRole('heading', { name: '동의' }) });
@@ -440,7 +448,7 @@ test('PII 를 본 조회가 열람 기록에 남고, 관리자만 본다', async
   await page.getByRole('button', { name: '로그인' }).click();
   await expect(page.getByRole('heading', { name: '일정', exact: true })).toBeVisible();
   await page.goto('/#/cases/1/info');
-  await expect(page.getByRole('tab', { name: '정보' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '내 정보' })).toBeVisible();
 
   // 실무자 사이드바에는 `시스템` 묶음이 서지 않는다(2026-09-16 Q 3차 — 묶음마다 메뉴 하나).
   await expect(page.getByRole('link', { name: '시스템' })).toHaveCount(0);
@@ -500,7 +508,7 @@ test('자유 글을 저장하고 다시 열면 그대로 읽힌다', async ({ pa
   await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
 
   // 회차별 요약의 원문 보기에 그대로 뜬다
-  await page.getByRole('link', { name: '당사자 정보' }).click();
+  await openInfo(page);
   const summary = page
     .locator('section.wire-card')
     .filter({ has: page.getByRole('heading', { name: '회차별 요약' }) });
@@ -534,9 +542,9 @@ test('당사자는 링크와 코드로 자기 일정만 본다', async ({ page, 
 
   // 실무자가 열람 링크를 만든다
   await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
-  await page.getByRole('link', { name: '당사자 정보' }).click();
+  await openInfo(page);
   await page.waitForURL(/\/info$/);
-  await page.getByRole('tab', { name: '정보' }).click();
+  await page.getByRole('tab', { name: '내 정보' }).click();
   const access = page
     .locator('section.wire-card')
     .filter({ has: page.getByRole('heading', { name: '당사자 열람' }) });
@@ -598,7 +606,7 @@ test('외부 LLM 동의가 없으면 AI 정리를 하지 않는다', async ({ pa
   await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
 
   // 회차별 요약 → AI 정리
-  await page.getByRole('link', { name: '당사자 정보' }).click();
+  await openInfo(page);
   await page.waitForURL(/\/info$/);
   const summary = page
     .locator('section.wire-card')

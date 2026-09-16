@@ -1,5 +1,5 @@
-// 당사자 정보 — 탭 4(GLOSSARY §6-4): 회차별 요약 · 15초 다시보기 · 목표 · 정보.
-// 당사자 카드와 할 일 전체는 두지 않는다(요구 25·28). 종결 버튼은 `정보` 탭에 있다.
+// 당사자 정보 — 탭 4(GLOSSARY §6-4): 회차별 요약 · 15초 다시보기 · 목표 · 내 정보.
+// 당사자 카드와 할 일 전체는 두지 않는다(요구 25·28). 종결 버튼은 `내 정보` 탭에 있다.
 import { useEffect, useState } from 'react';
 import {
   documentHref,
@@ -35,7 +35,7 @@ import {
 } from '../ui.tsx';
 import { BriefingScreen } from './briefing.tsx';
 
-const TABS = ['회차별 요약', '15초 다시보기', '목표', '정보'] as const;
+const TABS = ['회차별 요약', '15초 다시보기', '목표', '내 정보'] as const;
 type Tab = (typeof TABS)[number];
 
 const dateLabel = (iso: string | null): string => {
@@ -565,7 +565,7 @@ export function ParticipantInfoScreen({ caseId }: { caseId: number }) {
 
         {tab === '회차별 요약' && <Sessions detail={detail} caseId={caseId} />}
         {tab === '목표' && <Goals detail={detail} />}
-        {tab === '정보' && <Info detail={detail} caseId={caseId} />}
+        {tab === '내 정보' && <Info detail={detail} caseId={caseId} />}
       </div>
       {/* 15초 다시보기는 같은 화면을 그대로 쓴다. 두 벌로 만들지 않는다. */}
       {tab === '15초 다시보기' && <BriefingTab detail={detail} caseId={caseId} />}

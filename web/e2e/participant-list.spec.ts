@@ -42,7 +42,7 @@ test('이름 중심 목록에서 정보를 바로 보고 상세와 기록·일�
   await card.focus();
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(new RegExp(`/cases/${caseId}/info$`));
-  await expect(page.getByRole('tab', { name: '정보', exact: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '내 정보', exact: true })).toBeVisible();
 
   for (const [pick, destination, title] of [
     ['record', 'record', '상담 기록하기'],
