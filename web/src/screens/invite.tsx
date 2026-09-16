@@ -50,7 +50,7 @@ export function InviteScreen({ token, onDone }: { token: string; onDone: () => v
 
   return (
     <>
-      <PageHeader title="릴레이어에 들어오기" meta={role === 'admin' ? '관리자로 초대받았어요' : '실무자로 초대받았어요'} />
+      <PageHeader title="릴레이어에 들어오기" meta={role === 'admin' ? '관리자로 초대받았어요' : '담당자로 초대받았어요'} />
       <Card title="쓸 계정을 만들어요" hint="아이디는 나중에 바꿀 수 없어요. 지난 기록이 누구의 것인지 흐려지기 때문이에요.">
         <Field label="아이디" htmlFor="iv-email" required>
           <input id="iv-email" value={email} onChange={(e) => setEmail(e.target.value)} />

@@ -438,9 +438,10 @@ test('PII 를 본 조회가 열람 기록에 남고, 관리자만 본다', async
   await page.goto('/#/cases/1/info');
   await expect(page.getByRole('tab', { name: '정보' })).toBeVisible();
 
-  // 실무자 화면에는 열람 기록 메뉴가 없다
-  await expect(page.getByRole('link', { name: '열람 기록' })).toHaveCount(0);
-  await page.goto('/#/audit');
+  // 담당자 설정에는 열람 기록이 없다(2026-09-16 Q 2차 — 설정은 페이지 안에서 편다).
+  await page.goto('/#/settings');
+  await expect(page.getByText('열람 기록 관리')).toHaveCount(0);
+  await page.goto('/#/settings/connections');
   await expect(page.getByText('관리자만 볼 수 있어요', { exact: false })).toBeVisible();
 
   // 관리자로 바꿔 본다
@@ -448,7 +449,11 @@ test('PII 를 본 조회가 열람 기록에 남고, 관리자만 본다', async
   await page.locator('#email').fill('test1');
   await page.locator('#password').fill('test1');
   await page.getByRole('button', { name: '로그인' }).click();
-  await page.getByRole('link', { name: '열람 기록' }).click();
+  await page.goto('/#/settings');
+  await page
+    .locator('.wire-repeat-card', { hasText: '열람 기록 관리' })
+    .getByRole('button', { name: '열기' })
+    .click();
 
   const log = page.locator('section.wire-card', { hasText: '최근 200건' });
   await expect(log).toContainText('시험 실무자');

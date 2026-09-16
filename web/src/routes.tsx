@@ -6,7 +6,7 @@ import { getMe, logout, Unauthorized, type Me } from './api.ts';
 import { AccessScreen } from './screens/access.tsx';
 import { AuditScreen } from './screens/audit.tsx';
 import { InviteScreen } from './screens/invite.tsx';
-import { SETTINGS_MODULES, SettingsScreen, type SettingsModule } from './screens/settings.tsx';
+import { SettingsScreen } from './screens/settings.tsx';
 import { BriefingScreen } from './screens/briefing.tsx';
 import { CloseScreen } from './screens/close.tsx';
 import { HomeScreen } from './screens/home.tsx';
@@ -100,9 +100,9 @@ export function Routes() {
     if (hash === '#/pick/record') return <ParticipantsScreen pickFor="record" />;
     if (hash === '#/pick/schedule') return <ParticipantsScreen pickFor="schedule" />;
     if (hash === '#/settings/audit' || hash === '#/audit') return <AuditScreen />;
+    if (hash === '#/settings') return <SettingsScreen module="home" me={me} />;
     const inSettings = hash.match(/^#\/settings\/([a-z]+)$/);
-    if (inSettings) return <SettingsScreen module={inSettings[1] as SettingsModule} me={me} />;
-    if (hash === '#/settings') { window.location.hash = '#/settings/profile'; return null; }
+    if (inSettings) return <SettingsScreen module={inSettings[1]} me={me} />;
     if (hash === '#/participants/new') return <ParticipantNewScreen />;
 
     // 저장해 둔 회차 고쳐 쓰기. 기록 화면을 그대로 쓰되 대상 회차를 준다.
@@ -185,12 +185,9 @@ export function Routes() {
           <div className="navigation-group">
             <p className="navigation-section-title">설정</p>
             <ul className="navigation-list">
-              {/* 공통은 누구나. 관리자 몫은 관리자에게만 보인다(GLOSSARY §6-7).
-                  실무자에게는 그 자리에 `배정 요청하기` 하나가 선다. */}
-              {SETTINGS_MODULES.filter((m) => !m.admin || me.role === 'admin').map((m) =>
-                link(`#/settings/${m.key}`, m.label),
-              )}
-              {me.role !== 'admin' && link('#/settings/request', '실무자 배정 요청하기')}
+              {/* 항목은 설정 페이지 안에서 편다(2026-09-16 Q 2차) — 열세 줄이 세로로 서면
+                  위의 일정·당사자가 그 밑에 묻힌다. */}
+              {link('#/settings', '설정하기')}
             </ul>
           </div>
         </div>
