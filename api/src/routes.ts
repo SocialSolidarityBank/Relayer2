@@ -16,7 +16,7 @@ import {
   SttUnavailable,
 } from './stt.ts';
 import { AiUnavailable, approveDraft, draftSession, latestDraft } from './ai.ts';
-import { audit, listAudit, AUDIT_KIND_LIST } from './audit.ts';
+import { audit, auditCsv, auditSummary, listAudit, AUDIT_KIND_LIST } from './audit.ts';
 import { accessState, issueAccess, openAccess, revokeAccess } from './participant-access.ts';
 import { CONSENT_COPY, CONSENT_DECISIONS, CONSENT_DOMAINS, copyHash } from './consent.ts';
 import { LIFE_AREAS } from './domain/types.ts';
@@ -395,16 +395,49 @@ app.get('/documents/:id', async (c) => {
   });
 });
 
+const auditQuery = (c: { req: { query: (k: string) => string | undefined } }) => ({
+  days: Number(c.req.query('days')) || undefined,
+  kind: AUDIT_KIND_LIST.find((k) => k === c.req.query('kind')),
+  actorId: Number(c.req.query('actor')) || undefined,
+  caseId: Number(c.req.query('case')) || undefined,
+});
+
 app.get('/audit', async (c) => {
   // 열람 기록은 관리자만 본다(GLOSSARY §6-7 설정 › 열람 기록).
   if (c.get('actor').role !== 'admin') return c.json({ error: '관리자만 볼 수 있어요.' }, 403);
-  const kind = c.req.query('kind');
-  const rows = await listAudit({
-    kind: AUDIT_KIND_LIST.find((k) => k === kind),
-  });
+  const rows = await listAudit(auditQuery(c));
   // 이 화면은 이름을 꺼내 보여 준다. 그러니 이 화면을 연 것도 남는다.
   await audit({ actorId: c.get('actor').id, action: 'audit.view', fields: ['name'] });
   return c.json(rows);
+});
+
+app.get('/audit/summary', async (c) => {
+  if (c.get('actor').role !== 'admin') return c.json({ error: '관리자만 볼 수 있어요.' }, 403);
+  return c.json(await auditSummary(Number(c.req.query('days')) || undefined));
+});
+
+/**
+ * CSV 로 내려받기. `names=1` 이면 실명이, 아니면 가명이 실린다.
+ * **어느 쪽으로 내렸는지가 감사에 남는다** — 자유는 두되 책임이 따른다(docs/audit-view.md).
+ */
+app.get('/audit/export', async (c) => {
+  if (c.get('actor').role !== 'admin') return c.json({ error: '관리자만 볼 수 있어요.' }, 403);
+  const withNames = c.req.query('names') === '1';
+  const q = auditQuery(c);
+  const rows = await listAudit({ ...q, limit: 5000 });
+  await audit({
+    actorId: c.get('actor').id,
+    action: 'audit.export',
+    fields: [withNames ? '이름 포함' : '가명만', `줄 ${rows.length}`, `기간 ${q.days ?? 30}일`],
+  });
+  const day = new Date().toISOString().slice(0, 10);
+  return new Response(auditCsv(rows, withNames), {
+    headers: {
+      'content-type': 'text/csv; charset=utf-8',
+      'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(`열람기록_${day}.csv`)}`,
+      'cache-control': 'no-store',
+    },
+  });
 });
 
 app.post('/cases/:id/close', async (c) => {

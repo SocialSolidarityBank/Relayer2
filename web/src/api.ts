@@ -231,8 +231,11 @@ export type AuditRow = {
   /** 사람 말로 쓴 사건 이름. 서버가 정한다 — 화면마다 다르게 부르지 않게. */
   label: string;
   fields: string[];
+  actor_id: number | null;
   actor_name: string | null;
   by_participant: boolean;
+  /** 맡은 사람이 아닌데 열었나. 세기만 한 값이다 — 판정이 아니다. */
+  off_assignment: boolean;
   /** 누구의 것인가. 이름은 감사 표에 없고 볼 때 금고에서 꺼낸다. */
   subject: string | null;
   pseudonym: string | null;
@@ -240,8 +243,32 @@ export type AuditRow = {
   program_name: string | null;
 };
 
-export const listAudit = (kind?: AuditKind) =>
-  json<AuditRow[]>(`/audit${kind ? `?kind=${encodeURIComponent(kind)}` : ''}`);
+export type AuditQuery = { days?: number; kind?: AuditKind; actor?: number; case?: number };
+
+const auditParams = (q: AuditQuery): string => {
+  const p = new URLSearchParams();
+  if (q.days) p.set('days', String(q.days));
+  if (q.kind) p.set('kind', q.kind);
+  if (q.actor) p.set('actor', String(q.actor));
+  if (q.case) p.set('case', String(q.case));
+  return p.toString();
+};
+
+export const listAudit = (q: AuditQuery = {}) => json<AuditRow[]>(`/audit?${auditParams(q)}`);
+
+export type AuditSummary = {
+  days: number;
+  total: number;
+  by_kind: Array<{ kind: AuditKind; count: number }>;
+  watch: Array<{ key: string; label: string; count: number }>;
+  actors: Array<{ actor_id: number; name: string; cases: number; hits: number; off_assignment: number }>;
+};
+
+export const auditSummary = (days: number) => json<AuditSummary>(`/audit/summary?days=${days}`);
+
+/** 내려받기 주소. 이름을 실을지는 여기서 갈린다 — 그 선택이 감사에 남는다. */
+export const auditCsvHref = (q: AuditQuery, withNames: boolean): string =>
+  `${BASE}/audit/export?${auditParams(q)}${withNames ? '&names=1' : ''}`;
 
 export type DocumentRow = {
   id: number;

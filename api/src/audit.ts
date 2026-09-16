@@ -25,6 +25,7 @@ export const AUDIT_KINDS = {
   'participant.view': { kind: '열람', label: '당사자 본인 열람', fold: true },
   'document.read': { kind: '열람', label: '서면 문서 내려받기', fold: false },
   'audit.view': { kind: '열람', label: '열람 기록 조회', fold: true },
+  'audit.export': { kind: '열람', label: '열람 기록 내려받기', fold: false },
 
   'consent.record': { kind: '기록', label: '동의 받음', fold: false },
   'ai.draft': { kind: '기록', label: '외부 AI 로 보냄', fold: false },
@@ -107,6 +108,7 @@ export type AuditRow = {
   kind: AuditKind;
   label: string;
   fields: string[];
+  actor_id: number | null;
   actor_name: string | null;
   /** 당사자 본인이 연 것인지. 실무자 열람과 구분해 읽는다. */
   by_participant: boolean;
@@ -115,6 +117,11 @@ export type AuditRow = {
   pseudonym: string | null;
   case_id: number | null;
   program_name: string | null;
+  /**
+   * 이 열람이 **맡은 사람의 것이 아니었나.** 세기만 한다 — 판정하지 않는다.
+   * 상담 기록은 맡은 사람만 보는 것이 원칙이라, 그 밖이면 관리자가 들여다볼 값이 있다.
+   */
+  off_assignment: boolean;
 };
 
 /** 표에서 그대로 나온 줄. 이름은 아직 암호문이다. */
@@ -129,7 +136,26 @@ type RawRow = {
   enc_name: string | null;
   case_id: number | null;
   program_name: string | null;
+  assigned_user_id: number | null;
 };
+
+export type AuditQuery = {
+  /** 며칠치. 기본 30일 — 화면을 열자마자 보이는 범위다(docs/audit-view.md). */
+  days?: number;
+  kind?: AuditKind;
+  /** 누가 했나. 한 사람으로 좁혀 조사를 잇는 자리다. */
+  actorId?: number;
+  /** 누구 것인가. 사례 하나로 좁힌다. */
+  caseId?: number;
+  limit?: number;
+};
+
+const DEFAULT_DAYS = 30;
+const HARD_LIMIT = 1000;
+
+/** 지금 목록에 세우는 사건들. 옛 사건(`schedule.list`)은 표에 남되 목록에는 안 선다. */
+const liveActions = (kind?: AuditKind): AuditAction[] =>
+  (Object.keys(AUDIT_KINDS) as AuditAction[]).filter((a) => !kind || AUDIT_KINDS[a].kind === kind);
 
 /**
  * 열람 기록 조회. 관리자만 본다(라우트에서 막는다).
@@ -139,35 +165,158 @@ type RawRow = {
  * "누구 것을 봤나"에 답하지 못한다 — 그것이 이 화면의 존재 이유다.
  *
  * 그래서 **이 화면을 연 것 자체도 남긴다**(`audit.view`).
+ *
+ * 글자 검색은 여기 없다. **이름이 금고 암호문이라 서버가 이름으로 못 찾는다** —
+ * 불러온 것 안에서 화면이 거른다(당사자 목록이 이미 같은 제약을 안고 있다).
  */
-export async function listAudit(opts: { limit?: number; kind?: AuditKind } = {}): Promise<AuditRow[]> {
-  const { limit = 200, kind } = opts;
-  // 지금 쓰지 않는 사건은 목록에 세우지 않는다. 옛 `schedule.list` 같은 줄이 섞이면
-  // 소음을 걷어 낸 뜻이 없어진다 — 표에는 그대로 남는다(감사는 지우지 않는다).
-  const actions = (Object.keys(AUDIT_KINDS) as AuditAction[]).filter(
-    (a) => !kind || AUDIT_KINDS[a].kind === kind,
-  );
+export async function listAudit(q: AuditQuery = {}): Promise<AuditRow[]> {
+  const days = q.days ?? DEFAULT_DAYS;
+  const limit = Math.min(q.limit ?? 500, HARD_LIMIT);
   const rows = await sql<RawRow[]>`
     select a.id, a.at, a.action, a.fields, a.actor_id, u.name as actor_name,
-           p.pseudonym, v.enc_name, a.case_id, c.program_name
+           p.pseudonym, v.enc_name, a.case_id, c.program_name, c.assigned_user_id
     from audit_log a
     left join users u on u.id = a.actor_id
     left join support_cases c on c.id = a.case_id
     -- 사례만 적힌 줄에서도 누구인지 찾는다. 15초 다시보기는 사례 열쇠만 들고 온다.
     left join participants p on p.id = coalesce(a.participant_id, c.participant_id)
     left join participant_pii v on v.participant_id = p.id
-    where a.action = any(${actions})
+    where a.action = any(${liveActions(q.kind)})
+      and a.at > now() - (${days} || ' days')::interval
+      and ${q.actorId ? sql`a.actor_id = ${q.actorId}` : sql`true`}
+      and ${q.caseId ? sql`a.case_id = ${q.caseId}` : sql`true`}
     order by a.at desc, a.id desc
     limit ${limit}`;
 
-  return rows.map(({ actor_id, enc_name, ...row }) => {
-    const spec = AUDIT_KINDS[row.action] ?? { kind: '운영' as AuditKind, label: row.action };
+  return rows.map(({ enc_name, assigned_user_id, ...row }) => {
+    const spec = AUDIT_KINDS[row.action];
     return {
       ...row,
       kind: spec.kind,
       label: spec.label,
-      by_participant: actor_id === null,
+      by_participant: row.actor_id === null,
       subject: decryptPii(enc_name),
+      // 열람에만 뜻이 있다. 기록·운영은 원래 담당 밖에서 하는 일이 있다(관리자 배정 등).
+      off_assignment:
+        spec.kind === '열람' &&
+        row.actor_id !== null &&
+        row.case_id !== null &&
+        row.actor_id !== assigned_user_id,
     };
   });
+}
+
+export type AuditSummary = {
+  days: number;
+  total: number;
+  /** 묶음별 줄 수. 화면 맨 위 숫자다. */
+  by_kind: Array<{ kind: AuditKind; count: number }>;
+  /** 눈여겨볼 것. **판정하지 않는다 — 세기만 한다.** */
+  watch: Array<{ key: 'off_assignment' | 'download'; label: string; count: number }>;
+  /** 사람별 요약. 누구를 들여다볼지 고르는 자리다. */
+  actors: Array<{ actor_id: number; name: string; cases: number; hits: number; off_assignment: number }>;
+};
+
+/**
+ * 화면 맨 위 두 층 — 숫자와 눈여겨볼 것(2026-09-16 Q · docs/audit-view.md).
+ *
+ * `watch` 는 **사실을 센 것이지 판정이 아니다.** `담당 아닌 열람 9건`은 사실이고
+ * `의심스러운 접근 9건`은 판정이다. 앞엣것만 낸다 — 불일치 기능과 같은 규율이다.
+ *
+ * 야간 열람과 열람 횟수는 세지 않는다. 기관마다 근무 형태가 달라 오탐이 많고,
+ * 횟수는 10분 접기가 이미 걷었다.
+ */
+export async function auditSummary(days = DEFAULT_DAYS): Promise<AuditSummary> {
+  const since = sql`now() - (${days} || ' days')::interval`;
+  const live = liveActions();
+  const viewing = liveActions('열람');
+
+  const [byKind, off, downloads, actors] = await Promise.all([
+    sql<Array<{ action: AuditAction; count: number }>>`
+      select action, count(*)::int as count from audit_log
+      where action = any(${live}) and at > ${since} group by action`,
+    sql<Array<{ count: number }>>`
+      select count(*)::int as count
+      from audit_log a join support_cases c on c.id = a.case_id
+      where a.action = any(${viewing}) and a.at > ${since}
+        and a.actor_id is not null and a.actor_id is distinct from c.assigned_user_id`,
+    sql<Array<{ count: number }>>`
+      select count(*)::int as count from audit_log
+      where action = 'document.read' and at > ${since}`,
+    sql<Array<{ actor_id: number; name: string; cases: number; hits: number; off_assignment: number }>>`
+      select a.actor_id, coalesce(u.name, '알 수 없음') as name,
+             count(distinct a.case_id)::int as cases,
+             count(*)::int as hits,
+             count(*) filter (
+               where c.id is not null and a.actor_id is distinct from c.assigned_user_id
+             )::int as off_assignment
+      from audit_log a
+      left join users u on u.id = a.actor_id
+      left join support_cases c on c.id = a.case_id
+      where a.action = any(${viewing}) and a.at > ${since} and a.actor_id is not null
+      group by a.actor_id, u.name
+      order by hits desc`,
+  ]);
+
+  const counts = new Map<AuditKind, number>();
+  let total = 0;
+  for (const row of byKind) {
+    const k = AUDIT_KINDS[row.action].kind;
+    counts.set(k, (counts.get(k) ?? 0) + row.count);
+    total += row.count;
+  }
+
+  return {
+    days,
+    total,
+    by_kind: AUDIT_KIND_LIST.map((kind) => ({ kind, count: counts.get(kind) ?? 0 })),
+    watch: [
+      { key: 'off_assignment', label: '맡지 않은 당사자를 연 것', count: off[0]?.count ?? 0 },
+      { key: 'download', label: '문서를 내려받은 것', count: downloads[0]?.count ?? 0 },
+    ],
+    actors,
+  };
+}
+
+/**
+ * 기한이 지난 줄을 지운다. 3년이다(docs/audit-view.md) — 기록(음성·문서 1년)보다 길게 둔다.
+ * 사고는 늦게 발견되므로, 기록은 지워도 누가 봤는지는 남긴다.
+ *
+ * 표의 트리거가 3년 안쪽을 거부하므로(`0017_audit_retention.sql`), 여기서 실수해도 막힌다.
+ */
+export async function sweepAudit(): Promise<number> {
+  const rows = await sql`delete from audit_log where at <= now() - interval '3 years' returning id`;
+  return rows.length;
+}
+
+/**
+ * 감사 CSV(2026-09-16 Q). **이름을 넣을지 여기서 고른다.**
+ *
+ * 화면 그대로 내리면 금고에 넣어 둔 이름이 평문 파일로 기관 밖에 나가고, 그 파일에는
+ * 우리 보유기간도 삭제 장치도 닿지 않는다. 자유는 두되 **어느 쪽으로 내렸는지가 기록에 남는다**
+ * (라우트가 `audit.export` 를 쓴다).
+ *
+ * 엑셀이 한글을 깨뜨리지 않게 BOM 을 붙인다 — 받는 쪽은 대개 엑셀로 연다.
+ */
+export function auditCsv(rows: AuditRow[], withNames: boolean): string {
+  const esc = (v: string | number | null): string => {
+    const s = v === null ? '' : String(v);
+    return /[",\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
+  };
+  const head = ['시각', '묶음', '한 일', '한 사람', '대상', '사업', '맡은 사람 밖', '자세히'];
+  const body = rows.map((r) =>
+    [
+      new Date(r.at).toLocaleString('ko-KR'),
+      r.kind,
+      r.label,
+      r.by_participant ? '당사자 본인' : (r.actor_name ?? '알 수 없음'),
+      withNames ? (r.subject ?? r.pseudonym ?? '') : (r.pseudonym ?? ''),
+      r.program_name ?? '',
+      r.off_assignment ? 'Y' : '',
+      r.fields.join(' / '),
+    ]
+      .map(esc)
+      .join(','),
+  );
+  return `\uFEFF${[head.join(','), ...body].join('\n')}\n`;
 }
