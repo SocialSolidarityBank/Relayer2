@@ -43,18 +43,22 @@ import {
 } from '../api.ts';
 import { Badge, Button, Card, DataRows, Empty, ErrorText, Field, FormActions, Item, PageHeader } from '../ui.tsx';
 import { setTheme, themeChoice, type ThemeChoice } from '../theme.ts';
+import { AuditScreen } from './audit.tsx';
 
 const date = (s: string) => new Date(s).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
 
 /**
- * 설정 묶음(2026-09-16 Q 2차). **사이드바에 늘어뜨리지 않는다** — 열세 줄이 세로로 서면
- * 일정·당사자가 그 밑에 묻힌다. 사이드바에는 `설정하기` 하나만 두고 여기서 편다.
+ * 설정 묶음(2026-09-16 Q 3차). **묶음마다 사이드바 메뉴 하나**이고, 그 페이지에 항목이
+ * 곧바로 펼쳐진다 — `설정하기` 한 칸에 열두 항목을 넣었더니 두 번 눌러야 내용에 닿아
+ * 어디 있는지 알 수 없었다(Q: "설정하기가 헷갈린다").
  *
  * `admin: true` 는 관리자만 본다. **관리자는 실무자가 하는 일도 전부 본다**(Q 지시) —
  * 관리자도 당사자를 맡는 사람이지, 남의 일을 구경만 하는 자리가 아니다.
+ * 묶음 전체가 관리자 몫이면 실무자 사이드바에서는 그 메뉴 자체가 서지 않는다.
  */
 export const SETTINGS_GROUPS = [
   {
+    key: 'me',
     title: '내 정보',
     items: [
       { key: 'profile', label: '내 정보', desc: '이름·연락처·이메일을 고쳐요.', admin: false },
@@ -63,6 +67,7 @@ export const SETTINGS_GROUPS = [
     ],
   },
   {
+    key: 'staff',
     title: '실무자 관리',
     items: [
       { key: 'assign', label: '담당 배정하기', desc: '올라온 요청을 확정하고, 담당이 바뀔 때 넘겨요.', admin: true },
@@ -72,13 +77,15 @@ export const SETTINGS_GROUPS = [
     ],
   },
   {
+    key: 'org',
     title: '기관 정보 관리',
     items: [
-      { key: 'org', label: '기관 정보', desc: '기관 이름·번호·주소·전화.', admin: true },
+      { key: 'org-info', label: '기관 정보', desc: '기관 이름·번호·주소·전화.', admin: true },
       { key: 'programs', label: '사업 목록', desc: '당사자를 등록할 때 고르는 사업이에요.', admin: true },
     ],
   },
   {
+    key: 'system',
     title: '시스템',
     items: [
       { key: 'connections', label: 'API 연결 관리', desc: 'AI·전사·데이터베이스가 붙어 있는지.', admin: true },
@@ -89,11 +96,58 @@ export const SETTINGS_GROUPS = [
 ] as const;
 
 export type SettingsItem = { key: string; label: string; desc: string; admin: boolean };
+export type SettingsGroup = { key: string; title: string; items: readonly SettingsItem[] };
 
-const ALL_ITEMS: readonly SettingsItem[] = SETTINGS_GROUPS.flatMap((g) => [...g.items]);
+export const SETTINGS_GROUP_LIST: readonly SettingsGroup[] = SETTINGS_GROUPS.map((g) => ({
+  key: g.key,
+  title: g.title,
+  items: [...g.items],
+}));
+
+/** 묶음 전체가 관리자 몫이면 실무자에게는 메뉴를 세우지 않는다. */
+export const visibleGroups = (isAdmin: boolean): readonly SettingsGroup[] =>
+  SETTINGS_GROUP_LIST.map((g) => ({ ...g, items: g.items.filter((i) => !i.admin || isAdmin) })).filter(
+    (g) => g.items.length > 0,
+  );
 
 export type SettingsModule = string;
 
+/** 항목 하나를 그린다. 열람 기록은 자기 화면을 그대로 쓴다. */
+function Pane({ item, me }: { item: SettingsItem; me: { id: number; name: string; role: string } }) {
+  switch (item.key) {
+    case 'profile':
+      return <ProfilePane />;
+    case 'theme':
+      return <ThemePane />;
+    case 'leave':
+      return <LeavePane />;
+    case 'assign':
+      return <AssignPane />;
+    case 'invite':
+      return <InvitePane />;
+    case 'workers':
+      return <WorkersPane />;
+    case 'request':
+      return <RequestPane me={me} />;
+    case 'org-info':
+      return <OrgPane />;
+    case 'programs':
+      return <ProgramsPane />;
+    case 'connections':
+      return <ConnectionsPane />;
+    case 'consent':
+      return <ConsentPane />;
+    case 'audit':
+      return <AuditScreen embedded />;
+    default:
+      return null;
+  }
+}
+
+/**
+ * 묶음 한 페이지. **항목을 눌러 들어가지 않는다** — 내용이 그대로 선다.
+ * 두 번 눌러야 닿던 것이 헷갈림의 원인이었다(2026-09-16 Q 3차).
+ */
 export function SettingsScreen({
   module,
   me,
@@ -102,75 +156,28 @@ export function SettingsScreen({
   me: { id: number; name: string; role: string };
 }) {
   const isAdmin = me.role === 'admin';
-  const item = ALL_ITEMS.find((m) => m.key === module);
+  const groups = visibleGroups(isAdmin);
+  const group = groups.find((g) => g.key === module);
 
-  // 설정 첫 화면 — 묶음을 펴서 보여 준다. 여기가 사이드바 대신이다.
-  if (module === 'home' || !item) {
+  // 관리자 전용 묶음을 주소로 직접 열면 여기서 막힌다. 감추기는 안내이지 잠금이 아니다.
+  if (!group) {
+    const known = SETTINGS_GROUP_LIST.find((g) => g.key === module);
     return (
       <>
-        <PageHeader title="설정하기" meta={isAdmin ? '관리자' : '실무자'} />
-        {SETTINGS_GROUPS.map((group) => {
-          const shown = group.items.filter((i) => !i.admin || isAdmin);
-          if (shown.length === 0) return null;
-          return (
-            <Card title={group.title} key={group.title}>
-              {shown.map((i) => (
-                <div className="wire-repeat-card" key={i.key}>
-                  <Item
-                    title={i.label}
-                    desc={i.desc}
-                    action={
-                      <Button onClick={() => (window.location.hash = `#/settings/${i.key}`)}>열기</Button>
-                    }
-                  />
-                </div>
-              ))}
-            </Card>
-          );
-        })}
+        <PageHeader title={known?.title ?? '설정'} />
+        <Card title="관리자만 볼 수 있어요">
+          <Empty>이 설정은 기관 관리자가 다뤄요. 필요하면 관리자에게 말씀해 주세요.</Empty>
+        </Card>
       </>
     );
   }
 
   return (
     <>
-      {/* 어느 묶음에서 왔는지 머리에 적는다 — 설정이 한 페이지로 접혔으니
-          그 말이 없으면 여기가 어디인지 알 수 없다. */}
-      <PageHeader
-        title={item.label}
-        meta={
-          <a href="#/settings">
-            {SETTINGS_GROUPS.find((g) => g.items.some((x) => x.key === module))?.title} · 설정으로
-          </a>
-        }
-      />
-      {item.admin && !isAdmin ? (
-        <Card title="관리자만 볼 수 있어요">
-          <Empty>이 설정은 기관 관리자가 다뤄요. 필요하면 관리자에게 말씀해 주세요.</Empty>
-        </Card>
-      ) : module === 'profile' ? (
-        <ProfilePane />
-      ) : module === 'theme' ? (
-        <ThemePane />
-      ) : module === 'leave' ? (
-        <LeavePane />
-      ) : module === 'assign' ? (
-        <AssignPane />
-      ) : module === 'invite' ? (
-        <InvitePane />
-      ) : module === 'workers' ? (
-        <WorkersPane />
-      ) : module === 'org' ? (
-        <OrgPane />
-      ) : module === 'programs' ? (
-        <ProgramsPane />
-      ) : module === 'consent' ? (
-        <ConsentPane />
-      ) : module === 'connections' ? (
-        <ConnectionsPane />
-      ) : (
-        <RequestPane me={me} />
-      )}
+      <PageHeader title={group.title} meta={isAdmin ? '관리자' : '실무자'} />
+      {group.items.map((item) => (
+        <Pane item={item} me={me} key={item.key} />
+      ))}
     </>
   );
 }

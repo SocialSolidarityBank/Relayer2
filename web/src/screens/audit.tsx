@@ -30,7 +30,8 @@ function fieldText(field: string): string {
 const when = (iso: string): string =>
   new Date(iso).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-export function AuditScreen() {
+/** `embedded` 는 설정 › 시스템 안에서 쓸 때다. 제목이 두 번 뜨지 않게 한다. */
+export function AuditScreen({ embedded }: { embedded?: boolean } = {}) {
   const [rows, setRows] = useState<AuditRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,7 +43,9 @@ export function AuditScreen() {
 
   return (
     <>
-      <PageHeader title="열람 기록" meta="누가 누구 것을 언제 봤는지. 본 값은 남기지 않아요" />
+      {!embedded && (
+        <PageHeader title="열람 기록" meta="누가 누구 것을 언제 봤는지. 본 값은 남기지 않아요" />
+      )}
       <div className="wire-container">
         {error && (
           <Card>
@@ -56,7 +59,10 @@ export function AuditScreen() {
           </Card>
         )}
         {rows && rows.length > 0 && (
-          <Card title="최근 200건">
+          <Card
+            title={embedded ? '열람 기록 관리' : '최근 200건'}
+            hint={embedded ? '누가 누구 것을 언제 봤는지. 최근 200건이에요. 본 값은 남기지 않아요.' : undefined}
+          >
             {rows.map((r) => (
               <Item
                 key={r.id}

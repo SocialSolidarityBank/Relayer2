@@ -438,10 +438,9 @@ test('PII 를 본 조회가 열람 기록에 남고, 관리자만 본다', async
   await page.goto('/#/cases/1/info');
   await expect(page.getByRole('tab', { name: '정보' })).toBeVisible();
 
-  // 담당자 설정에는 열람 기록이 없다(2026-09-16 Q 2차 — 설정은 페이지 안에서 편다).
-  await page.goto('/#/settings');
-  await expect(page.getByText('열람 기록 관리')).toHaveCount(0);
-  await page.goto('/#/settings/connections');
+  // 실무자 사이드바에는 `시스템` 묶음이 서지 않는다(2026-09-16 Q 3차 — 묶음마다 메뉴 하나).
+  await expect(page.getByRole('link', { name: '시스템' })).toHaveCount(0);
+  await page.goto('/#/settings/system');
   await expect(page.getByText('관리자만 볼 수 있어요', { exact: false })).toBeVisible();
 
   // 관리자로 바꿔 본다
@@ -449,13 +448,10 @@ test('PII 를 본 조회가 열람 기록에 남고, 관리자만 본다', async
   await page.locator('#email').fill('test1');
   await page.locator('#password').fill('test1');
   await page.getByRole('button', { name: '로그인' }).click();
-  await page.goto('/#/settings');
-  await page
-    .locator('.wire-repeat-card', { hasText: '열람 기록 관리' })
-    .getByRole('button', { name: '열기' })
-    .click();
+  await page.getByRole('link', { name: '시스템' }).click();
 
-  const log = page.locator('section.wire-card', { hasText: '최근 200건' });
+  // 묶음 페이지에 내용이 바로 선다 — 항목을 눌러 들어가지 않는다.
+  const log = page.locator('section.wire-card', { hasText: '열람 기록 관리' });
   await expect(log).toContainText('시험 실무자');
   await expect(log).toContainText('당사자 정보 조회');
   await expect(log).toContainText('이름 · 연락처 · 이메일'); // 항목 이름만, 값은 없다

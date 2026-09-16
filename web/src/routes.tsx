@@ -6,7 +6,7 @@ import { getMe, logout, Unauthorized, type Me } from './api.ts';
 import { AccessScreen } from './screens/access.tsx';
 import { AuditScreen } from './screens/audit.tsx';
 import { InviteScreen } from './screens/invite.tsx';
-import { SettingsScreen } from './screens/settings.tsx';
+import { SettingsScreen, visibleGroups } from './screens/settings.tsx';
 import { BriefingScreen } from './screens/briefing.tsx';
 import { CloseScreen } from './screens/close.tsx';
 import { HomeScreen } from './screens/home.tsx';
@@ -99,9 +99,10 @@ export function Routes() {
     // 사례를 안 고른 채 상담 기록하기·상담 일정 등록을 누르면 여기로 온다.
     if (hash === '#/pick/record') return <ParticipantsScreen pickFor="record" />;
     if (hash === '#/pick/schedule') return <ParticipantsScreen pickFor="schedule" />;
-    if (hash === '#/settings/audit' || hash === '#/audit') return <AuditScreen />;
-    if (hash === '#/settings') return <SettingsScreen module="home" me={me} />;
-    const inSettings = hash.match(/^#\/settings\/([a-z]+)$/);
+    if (hash === '#/audit') return <AuditScreen />;
+    // 설정은 묶음 단위다. 낡은 항목 주소로 들어오면 그 항목이 든 묶음으로 보낸다.
+    if (hash === '#/settings') { window.location.hash = '#/settings/me'; return null; }
+    const inSettings = hash.match(/^#\/settings\/([a-z-]+)$/);
     if (inSettings) return <SettingsScreen module={inSettings[1]} me={me} />;
     if (hash === '#/participants/new') return <ParticipantNewScreen />;
 
@@ -185,9 +186,9 @@ export function Routes() {
           <div className="navigation-group">
             <p className="navigation-section-title">설정</p>
             <ul className="navigation-list">
-              {/* 항목은 설정 페이지 안에서 편다(2026-09-16 Q 2차) — 열세 줄이 세로로 서면
-                  위의 일정·당사자가 그 밑에 묻힌다. */}
-              {link('#/settings', '설정하기')}
+              {/* 묶음마다 메뉴 하나다(2026-09-16 Q 3차). 그 페이지에 항목이 곧바로 펼쳐져
+                  두 번 누를 일이 없다. 관리자 전용 묶음은 실무자에게 서지 않는다. */}
+              {visibleGroups(me.role === 'admin').map((g) => link(`#/settings/${g.key}`, g.title))}
             </ul>
           </div>
         </div>
