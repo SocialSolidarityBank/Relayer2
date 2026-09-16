@@ -1,6 +1,6 @@
 // CCC wire 계약을 쓰는 최소 부품. 클래스 이름과 구조는 정본 그대로이며 새 이름을 만들지 않는다.
 // 근거: web/src/styles/wire.css(=CCC wire-styles.ts), web/src/styles/shell.css(=CCC layout.tsx).
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { LIFE_AREAS } from './areas.ts';
 
 /**
@@ -20,6 +20,31 @@ export function Chevron({ dir = 'down' }: { dir?: 'up' | 'down' | 'left' | 'righ
         vectorEffect="non-scaling-stroke"
       />
     </svg>
+  );
+}
+
+/**
+ * 뒤로 가기. 정본 `apps/web/app/components/wire/back-link.tsx` 를 해시 라우팅에 맞춰 옮겼다.
+ *
+ * 모든 화면 좌상단 같은 자리다. 브라우저 뒤로가기를 없애는 것이 아니라 **화면에도 같은
+ * 출구를 하나 낸다** — 두 방법의 결과가 같다. 처음 여는 사람에게는 보이는 출구가 없다.
+ *
+ * **돌아갈 곳이 없으면 아예 그리지 않는다.** 없는 출구를 그려 두면 눌러도 아무 일이
+ * 일어나지 않아 화면이 고장난 것처럼 보인다.
+ */
+export function BackLink() {
+  const [canGoBack, setCanGoBack] = useState(false);
+  useEffect(() => {
+    setCanGoBack(window.history.length > 1);
+  }, []);
+  if (!canGoBack) return null;
+  return (
+    <div className="page-backbar">
+      <button type="button" className="page-back" onClick={() => window.history.back()}>
+        <Chevron dir="left" />
+        <span>뒤로</span>
+      </button>
+    </div>
   );
 }
 

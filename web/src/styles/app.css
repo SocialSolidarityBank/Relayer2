@@ -61,3 +61,11 @@ body { margin: 0; }
 /* 마지막 칸(자세히)만 줄바꿈을 허용한다 — 나머지가 밀리지 않게 한다. */
 .log-table td:last-child { white-space: normal; min-width: 18ch; }
 .log-table tbody tr:hover { background: var(--gradient-hover); }
+
+/* 열람 기록 필터 줄(2026-09-16 Q). 카드가 아니다 — 아래 기록이 본체라 위가 무거우면 안 된다.
+   넓으면 기간·확인 필요가 한 줄에 서고, 좁으면 접힌다. 검색칸은 늘 제 줄을 갖는다. */
+.log-filters { display: grid; gap: var(--space-4); margin-bottom: var(--space-4); }
+@container (min-width: 720px) {
+  .log-filters { grid-template-columns: auto 1fr; align-items: start; }
+  .log-filters > :last-child { grid-column: 1 / -1; }
+}

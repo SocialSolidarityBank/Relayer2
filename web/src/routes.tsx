@@ -5,6 +5,7 @@ import { applyTheme, followSystemTheme, initialTheme, type Theme } from './theme
 import { getMe, logout, Unauthorized, type Me } from './api.ts';
 import { AccessScreen } from './screens/access.tsx';
 import { AuditScreen } from './screens/audit.tsx';
+import { BackLink } from './ui.tsx';
 import { InviteScreen } from './screens/invite.tsx';
 import { SettingsScreen, visibleGroups } from './screens/settings.tsx';
 import { BriefingScreen } from './screens/briefing.tsx';
@@ -194,7 +195,11 @@ export function Routes() {
         </div>
       </aside>
 
-      <div className="page-content">{screen}</div>
+      {/* 뒤로 가기는 본문 위 한 자리다(정본 .page-backbar). 돌아갈 곳이 없으면 안 그린다. */}
+      <div className="content-column">
+        <BackLink />
+        <div className="page-content">{screen}</div>
+      </div>
     </div>
   );
 }

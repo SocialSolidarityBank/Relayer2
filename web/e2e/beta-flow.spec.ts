@@ -457,10 +457,10 @@ test('PII 를 본 조회가 열람 기록에 남고, 관리자만 본다', async
     .click();
 
   // 찾기 전에는 아무것도 펼치지 않는다.
-  await expect(page.getByText('위에서 찾아 주세요', { exact: false })).toBeVisible();
+  await expect(page.getByText('하나를 고르면 기록이 나와요', { exact: false })).toBeVisible();
   await page.locator('#audit-q').fill('당사자 정보 조회');
 
-  const log = page.locator('section.wire-card', { hasText: '찾은 기록' });
+  const log = page.locator('section.wire-card', { hasText: '열람 기록' });
   await expect(log).toContainText('시험 실무자');
   await expect(log).toContainText('당사자 정보 조회');
   await expect(log).toContainText('이름 · 연락처 · 이메일'); // 항목 이름만, 값은 없다

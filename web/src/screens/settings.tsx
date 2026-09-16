@@ -212,10 +212,8 @@ export function SettingsScreen({
   if (nestedItem) {
     return (
       <>
-        <PageHeader
-          title={nestedItem.item.label}
-          meta={<a href={`#/settings/${nestedItem.group.key}`}>{nestedItem.group.title}으로</a>}
-        />
+        {/* 되돌이 링크를 따로 두지 않는다 — 셸의 `뒤로`가 그 자리다(2026-09-16 Q). */}
+        <PageHeader title={nestedItem.item.label} />
         <Pane item={nestedItem.item} me={me} />
       </>
     );
@@ -273,7 +271,7 @@ function ProfilePane() {
   };
 
   return (
-    <Card title="내 정보" hint="로그인 아이디는 바꿀 수 없어요. 지난 기록이 누구의 것인지 흐려지기 때문이에요.">
+    <Card title="내 정보">
       <DataRows
         rows={[
           ['로그인 아이디', p.email],
@@ -286,7 +284,7 @@ function ProfilePane() {
       <Field label="연락처" htmlFor="pf-phone" hint="예: 010-1234-5678">
         <input id="pf-phone" value={p.phone ?? ''} onChange={(e) => setP({ ...p, phone: e.target.value })} />
       </Field>
-      <Field label="이메일" htmlFor="pf-mail" hint="알림과 초대를 받을 곳이에요.">
+      <Field label="이메일" htmlFor="pf-mail" hint="예: minhee@example.org">
         <input
           id="pf-mail"
           value={p.contact_email ?? ''}
@@ -313,7 +311,7 @@ const THEMES: ReadonlyArray<[ThemeChoice, string, string]> = [
 function ThemePane() {
   const [t, setT] = useState<ThemeChoice>(themeChoice());
   return (
-    <Card title="화면 테마" hint="이 기기에서만 적용돼요. 다른 기기에서는 따로 고르면 돼요.">
+    <Card title="화면 테마">
       {THEMES.map(([key, label, desc]) => (
         <div className="wire-repeat-card" key={key}>
           <Item
@@ -352,9 +350,8 @@ function LeavePane() {
   return (
     <Card
       title="계정 삭제하기"
-      hint="로그인만 막혀요. 내가 남긴 상담 기록은 사례의 것이라 지워지지 않아요 — 지우면 누가 기록했는지가 빈칸이 돼요."
     >
-      <Field label="확인" htmlFor="leave-c" hint="정말 나가려면 아래 칸에 `나가기` 라고 적어 주세요.">
+      <Field label="확인" htmlFor="leave-c" hint="`나가기` 라고 적어 주세요.">
         <input id="leave-c" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
       </Field>
       <FormActions>
@@ -393,7 +390,7 @@ function AssignPane() {
 
   return (
     <>
-      <Card title="올라온 배정 요청" hint="실무자가 맡겠다고 손든 당사자예요. 관리자가 확정하면 바로 효력이 생겨요.">
+      <Card title="올라온 배정 요청">
         {pending.length === 0 ? (
           <Empty>대기 중인 요청이 없어요.</Empty>
         ) : (
@@ -419,7 +416,7 @@ function AssignPane() {
         )}
       </Card>
 
-      <Card title="담당이 바뀔 때" hint="실무자를 고르면 맡고 있는 당사자가 나와요. 한 사람씩 다른 실무자에게 넘겨요.">
+      <Card title="담당이 바뀔 때">
         <Field label="실무자" htmlFor="as-who" control="select">
           <select id="as-who" value={who ?? ''} onChange={(e) => setWho(e.target.value ? Number(e.target.value) : null)}>
             <option value="">고르기</option>
@@ -499,7 +496,6 @@ function InvitePane() {
     <>
       <Card
         title="초대 링크 만들기"
-        hint="링크를 건네면 그 사람이 이 워크스페이스에 들어와요. 7일 뒤 만료돼요."
       >
         <Field label="역할" htmlFor="iv-role" control="select">
           <select id="iv-role" value={role} onChange={(e) => setRole(e.target.value as 'worker' | 'admin')}>
@@ -507,7 +503,7 @@ function InvitePane() {
             <option value="admin">관리자</option>
           </select>
         </Field>
-        <Field label="메모" htmlFor="iv-note" hint="누구에게 주는 링크인지 적어 두면 나중에 찾기 쉬워요.">
+        <Field label="메모" htmlFor="iv-note">
           <input id="iv-note" value={note} onChange={(e) => setNote(e.target.value)} />
         </Field>
         <FormActions>
@@ -574,7 +570,7 @@ function WorkersPane() {
   }, [open]);
 
   return (
-    <Card title="실무자 목록" hint="이름을 누르면 맡고 있는 당사자가 나와요.">
+    <Card title="실무자 목록">
       {rows === null ? (
         <Empty>불러오는 중이에요.</Empty>
       ) : (
@@ -621,7 +617,7 @@ function OrgPane() {
   if (!org) return <Empty>불러오는 중이에요.</Empty>;
 
   return (
-    <Card title="기관 정보" hint="서면 문서와 보고서에 이 이름이 쓰여요.">
+    <Card title="기관 정보">
       <Field label="기관 이름" htmlFor="og-name">
         <input id="og-name" value={org.name} onChange={(e) => setOrg({ ...org, name: e.target.value })} />
       </Field>
@@ -655,7 +651,6 @@ function ProgramsPane() {
   return (
     <Card
       title="사업 목록"
-      hint="당사자를 등록할 때 여기서 고르게 돼요. 직접 칠 수 없어요 — 그래야 같은 사업이 두 이름으로 갈리지 않아요."
     >
       {programs === null ? (
         <Empty>불러오는 중이에요.</Empty>
@@ -680,7 +675,7 @@ function ProgramsPane() {
           </div>
         ))
       )}
-      <Field label="새 사업 이름" htmlFor="pg-new" hint="내렸던 이름을 적으면 그 사업이 다시 올라와요.">
+      <Field label="새 사업 이름" htmlFor="pg-new">
         <input id="pg-new" value={name} onChange={(e) => setName(e.target.value)} />
       </Field>
       <FormActions>
@@ -715,7 +710,6 @@ function ConsentPane() {
   return (
     <Card
       title="동의서 관리"
-      hint="지금 쓰는 문안이에요. 화면에서 고칠 수 없어요 — 글자 하나만 바뀌어도 이미 받은 동의가 전부 다시 받아야 하는 상태가 되기 때문이에요."
     >
       {rows === null ? (
         <Empty>불러오는 중이에요.</Empty>
@@ -762,7 +756,6 @@ function DownloadPane() {
   return (
     <Card
       title="열람 기록 내려받기"
-      hint="고른 조건 그대로 CSV 로 받아요. 엑셀에서 바로 열려요."
     >
       <Field label="기간" htmlFor="dl-days">
         <div className="info-tabs" id="dl-days">
@@ -774,7 +767,7 @@ function DownloadPane() {
         </div>
       </Field>
 
-      <Field label="실무자" htmlFor="dl-actor" control="select" hint="비워 두면 모두예요.">
+      <Field label="실무자" htmlFor="dl-actor" control="select">
         <select id="dl-actor" value={actor} onChange={(e) => setActor(e.target.value)}>
           <option value="">모두</option>
           {workers
@@ -807,7 +800,6 @@ function DownloadPane() {
         label="당사자 표기"
         htmlFor="dl-names"
         control="select"
-        hint="기관 밖으로 낼 때는 가명이 안전해요. 실명이 든 파일에는 우리 보유기간도 삭제 장치도 닿지 않아요. 어느 쪽으로 내렸는지가 열람 기록에 남아요."
       >
         <select
           id="dl-names"
@@ -851,7 +843,6 @@ function ConnectionsPane() {
   return (
     <Card
       title="API 연결 관리"
-      hint="열쇠는 기관 서버의 환경 변수로 넣어요. 화면에서 넣게 하면 그 값이 브라우저와 기록을 거쳐 흐르기 때문이에요."
     >
       {row('AI 연결', c.ai.connected, `${c.ai.provider} · ${c.ai.model}`, c.ai.env)}
       {row('STT 연결', c.stt.connected, `${c.stt.provider}${c.stt.region ? ` · ${c.stt.region}` : ''}`, c.stt.env)}
@@ -870,7 +861,6 @@ function RequestPane({ me }: { me: { id: number } }) {
   return (
     <Card
       title="내가 올린 배정 요청"
-      hint="당사자 목록에서 `내가 맡기` 를 누르면 여기에 올라와요. 관리자가 확정하면 바로 담당이 돼요."
     >
       {rows === null ? (
         <Empty>불러오는 중이에요.</Empty>

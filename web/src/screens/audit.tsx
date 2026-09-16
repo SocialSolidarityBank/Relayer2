@@ -155,11 +155,9 @@ export function AuditScreen({ embedded }: { embedded?: boolean } = {}) {
     <>
       {!embedded && <PageHeader title="열람 기록" meta="누가 누구 것을 언제 봤는지. 본 값은 남기지 않아요" />}
 
-      <Card
-        title="찾기"
-        hint="찾아야 줄이 나와요. 기록을 펼쳐 두지 않는 건 그 자체가 개인정보를 화면에 늘어놓는 일이기 때문이에요."
-      >
-        <Field label="기간" htmlFor="audit-days">
+      {/* 필터는 카드 밖 한 줄이다(2026-09-16 Q). 아래 기록이 본체라 위가 무거우면 안 된다. */}
+      <div className="log-filters">
+        <Field label="열람 기록 기간" htmlFor="audit-days">
           <div className="info-tabs" id="audit-days">
             {AUDIT_DAYS.map(([d, label]) => (
               <button type="button" key={d} className="wire-step" data-active={days === d} onClick={() => setDays(d)}>
@@ -169,10 +167,7 @@ export function AuditScreen({ embedded }: { embedded?: boolean } = {}) {
           </div>
         </Field>
 
-        <Field
-          label="눈여겨볼 것"
-          hint="고르면 그것만 봐요. 숫자는 고른 기간 전체예요 — 이상하다는 뜻이 아니라 센 수예요."
-        >
+        <Field label="열람 기록 확인 필요">
           <div className="info-tabs">
             {(['off_assignment', 'download'] as const).map((key) => {
               const w = watch(key);
@@ -189,23 +184,14 @@ export function AuditScreen({ embedded }: { embedded?: boolean } = {}) {
               );
             })}
             {sum && (
-              <button
-                type="button"
-                className="wire-step"
-                data-active={only === null}
-                onClick={() => setOnly(null)}
-              >
+              <button type="button" className="wire-step" data-active={only === null} onClick={() => setOnly(null)}>
                 모두 {sum.total.toLocaleString()}건
               </button>
             )}
           </div>
         </Field>
 
-        <Field
-          label="글자로 찾기"
-          htmlFor="audit-q"
-          hint="당사자 이름 · 가명 · 실무자 이름 · 사업 이름 · 한 일(예: 내려받기, 동의, 배정)"
-        >
+        <Field label="열람 기록 검색" htmlFor="audit-q">
           <input
             id="audit-q"
             type="search"
@@ -214,7 +200,7 @@ export function AuditScreen({ embedded }: { embedded?: boolean } = {}) {
             onChange={(e) => setQ(e.target.value)}
           />
         </Field>
-      </Card>
+      </div>
 
       {error && (
         <Card>
@@ -223,17 +209,13 @@ export function AuditScreen({ embedded }: { embedded?: boolean } = {}) {
       )}
 
       {!asked ? (
-        <Card title="찾은 기록">
-          <Empty>위에서 찾아 주세요. 전체를 받아 보려면 `자료 다운로드`를 쓰세요.</Empty>
+        <Card title="열람 기록">
+          <Empty>기간·확인 필요·검색 중에 하나를 고르면 기록이 나와요.</Empty>
         </Card>
       ) : (
         <Card
-          title={rows === null ? '찾는 중' : `찾은 기록 ${shown.length.toLocaleString()}건`}
-          hint={
-            shown.length >= LIMIT
-              ? `${LIMIT}건까지 보여요. 기간을 줄이거나 더 좁혀서 찾으세요.`
-              : '같은 사람이 같은 당사자를 10분 안에 다시 열면 한 줄로 접어요.'
-          }
+          title={rows === null ? '열람 기록' : `열람 기록 ${shown.length.toLocaleString()}건`}
+          hint={shown.length >= LIMIT ? `${LIMIT}건까지 보여요. 기간을 줄이거나 더 좁혀 보세요.` : undefined}
         >
           {rows === null ? (
             <Empty>찾는 중이에요.</Empty>
