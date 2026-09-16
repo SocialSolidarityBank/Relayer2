@@ -4,6 +4,10 @@
 // 루트 서버(VOICE_ENABLED=1, STT 키 없음 → 전사 skipped)에 붙여 돌린다.
 import { expect, test } from '@playwright/test';
 
+// 다른 spec 과 같은 규약이다 — 같은 원점에서 화면과 API 를 함께 내는 서버(dist 를 얹은
+// api :8798)에서는 접두 `/api` 가 없다. 하드코딩하면 그 서버에서 404 를 JSON 으로 읽는다.
+const api = process.env.PLAYWRIGHT_API_PREFIX ?? '/api';
+
 // 이 spec 에서만 가짜 마이크를 켠다 — 다른 spec 의 브라우저에는 영향이 없다.
 test.use({
   permissions: ['microphone'],
@@ -48,7 +52,7 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
   // 회차는 시작과 함께 생긴다 — 멈추기 전에 이미 서버에 있다.
   await expect
     .poll(async () => {
-      const res = await page.request.get(`/api/cases/${caseId}/detail`);
+      const res = await page.request.get(`${api}/cases/${caseId}/detail`);
       const detail = (await res.json()) as {
         sessions: Array<{ status: string; written: boolean }>;
       };

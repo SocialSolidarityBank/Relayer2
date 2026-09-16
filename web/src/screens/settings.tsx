@@ -309,35 +309,36 @@ function ProfilePane() {
   );
 }
 
-const THEMES: ReadonlyArray<[ThemeChoice, string, string]> = [
-  ['light', '밝게', '흰 바탕. 밝은 사무실에서 읽기 좋아요.'],
-  ['dark', '어둡게', '어두운 바탕. 밤이나 조명이 낮은 곳에서 눈이 덜 부셔요.'],
-  ['system', '기기 설정 따라', '기기가 밤에 어두워지면 같이 어두워져요.'],
+// 설명은 보기 안에서 끝낸다(2026-09-17 Q "설명은 짧게 선택창 안에서") — 세 줄 카드로
+// 늘어놓으면 고르는 일보다 읽는 일이 커진다(§13 설명형 글은 기본으로 두지 않는다).
+const THEMES: ReadonlyArray<[ThemeChoice, string]> = [
+  ['light', '밝게 — 흰 바탕'],
+  ['dark', '어둡게 — 어두운 바탕'],
+  ['system', '기기 설정 따라 — 기기가 어두워지면 같이'],
 ];
 
 function ThemePane() {
   const [t, setT] = useState<ThemeChoice>(themeChoice());
   return (
     <Card title="화면 테마">
-      {THEMES.map(([key, label, desc]) => (
-        <div className="wire-repeat-card" key={key}>
-          <Item
-            title={label}
-            desc={desc}
-            action={
-              <Button
-                variant={t === key ? 'primary' : 'secondary'}
-                onClick={() => {
-                  setTheme(key);
-                  setT(key);
-                }}
-              >
-                {t === key ? '쓰는 중' : '고르기'}
-              </Button>
-            }
-          />
-        </div>
-      ))}
+      {/* 고르는 즉시 칠한다 — 저장 버튼을 두면 이미 바뀐 화면을 두고 한 번 더 누르게 된다. */}
+      <Field label="테마" htmlFor="theme" control="select">
+        <select
+          id="theme"
+          value={t}
+          onChange={(e) => {
+            const choice = e.target.value as ThemeChoice;
+            setTheme(choice);
+            setT(choice);
+          }}
+        >
+          {THEMES.map(([key, label]) => (
+            <option key={key} value={key}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </Field>
     </Card>
   );
 }
