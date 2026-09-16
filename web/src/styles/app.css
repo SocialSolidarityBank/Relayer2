@@ -1,5 +1,5 @@
-/* 베타 전용 임시 내비. CCC 사이드바(.app-shell/.wire-sidebar)는 베타 범위 밖이라
-   그 계약을 흉내 내지 않고 최소한의 줄만 둔다. 화면 안쪽은 전부 wire 계약을 쓴다. */
+/* 릴레이어의 국소 보정. 화면 안쪽은 전부 wire 계약을 쓰고, 셸은 이식한
+   .app-shell/.sidebar 를 쓴다(2026-09-16 Q 사이드바 셸 — 구 .app-nav 한 줄 대체). */
 body { margin: 0; }
 
 /* 머리줄 기관 이름. 정본 헤더에는 기관 전환기가 서지만 베타는 기관이 하나라 글자만 둔다. */
@@ -81,3 +81,25 @@ body { margin: 0; }
   border-bottom: 1px solid var(--risk);
 }
 .api-failure > span { margin-right: auto; }
+
+/* 767 이하: 내비를 본문 위에 눕힌다(2026-09-16).
+   이식 CSS 는 이 폭에서 사이드바를 **드로어**로 바꾸고(.sidebar{position:fixed;translateX(100%)})
+   헤더를 숨긴다. 여는 손잡이(.drawer-bar)·스크림·닫기 버튼 마크업이 릴레이어에는 없어서
+   390px 실측에서 내비가 화면 밖(x=375)에 갇히고 이름·로그아웃까지 사라졌다.
+   드로어를 살리려면 여닫는 상태·스크림·초점 처리가 새로 필요하다. 이 폭은 지금 실사 표면이
+   아니므로 항목과 순서를 그대로 둔 채 흐름으로 되돌린다. 묶음은 폭이 되는 만큼 나란히 선다. */
+@media (max-width: 767px) {
+  .app-header { display: flex; padding: 0 var(--page-pad-x); }
+  .sidebar {
+    position: static; transform: none; height: auto; width: auto; max-width: none; z-index: auto;
+    padding: var(--space-4) var(--page-pad-x); gap: var(--space-4);
+  }
+  /* 본문과 만나는 모서리가 아래로 바뀌므로 세로선을 가로선으로 돌린다(헤더 아래 선과 같은 축). */
+  .sidebar::after { inset: auto 0 0; width: auto; height: 1px; opacity: 1; background: var(--gradient-frame); }
+  .sidebar > .navigation-groups {
+    overflow: visible;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    /* 묶음 칸이 늘어나면 안의 항목 행까지 벌어져 옆 묶음과 줄이 안 맞는다(390px 실측 17px). */
+    align-items: start;
+  }
+}
