@@ -19,5 +19,7 @@ export function buildSessionLine(session: Session, cards: Card[]): string {
 
   if (mine.some((c) => c.source_section === 'judgment')) parts.push('의견 있음');
 
-  return parts.length > 0 ? parts.join(', ') : '수기 기록';
+  // 카드가 없으면 상태만 말한다. 수기가 없는 회차(녹음만 하고 아직 안 적음, 2026-09-16 Q)를 '수기 기록'이라 부르지 않는다.
+  if (parts.length > 0) return parts.join(', ');
+  return session.memo ? '수기 기록' : '수기 미작성';
 }
