@@ -52,14 +52,15 @@ async function fixture() {
   return { actor, caseId, sessionId };
 }
 
+const FACT = { topic: '월세 연체 개월 수', before: { seq: 1, quote: '월세 한 달 밀림.' }, after: { seq: 2, quote: '월세 두 달 밀림.' }, note: '연체가 한 달에서 두 달로 늘었다고 말함.' };
 const draftRow = (sessionId: number, actor: number, tasks: string[]) => sql`
-  insert into ai_drafts (session_id, status, summary, changes, tasks, questions, mask_hits, model, created_by)
+  insert into ai_drafts (session_id, status, summary, changes, tasks, questions, fact_changes, mask_hits, model, created_by)
   values (${sessionId}, 'draft', '월세 연체가 두 달로 늘었다고 함.', ${sql.json(['연체 1개월 → 2개월'])},
-          ${sql.json(tasks)}, ${sql.json(['내역서를 못 뗀 이유'])}, '{}'::jsonb, 'test-model', ${actor})`;
+          ${sql.json(tasks)}, ${sql.json(['내역서를 못 뗀 이유'])}, ${sql.json([FACT])}, '{}'::jsonb, 'test-model', ${actor})`;
 
 type OpenCard = { kind: string; text: string; source_type: string };
 type Detail = {
-  sessions: Array<{ id: number; ai_summary: { summary: string; changes: string[] } | null }>;
+  sessions: Array<{ id: number; ai_summary: { summary: string; changes: string[]; fact_changes: unknown[] } | null }>;
   open_cards: OpenCard[];
 };
 type BriefingView = {
@@ -87,6 +88,7 @@ describe.skipIf(!enabled)('approved AI drafts become visible records', () => {
     expect(detail.sessions.find((s) => s.id === sessionId)?.ai_summary).toEqual({
       summary: '월세 연체가 두 달로 늘었고 내역서는 아직 못 뗌.',
       changes: ['연체 1개월 → 2개월'],
+      fact_changes: [FACT],
     });
     const openTexts = detail.open_cards.map((c) => [c.kind, c.text, c.source_type]);
     expect(openTexts).toContainEqual(['promise', '통장 사본 떼어 오기', 'ai_approved']);

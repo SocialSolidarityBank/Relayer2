@@ -1,6 +1,6 @@
 // AI 텍스트 경로(P3). 순서가 곧 규칙이다.
 //
-//   동의 확인 → 가림 처리 → 외부 호출 → **초안 저장** → 사람이 승인해야 기록
+//   동의 확인 → 마스킹 → 외부 호출 → **초안 저장** → 사람이 승인해야 기록
 //
 // 승인 전에는 어떤 것도 회차 기록이 되지 않는다. 승인은 사람만 한다(GLOSSARY §6-5).
 import { assertConsent, replaceAiCards } from './service.ts';
@@ -10,7 +10,7 @@ import { sql } from './db.ts';
 import { maskAll } from './domain/masking.ts';
 
 import { decryptPii, decryptText } from './pii.ts';
-import type { Card, Session } from './domain/types.ts';
+import type { Card, FactChange, Session } from './domain/types.ts';
 
 /**
  * 제공자는 기관이 고른다. 바꾸면 동의 문안 해시가 달라져 기존 동의가 `확인 필요`로 떨어진다 —
@@ -29,6 +29,7 @@ export type Draft = {
   changes: string[];
   tasks: string[];
   questions: string[];
+  fact_changes: FactChange[];
   mask_hits: Record<string, number>;
   model: string | null;
   created_by: number | null;
@@ -45,7 +46,7 @@ const SYSTEM = [
   '',
   '반드시 지킨다:',
   '- 자료에 없는 사실을 지어내지 않는다. 모르면 비운다.',
-  '- 대괄호로 가려진 자리표([otter-001], [연락처])는 그대로 둔다. 추측해 채우지 않는다.',
+  '- 대괄호로 마스킹한 자리표([otter-001], [연락처])는 그대로 둔다. 추측해 채우지 않는다.',
   '- 진단·평가·판정을 하지 않는다. 적힌 말을 정리만 한다.',
   '- 존댓말 대신 기록체(…함, …라고 말함)를 쓴다.',
   '- 숫자는 반드시 살린다. 건수·금액·기간. "늘었다"가 아니라 "3건에서 4건으로".',
@@ -59,16 +60,21 @@ const SYSTEM = [
   '5. 건강·돌봄의 변화',
   '',
   '요약에 넣지 않는 것: 지각·날씨·교통 같은 잡담, 같은 말의 반복, 변화 없는 상태.',
+  '',
+  '사실관계 변화(fact_changes): [지난 회차] 자료가 함께 오면, 지난 회차에서 말한 것과 이번 회차에서',
+  '말한 것이 **서로 어긋나는 사실**만 찾는다(건수·금액·기간·관계·상태). 새로 알게 된 것은 아니다.',
+  '양쪽 원문을 한 문장씩 **자료에 적힌 그대로** 옮긴다. 고쳐 쓰거나 줄이지 않는다.',
+  '어느 쪽이 맞는지 판정하지 않는다 — 앞뒤 맥락만 한두 문장으로 적는다. 지난 회차 자료가 없으면 빈 배열.',
 ].join('\n');
 
 // 칸은 **사람이 쓰는 칸과 같다**(GLOSSARY §6-2). 그래야 승인하면 그대로 카드가 된다.
 // 한 덩어리로 받으면 무엇을 버릴지 모델이 제멋대로 고른다.
-type Shape = { summary: string; changes: string[]; tasks: string[]; questions: string[] };
+type Shape = { summary: string; changes: string[]; tasks: string[]; questions: string[]; fact_changes: FactChange[] };
 
 const SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['summary', 'changes', 'tasks', 'questions'],
+  required: ['summary', 'changes', 'tasks', 'questions', 'fact_changes'],
   properties: {
     summary: {
       type: 'string',
@@ -93,6 +99,27 @@ const SCHEMA = {
       items: { type: 'string' },
       description: '다음에 확인할 것. 자료에 적힌 것만.',
     },
+    fact_changes: {
+      type: 'array',
+      description: '지난 회차와 이번 회차가 서로 어긋나는 사실. 양쪽 원문을 그대로 옮긴다. 없으면 빈 배열.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['topic', 'before', 'after', 'note'],
+        properties: {
+          topic: { type: 'string', description: '무엇이 달라졌는지 한 줄' },
+          before: {
+            type: 'object', additionalProperties: false, required: ['seq', 'quote'],
+            properties: { seq: { type: 'integer', description: '지난 회차 번호' }, quote: { type: 'string', description: '그 회차 자료의 원문 한 문장' } },
+          },
+          after: {
+            type: 'object', additionalProperties: false, required: ['seq', 'quote'],
+            properties: { seq: { type: 'integer', description: '이번 회차 번호' }, quote: { type: 'string', description: '이번 회차 자료의 원문 한 문장' } },
+          },
+          note: { type: 'string', description: '앞뒤 맥락 한두 문장. 판정이 아니다.' },
+        },
+      },
+    },
   },
 } as const;
 
@@ -107,10 +134,12 @@ async function callGemini(prompt: string): Promise<Shape> {
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: SYSTEM }] },
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        // Gemini 의 스키마는 OpenAPI 계열이라 `additionalProperties` 를 모른다. 그것만 뺀다.
+        // Gemini 의 스키마는 OpenAPI 계열이라 `additionalProperties` 를 모른다. 중첩까지 전부 뺀다.
         generationConfig: {
           responseMimeType: 'application/json',
-          responseSchema: { ...SCHEMA, additionalProperties: undefined },
+          responseSchema: JSON.parse(
+            JSON.stringify(SCHEMA, (k, v) => (k === 'additionalProperties' ? undefined : v)),
+          ),
         },
       }),
     },
@@ -160,9 +189,20 @@ async function callOpenAi(prompt: string): Promise<Shape> {
 const callModel = (prompt: string): Promise<Shape> =>
   PROVIDER === 'gemini' ? callGemini(prompt) : callOpenAi(prompt);
 
+/** 회차 하나의 자료 조각(상담 내용 + 카드). 마스킹 전 평문이다. */
+async function sessionParts(session: Session): Promise<Array<{ label: string; text: string }>> {
+  const cards = await sql<Card[]>`select * from cards where source_session_id = ${session.id} order by id`;
+  return [
+    { label: '상담 내용', text: decryptText(session.memo) ?? '' },
+    ...cards.map((c) => ({ label: SECTION_LABEL[c.source_section] ?? c.source_section, text: decryptText(c.text) ?? '' })),
+  ].filter((p) => p.text.trim());
+}
+
 /**
- * 한 회차의 초안을 만든다. 저장된 자료만 쓰고, 보내기 전에 가린다.
+ * 한 회차의 초안을 만든다. 저장된 자료만 쓰고, 보내기 전에 마스킹한다.
  * 동의(외부 LLM·국외 처리)가 없으면 호출 자체를 하지 않는다.
+ * 지난 회차 자료도 함께 보낸다 — 사실관계 변화는 견줄 상대가 있어야 나온다.
+ * ponytail: 지난 회차 전부를 매번 보낸다. 회차가 수십 개로 늘면 최근 N개로 자른다.
  */
 export async function draftSession(sessionId: number, actorId: number): Promise<Draft> {
   const [session] = await sql<Session[]>`select * from sessions where id = ${sessionId}`;
@@ -176,38 +216,44 @@ export async function draftSession(sessionId: number, actorId: number): Promise<
     left join participant_pii v on v.participant_id = p.id
     where c.id = ${session.case_id}`;
 
-  const cards = await sql<Card[]>`
-    select * from cards where source_session_id = ${sessionId} order by id`;
-
-  const parts = [
-    { label: '상담 내용', text: decryptText(session.memo) ?? '' },
-    ...cards.map((c) => ({ label: SECTION_LABEL[c.source_section] ?? c.source_section, text: decryptText(c.text) ?? '' })),
-  ].filter((p) => p.text.trim());
-
-  if (parts.length === 0) throw new AiUnavailable('정리할 내용이 없어요. 상담 내용을 먼저 적어 주세요.');
-
-  const { parts: masked, hits } = maskAll(parts, {
+  const subject = {
     pseudonym: participant.pseudonym,
     name: decryptPii(participant.enc_name),
     phone: decryptPii(participant.enc_phone),
     email: decryptPii(participant.enc_email),
-  });
+  };
+
+  const parts = await sessionParts(session);
+  if (parts.length === 0) throw new AiUnavailable('정리할 내용이 없어요. 상담 내용을 먼저 적어 주세요.');
+  const { parts: masked, hits } = maskAll(parts, subject);
+
+  // 지난 회차는 기록된 것만, 회차 순으로. 마스킹 건수는 이번 회차 것만 센다 — 감사에 남는 값이다.
+  const previous = await sql<Session[]>`
+    select * from sessions where case_id = ${session.case_id} and seq < ${session.seq} and status = 'done' order by seq`;
+  const history: string[] = [];
+  for (const p of previous) {
+    const pParts = await sessionParts(p);
+    if (pParts.length === 0) continue;
+    const { parts: pMasked } = maskAll(pParts, subject);
+    history.push(`[지난 회차 ${p.seq}회차]`, ...pMasked.map((x) => `(${x.label}) ${x.text}`), '');
+  }
 
   const prompt = [
     `${session.seq}회차 상담 자료다. 아래 내용만 보고 정리한다.`,
     '',
     ...masked.map((p) => `[${p.label}]\n${p.text}`),
+    ...(history.length > 0 ? ['', '---- 지난 회차 자료 (사실관계 변화를 찾는 데만 쓴다) ----', ...history] : []),
   ].join('\n');
 
   const shape = await callModel(prompt);
 
   const [row] = await sql<Array<{ id: number; created_at: string }>>`
-    insert into ai_drafts (session_id, status, summary, changes, tasks, questions, mask_hits, model, created_by)
+    insert into ai_drafts (session_id, status, summary, changes, tasks, questions, fact_changes, mask_hits, model, created_by)
     values (${sessionId}, 'draft', ${shape.summary}, ${sql.json(shape.changes)}, ${sql.json(shape.tasks)},
-            ${sql.json(shape.questions)}, ${sql.json(hits)}, ${MODEL}, ${actorId})
+            ${sql.json(shape.questions)}, ${sql.json(shape.fact_changes)}, ${sql.json(hits)}, ${MODEL}, ${actorId})
     returning id, created_at`;
 
-  // 무엇을 몇 건 가려 **어디로** 보냈는지 남긴다. 보낸 원문은 남기지 않는다.
+  // 무엇을 몇 건 마스킹해 **어디로** 보냈는지 남긴다. 보낸 원문은 남기지 않는다.
   // 수신자는 국외 이전 기록의 본체다. 빠지면 "누구에게 넘어갔나"에 답할 수 없다.
   await audit({
     actorId,
@@ -229,6 +275,7 @@ export async function draftSession(sessionId: number, actorId: number): Promise<
     changes: shape.changes,
     tasks: shape.tasks,
     questions: shape.questions,
+    fact_changes: shape.fact_changes,
     mask_hits: hits,
     model: MODEL,
     created_by: actorId,
@@ -248,7 +295,7 @@ const SECTION_LABEL: Record<string, string> = {
 /** 회차의 현재 초안. 마지막 행이 현재 상태다. */
 export async function latestDraft(sessionId: number): Promise<Draft | null> {
   const [row] = await sql<Draft[]>`
-    select id, session_id, status, summary, changes, tasks, questions, mask_hits, model, created_by, created_at
+    select id, session_id, status, summary, changes, tasks, questions, fact_changes, mask_hits, model, created_by, created_at
     from ai_drafts where session_id = ${sessionId} order by id desc limit 1`;
   return row ?? null;
 }
@@ -278,9 +325,9 @@ export async function approveDraft(
 
   const row = await sql.begin(async (tx) => {
     const [inserted] = await tx<Array<{ id: number; created_at: string }>>`
-      insert into ai_drafts (session_id, status, summary, changes, tasks, questions, mask_hits, model, created_by, approved_by)
+      insert into ai_drafts (session_id, status, summary, changes, tasks, questions, fact_changes, mask_hits, model, created_by, approved_by)
       values (${sessionId}, 'approved', ${summary}, ${sql.json(changes)}, ${sql.json(tasks)}, ${sql.json(questions)},
-              ${sql.json(current.mask_hits)}, ${current.model}, ${current.created_by ?? actorId}, ${actorId})
+              ${sql.json(current.fact_changes)}, ${sql.json(current.mask_hits)}, ${current.model}, ${current.created_by ?? actorId}, ${actorId})
       returning id, created_at`;
     await replaceAiCards(tx as unknown as typeof sql, session.case_id, sessionId, [
       ...tasks.map((text) => ({ kind: 'promise' as const, text, section: 'promise' as const })),

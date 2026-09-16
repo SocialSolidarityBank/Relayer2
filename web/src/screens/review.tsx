@@ -9,7 +9,9 @@ import {
   Card,
   Empty,
   ErrorText,
+  FactChanges,
   Field,
+  Fold,
   FormActions,
   LineList,
   PageHeader,
@@ -84,7 +86,7 @@ export function ReviewScreen({ caseId, sessionId }: { caseId: number; sessionId:
 
       <div className="wire-container">
         {draft === 'none' ? (
-          <Card title="AI 정리" hint="저장된 상담 자료만 씁니다. 보내기 전에 이름·연락처를 가려요.">
+          <Card title="AI 정리" hint="저장된 상담 자료만 씁니다. 보내기 전에 이름·연락처를 마스킹해요.">
             <Empty>아직 정리한 것이 없어요.</Empty>
             <FormActions>
               {error && <ErrorText>{error}</ErrorText>}
@@ -95,19 +97,35 @@ export function ReviewScreen({ caseId, sessionId }: { caseId: number; sessionId:
           </Card>
         ) : (
           <>
-            <Card
-              title="가림 처리"
-              hint="외부로 보내기 전에 무엇을 가렸는지예요. 가린 값 자체는 어디에도 남기지 않아요."
+            {/* 접힌 카드 둘(2026-09-16 Q). 사실관계 변화가 마스킹 자리로 올라오고, 마스킹은 그 아래 접힌다.
+                요약이 먼저 눈에 들어와야 하므로 둘 다 닫아 둔다. */}
+            <Fold
+              title="내용 불일치"
+              desc={
+                draft.fact_changes.length > 0
+                  ? `지난 회차와 어긋나는 사실 ${draft.fact_changes.length}건`
+                  : '지난 회차와 어긋나는 사실 없음'
+              }
             >
-              {masked.length === 0 ? (
-                <Empty>가릴 것이 없었어요.</Empty>
-              ) : (
-                <p className="wire-item-desc">
-                  {masked.map(([kind, n]) => `${MASK_LABEL[kind] ?? kind} ${n}건`).join(' · ')}
-                </p>
-              )}
+              <p className="panel-meta">
+                지난 회차 자료와 견줘 달라진 사실만 골라 양쪽 원문을 그대로 보여 줘요. 어느 쪽이 맞는지는 판정하지 않아요.
+              </p>
+              <FactChanges items={draft.fact_changes} />
+            </Fold>
+
+            <Fold
+              title="마스킹"
+              desc={
+                masked.length === 0
+                  ? '마스킹한 값 없음'
+                  : masked.map(([kind, n]) => `${MASK_LABEL[kind] ?? kind} ${n}건`).join(' · ')
+              }
+            >
+              <p className="panel-meta">
+                외부로 보내기 전에 무엇을 마스킹했는지예요. 마스킹한 값 자체는 어디에도 남기지 않아요.
+              </p>
               <p className="panel-meta">모델 {draft.model}</p>
-            </Card>
+            </Fold>
 
             <Card title="요약" hint="사람이 고칠 수 있어요. 고쳐도 승인 전에는 초안이에요.">
               <Field label="요약" htmlFor="summary" control="textarea">

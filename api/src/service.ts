@@ -26,7 +26,7 @@ import { buildMismatches, type MismatchView } from './domain/mismatch-view.ts';
 import { openCards, resolveOutcomes, type OutcomeSubmission } from './domain/cards.ts';
 import { carryOverOnRecord } from './domain/goals.ts';
 import { buildSessionLine } from './domain/session-line.ts';
-import type { Assignee, Card, CardOutcome, Session, SupportCase } from './domain/types.ts';
+import type { Assignee, Card, CardOutcome, FactChange, Session, SupportCase } from './domain/types.ts';
 import { NotFound } from './access.ts';
 
 const ANIMALS = [
@@ -519,16 +519,18 @@ export async function replaceAiCards(
   await insertCards(tx, caseId, sessionId, fresh, 'ai_approved');
 }
 
-export type ApprovedSummary = { summary: string; changes: string[] };
+export type ApprovedSummary = { summary: string; changes: string[]; fact_changes: FactChange[] };
 
 /** 회차별 승인된 요약. 마지막 행이 새 초안이면 이전 승인본으로 조용히 되돌아가지 않는다(불일치 화면과 같은 규칙). */
 async function approvedSummaries(sessionIds: number[]): Promise<Record<number, ApprovedSummary>> {
   if (sessionIds.length === 0) return {};
-  const rows = await sql<Array<{ session_id: number; status: 'draft' | 'approved'; summary: string; changes: string[] }>>`
-    select distinct on (session_id) session_id, status, summary, changes
+  const rows = await sql<Array<{ session_id: number; status: 'draft' | 'approved' } & ApprovedSummary>>`
+    select distinct on (session_id) session_id, status, summary, changes, fact_changes
     from ai_drafts where session_id in ${sql(sessionIds)} order by session_id, id desc`;
   return Object.fromEntries(
-    rows.filter((r) => r.status === 'approved').map((r) => [r.session_id, { summary: r.summary, changes: r.changes }]),
+    rows
+      .filter((r) => r.status === 'approved')
+      .map((r) => [r.session_id, { summary: r.summary, changes: r.changes, fact_changes: r.fact_changes }]),
   );
 }
 

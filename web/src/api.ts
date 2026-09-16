@@ -157,7 +157,7 @@ export type CaseDetail = {
     line: string;
     memo: string | null;
     today_goal_text: string | null;
-    ai_summary: { summary: string; changes: string[] } | null;
+    ai_summary: { summary: string; changes: string[]; fact_changes: FactChange[] } | null;
   }>;
   goal_revisions: Array<{ text: string | null; created_at: string }>;
   open_cards: Array<{ id: number; kind: string; text: string; source_session_seq?: number | null }>;
@@ -253,6 +253,14 @@ export const issueAccess = (caseId: number) =>
 export const revokeAccess = (caseId: number) =>
   json<{ ok: true }>(`/cases/${caseId}/access`, { method: 'DELETE' });
 
+/** 회차간 사실관계 변화. 양쪽 원문을 그대로 들고 온다. 판정은 없다. */
+export type FactChange = {
+  topic: string;
+  before: { seq: number; quote: string };
+  after: { seq: number; quote: string };
+  note: string;
+};
+
 export type Draft = {
   id: number;
   session_id: number;
@@ -261,6 +269,7 @@ export type Draft = {
   changes: string[];
   tasks: string[];
   questions: string[];
+  fact_changes: FactChange[];
   mask_hits: Record<string, number>;
   model: string | null;
   created_at: string;

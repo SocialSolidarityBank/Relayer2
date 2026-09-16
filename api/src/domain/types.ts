@@ -3,6 +3,19 @@ export type SourceSection = 'intake' | 'memo' | 'change' | 'promise' | 'question
 export type OutcomeResult = 'done' | 'in_progress' | 'not_done' | 'confirmed' | 'unchecked';
 export type Follow = 'continue' | 'stop';
 
+/**
+ * 회차간 사실관계 변화(2026-09-16 Q). 지난 회차에서 말한 것과 이번 회차에서 말한 것이 다르면
+ * **양쪽 원문**을 그대로 붙인다. 어느 쪽이 맞는지는 말하지 않는다 — 번복했을 수 있다.
+ */
+export type FactChange = {
+  /** 무엇이 달라졌는지 한 줄. 예: "월세 연체 개월 수" */
+  topic: string;
+  before: { seq: number; quote: string };
+  after: { seq: number; quote: string };
+  /** 앞뒤 맥락을 견준 설명 한두 문장. 판정이 아니다. */
+  note: string;
+};
+
 // 국가 표준 욕구영역 10종 + 기타. 2024 희망복지지원단 업무안내 통합사례관리 욕구사정과 같다.
 // 민간(희망이음)·공공(행복e음)이 같은 분류를 쓰므로 의뢰·통계가 구조적으로 호환된다. 임의로 늘리거나 줄이지 않는다.
 export const LIFE_AREAS = [

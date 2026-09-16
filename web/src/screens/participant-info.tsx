@@ -26,7 +26,9 @@ import {
   DataRows,
   Empty,
   ErrorText,
+  FactChanges,
   Field,
+  Fold,
   FormActions,
   Item,
   PageHeader,
@@ -76,7 +78,7 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
 
   return (
     <>
-      <Card title="회차별 요약" hint="회차 줄은 기록 상태예요. 승인한 AI 정리가 있으면 그 아래에 보여요.">
+      <Card title="회차별 요약" hint="회차 줄은 기록 상태예요. 승인한 AI 정리는 아래 접힌 카드에 있어요.">
         {done.map((s) => (
           <div className="wire-repeat-card" key={s.id}>
             <Item
@@ -114,10 +116,22 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
             />
             {s.ai_summary && (
               <div className="info-ai-summary">
-                <p className="wire-item-desc">{s.ai_summary.summary}</p>
-                {s.ai_summary.changes.length > 0 && (
-                  <p className="wire-item-desc">달라진 것: {s.ai_summary.changes.join(' · ')}</p>
-                )}
+                <Fold title="AI 요약" desc={s.ai_summary.summary}>
+                  <p className="wire-item-desc">{s.ai_summary.summary}</p>
+                  {s.ai_summary.changes.length > 0 && (
+                    <p className="wire-item-desc">달라진 것: {s.ai_summary.changes.join(' · ')}</p>
+                  )}
+                </Fold>
+                <Fold
+                  title="내용 불일치"
+                  desc={
+                    s.ai_summary.fact_changes.length > 0
+                      ? `지난 회차와 어긋나는 사실 ${s.ai_summary.fact_changes.length}건`
+                      : '지난 회차와 어긋나는 사실 없음'
+                  }
+                >
+                  <FactChanges items={s.ai_summary.fact_changes} />
+                </Fold>
               </div>
             )}
             {openIds.includes(s.id) && <p className="info-original">{s.memo ?? '수기 기록이 없어요.'}</p>}
