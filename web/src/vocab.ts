@@ -6,6 +6,7 @@ export const METHODS: ReadonlyArray<{ key: NonNullable<NewSessionInput['method']
   { key: 'visit', label: '방문' },
   { key: 'phone', label: '전화' },
   { key: 'video', label: '화상' },
+  { key: 'other', label: '기타(이메일, SNS 등)' },
 ];
 
 export const METHOD_LABEL: Record<string, string> = Object.fromEntries(

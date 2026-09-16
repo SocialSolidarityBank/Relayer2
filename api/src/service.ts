@@ -96,6 +96,10 @@ export async function createCase(input: {
 
 export type IntakeView = {
   session_id: number | null;
+  /** 실제로 상담한 일시·방식·장소. detail.preferred_counsel_method(선호 방식)와는 다른 값이다. */
+  held_at: string | null;
+  method: string | null;
+  place: string | null;
   memo: string | null;
   detail: Record<string, unknown>;
   overall_goal: string | null;
@@ -107,11 +111,22 @@ export type IntakeView = {
 export async function getIntake(caseId: number): Promise<IntakeView | null> {
   const [supportCase] = await sql<SupportCase[]>`select * from support_cases where id = ${caseId}`;
   if (!supportCase) return null;
-  const [session] = await sql<Array<{ id: number; memo: string | null; detail: Record<string, unknown> }>>`
-    select id, memo, detail from sessions where case_id = ${caseId} and kind = 'intake'`;
+  const [session] = await sql<Array<{
+    id: number;
+    held_at: string | null;
+    method: string | null;
+    place: string | null;
+    memo: string | null;
+    detail: Record<string, unknown>;
+  }>>`
+    select id, held_at, method, place, memo, detail
+    from sessions where case_id = ${caseId} and kind = 'intake'`;
   if (!session) {
     return {
       session_id: null,
+      held_at: null,
+      method: null,
+      place: null,
       memo: null,
       detail: {},
       overall_goal: decryptText(supportCase.overall_goal),
@@ -123,6 +138,9 @@ export async function getIntake(caseId: number): Promise<IntakeView | null> {
     from cards c where c.source_session_id = ${session.id} order by c.id`;
   return {
     session_id: session.id,
+    held_at: session.held_at,
+    method: session.method,
+    place: session.place,
     memo: decryptText(session.memo),
     detail: decryptJson(session.detail),
     overall_goal: decryptText(supportCase.overall_goal),
@@ -133,33 +151,68 @@ export async function getIntake(caseId: number): Promise<IntakeView | null> {
 /**
  * 인테이크 작성하기. 전체 상담 목표는 비워둘 수 있다.
  * 이미 쓴 인테이크가 있으면 **고쳐 쓴다** — 첫 회차는 하나뿐이라 새로 만들지 않는다.
+ * 빠진 칸은 지우지 않고 두고, 들고 온 칸만 바꾼다 — 옛 화면의 답이나 화면에서 빠진
+ * 항목(사실·판단 카드, 폐기된 질문)이 저장할 때마다 사라지면 안 된다.
  * 다른 회차에서 결과가 찍힌 카드(확인함·못 함 따위)는 지우지 않는다. 그 이력까지 사라진다.
  */
 export async function saveIntake(
   caseId: number,
-  input: { held_at?: string; memo?: string; overall_goal?: string | null; detail?: Record<string, unknown>; cards?: NewCardInput[] },
+  input: {
+    held_at?: string;
+    method?: string;
+    place?: string | null;
+    memo?: string;
+    overall_goal?: string | null;
+    detail?: Record<string, unknown>;
+    cards?: NewCardInput[];
+  },
 ): Promise<{ session_id: number }> {
   // 상담 자유 글에는 건강·채무 같은 민감정보가 섞인다. 동의 없이 저장하지 않는다(P1).
   await assertConsent(caseId, 'sensitive_information_processing');
   return await sql.begin(async (tx) => {
-    const [intake] = await tx<{ id: number }[]>`
-      select id from sessions where case_id = ${caseId} and kind = 'intake'`;
+    // 첫 인테이크 저장은 회차를 만든다 — 일정 등록과 같은 이유로 사례 행을 먼저 잠근다.
+    await tx`select id from support_cases where id = ${caseId} for update`;
+    const [intake] = await tx<{
+      id: number;
+      held_at: string | null;
+      method: string | null;
+      place: string | null;
+      memo: string | null;
+      detail: Record<string, unknown>;
+    }[]>`
+      select id, held_at, method, place, memo, detail
+      from sessions where case_id = ${caseId} and kind = 'intake'`;
 
     let sessionId: number;
     if (intake) {
       sessionId = intake.id;
+      // 실제 상담 방식이 대면이 아니면 장소는 없다 — 이전에 남은 장소도 지운다.
+      const method = input.method === undefined ? intake.method : input.method;
+      const place =
+        method === 'in_person' ? (input.place === undefined ? intake.place : input.place) : null;
+      // detail 은 겹쳐 쓴다 — 화면에서 빠진 옛 질문의 답(폐기된 키)은 그대로 남긴다.
+      // 들고 온 값이 있으면 풀어서 겹친 뒤 다시 암호화한다.
+      const detail =
+        input.detail === undefined
+          ? intake.detail
+          : encryptJson({ ...decryptJson(intake.detail), ...input.detail });
       await tx`
         update sessions set
-          memo = ${encryptText(input.memo)},
-          detail = ${tx.json(encryptJson(input.detail))}
+          held_at = ${input.held_at ?? intake.held_at},
+          method = ${method},
+          place = ${place},
+          memo = ${input.memo === undefined ? intake.memo : encryptText(input.memo)},
+          detail = ${tx.json(detail)}
         where id = ${sessionId}`;
     } else {
       const [other] = await tx<{ id: number }[]>`
         select id from sessions where case_id = ${caseId} limit 1`;
       if (other) throw new Error('이미 다른 회차가 있어요. 인테이크는 첫 회차예요.');
       const [created] = await tx<{ id: number }[]>`
-        insert into sessions (case_id, seq, kind, status, held_at, memo, detail)
+        insert into sessions (case_id, seq, kind, status, held_at, method, place, memo, detail)
         values (${caseId}, 1, 'intake', 'done', ${input.held_at ?? new Date().toISOString()},
+                ${input.method ?? null},
+                ${input.method === 'in_person' ? (input.place ?? null) : null},
                 ${encryptText(input.memo)}, ${tx.json(encryptJson(input.detail))})
         returning id`;
       sessionId = created.id;
@@ -169,18 +222,25 @@ export async function saveIntake(
       await setOverallGoal(tx as unknown as typeof sql, caseId, input.overall_goal);
     }
 
-    // 결과가 찍힌 카드는 남기고, 나머지는 지운 뒤 지금 화면의 목록을 다시 넣는다.
-    const locked = await tx<Array<{ kind: string; text: string }>>`
-      select c.kind, c.text from cards c
-      where c.source_session_id = ${sessionId}
-        and exists (select 1 from card_outcomes o where o.card_id = c.id)`;
-    await tx`
-      delete from cards c
-      where c.source_session_id = ${sessionId}
-        and not exists (select 1 from card_outcomes o where o.card_id = c.id)`;
-    const keep = new Set(locked.map((c) => `${c.kind}\u0000${c.text}`));
-    const fresh = (input.cards ?? []).filter((c) => !keep.has(`${c.kind}\u0000${c.text}`));
-    await insertCards(tx as unknown as typeof sql, caseId, sessionId, fresh);
+    // 카드 목록을 들고 왔을 때만 갈아 끼운다 — 안 들고 오면(옛 화면) 있는 그대로 둔다.
+    if (input.cards !== undefined) {
+      // 인테이크 화면이 고치는 것은 과제·질문뿐이다. 사실·판단 카드는 화면에 없으니
+      // 지우지 않고 남긴다 — 결과가 찍힌 카드도 마찬가지다.
+      const kept = await tx<Array<{ kind: string; text: string }>>`
+        select c.kind, c.text from cards c
+        where c.source_session_id = ${sessionId}
+          and (c.kind in ('fact', 'judgment')
+               or exists (select 1 from card_outcomes o where o.card_id = c.id))`;
+      await tx`
+        delete from cards c
+        where c.source_session_id = ${sessionId}
+          and c.kind in ('promise', 'question')
+          and not exists (select 1 from card_outcomes o where o.card_id = c.id)`;
+      // 남은 카드 본문은 암호문이다 — 들고 온 평문과 견주려면 먼저 풀어야 한다.
+      const keep = new Set(kept.map((c) => `${c.kind}\u0000${decryptText(c.text) ?? ''}`));
+      const fresh = input.cards.filter((c) => !keep.has(`${c.kind}\u0000${c.text}`));
+      await insertCards(tx as unknown as typeof sql, caseId, sessionId, fresh);
+    }
     return { session_id: sessionId };
   });
 }
@@ -257,21 +317,36 @@ export async function recordSession(
     const outcomesBefore = wasDone ? outcomes.filter((o) => o.session_id !== sessionId) : outcomes;
 
     // 고쳐 쓰기: 이 회차가 만든 카드 중 **결과가 붙지 않은 것**만 갈아 끼운다(인테이크와 같은 규칙).
-    if (wasDone) {
+    // 카드 목록을 들고 왔을 때만 지운다 — 안 들고 오면 있는 그대로 둔다.
+    // 사실 카드는 기록 화면에 없으므로(달라진 것 칸 폐지) 지우지 않는다.
+    // 인테이크라면 판단 카드도 화면에 없으므로 과제·질문만 고친다.
+    if (wasDone && input.cards !== undefined) {
       await tx`
         delete from cards c
         where c.source_session_id = ${sessionId}
+          and c.kind <> 'fact'
+          and (${target.kind} <> 'intake' or c.kind <> 'judgment')
           and not exists (select 1 from card_outcomes o where o.card_id = c.id)`;
     }
 
     const carry = carryOverOnRecord(target, sessions);
+    // 빠진 칸은 지우지 않고 둔다. 방식이 대면이 아니면 장소는 없다 — 남은 장소도 지운다.
+    const method = input.method === undefined ? target.method : input.method;
+    const place =
+      method === 'in_person' ? (input.place === undefined ? target.place : input.place) : null;
+    // detail 은 겹쳐 쓴다 — 안 들고 오면 있는 그대로, 들고 오면 풀어서 겹친 뒤 다시 암호화한다.
+    // 겹치지 않으면 인테이크의 숨은 답이 기록 저장 한 번에 지워진다.
+    const detail =
+      input.detail === undefined
+        ? target.detail
+        : encryptJson({ ...decryptJson(target.detail), ...input.detail });
     await tx`update sessions set
         status = 'done',
-        held_at = ${input.held_at ?? new Date().toISOString()},
+        held_at = ${input.held_at ?? target.held_at ?? new Date().toISOString()},
         memo = ${encryptText(input.memo)},
-        method = ${input.method ?? target.method},
-        place = ${input.place ?? null},
-        detail = ${tx.json(input.detail ?? {})},
+        method = ${method},
+        place = ${place},
+        detail = ${tx.json(detail)},
         next_goal_text = ${encryptText(input.next_goal_text)},
         created_by = coalesce(created_by, ${input.actorId ?? null}),
         is_closing = ${input.is_closing ?? false},
@@ -290,8 +365,9 @@ export async function recordSession(
       (await tx<Array<{ id: number }>>`select id from cards where source_session_id = ${sessionId}`).map((c) => c.id),
     );
     const kept = cards.filter((c) => keptIds.has(c.id));
+    // 남은 카드 본문은 암호문이다 — 들고 온 평문과 견주려면 먼저 풀어야 한다.
     const fresh = (input.cards ?? []).filter(
-      (c) => !kept.some((k) => k.kind === c.kind && k.text === c.text),
+      (c) => !kept.some((k) => k.kind === c.kind && decryptText(k.text) === c.text),
     );
     await insertCards(tx as unknown as typeof sql, target.case_id, sessionId, fresh);
 

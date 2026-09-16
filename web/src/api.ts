@@ -188,8 +188,8 @@ export type RecordInput = {
   held_at?: string;
   is_closing?: boolean;
   memo: string;
-  method?: 'in_person' | 'phone' | 'video' | 'visit';
-  place?: string;
+  method?: ConsultationMethod;
+  place?: string | null;
   next_goal_text?: string | null;
   overall_goal?: string | null;
   cards?: Array<{ kind: string; text: string; section: string; area?: string }>;
@@ -373,7 +373,12 @@ export type NewCaseInput = {
   sessions_planned?: number;
 };
 
+export type ConsultationMethod = 'in_person' | 'phone' | 'video' | 'visit' | 'other';
+
 export type IntakeInput = {
+  held_at?: string;
+  method?: ConsultationMethod;
+  place?: string | null;
   memo?: string;
   overall_goal?: string | null;
   detail?: Record<string, unknown>;
@@ -382,6 +387,9 @@ export type IntakeInput = {
 
 export type IntakeView = {
   session_id: number | null;
+  held_at: string | null;
+  method: ConsultationMethod | null;
+  place: string | null;
   memo: string | null;
   detail: Record<string, unknown>;
   overall_goal: string | null;
@@ -402,7 +410,7 @@ export const createCase = (body: NewCaseInput) =>
 export type NewSessionInput = {
   is_closing?: boolean;
   scheduled_at: string;
-  method: 'in_person' | 'phone' | 'video' | 'visit';
+  method: ConsultationMethod;
   place?: string;
   plan_memo?: string;
 };

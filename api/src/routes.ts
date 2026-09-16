@@ -47,6 +47,11 @@ import {
 // 영역은 국가 표준 10종+기타 하나뿐이다(SPEC §8). 여기에 목록을 또 적으면 이번처럼 어긋난다.
 const area = z.enum(LIFE_AREAS);
 
+// 실제 상담 방식. 'visit' 은 옛 기록에 남아 있어 받아들이고, 새 선택지는 'other' 까지다.
+const sessionMethod = z.enum(['in_person', 'phone', 'video', 'visit', 'other']);
+// 상담 일시는 ISO datetime 만 받는다 — 잘못 들어온 날짜가 조용히 저장되지 않게.
+const isoDateTime = z.string().datetime({ offset: true });
+
 const cardInput = z.object({
   kind: z.enum(['fact', 'question', 'promise', 'judgment']),
   text: z.string().min(1),
@@ -243,7 +248,9 @@ app.put('/cases/:id/intake', async (c) => {
   const caseId = await caseAccess(c.req.param('id'), c.get('actor').id);
   const body = z
     .object({
-      held_at: z.string().optional(),
+      held_at: isoDateTime.optional(),
+      method: sessionMethod.optional(),
+      place: z.string().nullable().optional(),
       memo: z.string().optional(),
       // 전체 상담 목표는 비워둘 수 있다.
       overall_goal: z.string().nullable().optional(),
@@ -259,8 +266,8 @@ app.post('/cases/:id/sessions', async (c) => {
   const body = z
     .object({
       scheduled_at: z.string(),
-      method: z.enum(['in_person', 'phone', 'video', 'visit']),
-      place: z.string().optional(),
+      method: sessionMethod,
+      place: z.string().nullable().optional(),
       plan_memo: z.string().optional(),
       is_closing: z.boolean().optional(),
     })
@@ -270,6 +277,7 @@ app.post('/cases/:id/sessions', async (c) => {
   }
   return c.json(await service.planSession(caseId, body), 201);
 });
+
 
 app.get('/cases/:id', async (c) => {
   const caseId = await caseAccess(c.req.param('id'), c.get('actor').id);
@@ -287,10 +295,10 @@ app.patch('/sessions/:id', async (c) => {
   const sessionId = await sessionAccess(c.req.param('id'), c.get('actor').id);
   const body = z
     .object({
-      held_at: z.string().optional(),
+      held_at: isoDateTime.optional(),
       memo: z.string().min(1), // 유일한 필수 입력
-      method: z.enum(['in_person', 'phone', 'video', 'visit']).optional(),
-      place: z.string().optional(),
+      method: sessionMethod.optional(),
+      place: z.string().nullable().optional(),
       detail: z.record(z.unknown()).optional(),
       next_goal_text: z.string().nullable().optional(),
       overall_goal: z.string().nullable().optional(),

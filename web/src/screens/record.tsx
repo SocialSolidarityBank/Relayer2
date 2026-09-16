@@ -1,4 +1,4 @@
-// 상담 기록하기 — 6구획. 유일한 필수는 수기 메모다(SPEC §1, GLOSSARY §6-2).
+// 상담 기록하기 — 사용자 피드백에 따른 다섯 구획. 필수 입력은 오늘 상담 내용이다.
 // 구획이 곧 카드 분류다. 실무자는 문장마다 분류를 고르지 않는다.
 // 레이아웃은 CCC 기록 레일 계약: wire-container rail-grid record-grid > .record-side + .record-main.
 import { useEffect, useState } from 'react';
@@ -22,6 +22,7 @@ import {
   Empty,
   ErrorText,
   Field,
+  Fold,
   FormActions,
   Item,
   LineList,
@@ -65,10 +66,8 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
   const [memo, setMemo] = useState('');
   const [tasks, setTasks] = useState<Line[]>([]);
   const [questions, setQuestions] = useState<Line[]>([]);
-  const [changes, setChanges] = useState<Line[]>([]);
   const [opinion, setOpinion] = useState('');
   const [nextGoal, setNextGoal] = useState('');
-  const [overallGoal, setOverallGoal] = useState('');
   const [place, setPlace] = useState('');
   // 예정 회차가 없을 때 이 자리에서 바로 적는 일시·상담 방식.
   const [heldAt, setHeldAt] = useState(localNow());
@@ -78,7 +77,6 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
   const [outcomes, setOutcomes] = useState<Record<number, OutcomeInput>>({});
   const [taskDraft, setTaskDraft] = useState<Line>({ text: '' });
   const [questionDraft, setQuestionDraft] = useState<Line>({ text: '' });
-  const [changeDraft, setChangeDraft] = useState<Line>({ text: '' });
   // 저장해 둔 회차를 고쳐 쓰는 중이면 그 회차. 새로 쓰는 중이면 null.
   const [editing, setEditing] = useState<SessionRecord | null>(null);
   const [saving, setSaving] = useState(false);
@@ -106,7 +104,6 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
       if (!live) return;
       setBriefing(b);
       setView(v);
-      setOverallGoal(rec?.overall_goal ?? v.case.overall_goal ?? '');
 
       if (rec) {
         setEditing(rec);
@@ -118,9 +115,6 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
         setNextGoal(rec.next_goal_text ?? '');
         setTasks(rec.cards.filter((c) => c.kind === 'promise').map((c) => ({ text: c.text })));
         setQuestions(rec.cards.filter((c) => c.kind === 'question').map((c) => ({ text: c.text })));
-        setChanges(
-          rec.cards.filter((c) => c.kind === 'fact').map((c) => ({ text: c.text, area: c.area ?? undefined })),
-        );
         setOpinion(rec.cards.find((c) => c.kind === 'judgment')?.text ?? '');
         // 지난번에 매긴 결과를 그대로 다시 세운다. 안 그러면 고쳐 쓰기가 전부 미확인으로 덮는다.
         const prior: Record<number, OutcomeInput> = {};
@@ -150,12 +144,10 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
       setNextGoal('');
       setTasks([]);
       setQuestions([]);
-      setChanges([]);
       setOpinion('');
       setOutcomes({});
       setTaskDraft({ text: '' });
       setQuestionDraft({ text: '' });
-      setChangeDraft({ text: '' });
       setPlace(planned?.place ?? '');
       setIsClosing(planned?.is_closing ?? false);
       setMethod((planned?.method as NewSessionInput['method']) ?? 'in_person');
@@ -214,19 +206,12 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
         method,
         is_closing: isClosing,
         memo,
-        place: inPerson && place ? place : undefined,
+        place: inPerson ? place.trim() || null : null,
         next_goal_text: nextGoal.trim() || null,
-        overall_goal: overallGoal.trim() || null,
         cards: [
           // `추가`를 누르지 않고 적어만 둔 줄도 함께 저장한다.
           ...withDraft(tasks, taskDraft).map((t) => ({ kind: 'promise', text: t.text, section: 'promise' })),
           ...withDraft(questions, questionDraft).map((q) => ({ kind: 'question', text: q.text, section: 'question' })),
-          ...withDraft(changes, changeDraft).map((c) => ({
-            kind: 'fact',
-            text: c.text,
-            section: 'change',
-            area: c.area,
-          })),
           ...(opinion.trim() ? [{ kind: 'judgment', text: opinion.trim(), section: 'judgment' }] : []),
         ],
         outcomes: Object.values(outcomes),
@@ -346,14 +331,7 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
 
         <main className="record-main">
           {/* 일시·방식·장소는 한 묶음이다. 장소는 대면일 때만 나오고 방식 바로 아래에 붙는다(요구 14). */}
-          <Card
-            title="상담 일시와 상담 방식"
-            hint={
-              session
-                ? '잡아 둔 일정이에요. 실제로 만난 시각이 다르면 여기서 고쳐요.'
-                : '잡아 둔 일정이 없어요. 언제 만났는지 여기서 적으면 이 회차가 만들어져요.'
-            }
-          >
+          <Card title="1. 오늘 상담 내용">
             <Field label="상담 일시" htmlFor="held-at" required>
               <input
                 id="held-at"
@@ -375,18 +353,16 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
               ))}
             </ChoiceGroup>
             {inPerson && (
-              <Field label="상담 장소" htmlFor="place" hint="대면일 때만 적어요.">
+              <Field label="상담 장소" htmlFor="place">
                 <input id="place" type="text" value={place} onChange={(e) => setPlace(e.target.value)} />
               </Field>
             )}
-          </Card>
 
-          <Card title="1. 상담 내용" hint="상담 내용만 적어도 저장할 수 있어요.">
-            <Field label="상담 내용" htmlFor="memo" control="textarea" required>
+            <Field label="오늘 상담 내용" htmlFor="memo" control="textarea" required>
               <textarea
                 id="memo"
                 rows={5}
-                aria-label="상담 내용"
+                aria-label="오늘 상담 내용"
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
                 placeholder="오늘 나눈 이야기를 적어 주세요."
@@ -394,7 +370,7 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
             </Field>
           </Card>
 
-          <Card title="2. 수행할 과제" hint="다음 상담의 확인할 과제로 올라가요.">
+          <Card title="2. 수행할 과제">
             <LineList
               id="task"
               label="수행할 과제"
@@ -416,7 +392,7 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
             )}
           </Card>
 
-          <Card title="3. 다음에 물어볼 것" hint="다음 상담의 오늘 물어볼 것으로 올라가요.">
+          <Card title="3. 다음에 물어볼 것">
             <LineList
               id="question"
               label="다음에 물어볼 것"
@@ -428,20 +404,8 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
             />
           </Card>
 
-          <Card title="4. 달라진 것" hint="비워 두면 이번 회차 미확인으로 남아요. 변화 없음이 아니에요.">
-            <LineList
-              id="change"
-              label="달라진 것"
-              placeholder="예: 월세 계약을 6개월 연장함"
-              withArea
-              lines={changes}
-              draft={changeDraft}
-              onDraft={setChangeDraft}
-              onChange={setChanges}
-            />
-          </Card>
 
-          <Card title="5. 실무자 의견">
+          <Card title="4. 실무자 의견">
             <Field label="실무자 의견" htmlFor="opinion" control="textarea">
               <textarea
                 id="opinion"
@@ -453,22 +417,12 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
             </Field>
           </Card>
 
-          <Card title="6. 목표">
+          <Card title="5. 다음 상담 목표">
             <Field
               label="다음 상담 목표"
               htmlFor="next-goal"
-              hint="다음 상담의 오늘 상담 목표로 표시돼요."
             >
               <input id="next-goal" type="text" value={nextGoal} onChange={(e) => setNextGoal(e.target.value)} />
-            </Field>
-            <Field label="전체 상담 목표" htmlFor="overall-goal" hint="고치면 이전 문구가 이력으로 남아요.">
-              <input
-                id="overall-goal"
-                type="text"
-                value={overallGoal}
-                onChange={(e) => setOverallGoal(e.target.value)}
-                placeholder="비워 두어도 괜찮아요"
-              />
             </Field>
           </Card>
 
@@ -484,9 +438,9 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
               }}
             />
           ) : (
-            <Card title="음성·수기 기록 불일치">
+            <Fold title="음성·수기 기록 불일치">
               <Empty>상담 회차를 저장한 뒤 음성을 업로드할 수 있어요.</Empty>
-            </Card>
+            </Fold>
           )}
 
           <FormActions>
