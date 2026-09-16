@@ -82,6 +82,14 @@ export const STEP1_GROUPS: readonly IntakeQuestionGroup[] = [
         options: ['대면', '전화', '온라인 화상', '가정·현장 방문', '기타', NO_RESPONSE_OPTION],
       },
       {
+        // 상담 장소는 신청 단계에서도 적는다(2026-09-16 Q). 상담 방식 바로 아래에 둔다 —
+        // 어디서 만나는지는 어떻게 만나는지와 한 덩어리다.
+        key: 'counsel_place',
+        label: '상담 장소',
+        kind: 'text',
+        hint: '대면·방문일 때 적어요. 예: 사무실 상담실, 당사자 자택',
+      },
+      {
         key: 'referral_path',
         label: '상담 신청·유입 경로',
         kind: 'select',
@@ -118,11 +126,17 @@ export const STEP1_GROUPS: readonly IntakeQuestionGroup[] = [
         key: 'application_reason',
         label: '상담을 신청한 사유',
         kind: 'multi',
-        // `복합적인 어려움`을 뺐다 — 여러 개를 고를 수 있으면 그것이 곧 복합이다.
+        // 2026-09-16 Q 확정: 돈과 집으로 좁힌다. 건강·심리·법률·가족·안전은
+        // 사유가 아니라 **이어 줄 자원**이라 아래 문항으로 갈렸다.
+        options: ['경제·재무', '부채', '일자리·소득', '주거', '기타', NO_RESPONSE_OPTION],
+      },
+      {
+        // 사유와 세트다. 사유가 "무엇 때문에 왔나"라면 이것은 "무엇으로 이어 줄까"다.
+        key: 'resource_link',
+        label: '필요 자원 연계',
+        kind: 'multi',
         options: [
-          '경제·생계 어려움', '부채·연체 문제', '일자리·소득 불안정', '주거 문제', '건강·의료 문제',
-          '심리·정서 어려움', '가족·관계 문제', '돌봄 부담', '법률·행정 문제',
-          '기타', NO_RESPONSE_OPTION,
+          '건강·의료', '심리·정서', '법률·행정', '가족', '안전', '기타', NO_RESPONSE_OPTION,
         ],
       },
       {
