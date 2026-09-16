@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { app } from './routes.ts';
+import { startRetentionSweep } from './retention.ts';
 
 const port = Number(process.env.PORT ?? 8787);
 
@@ -21,4 +22,6 @@ if (existsSync(webDist)) {
 
 serve({ fetch: app.fetch, port }, (info) => {
   console.log(`relayer on http://localhost:${info.port}`);
+  // 보유기간 청소. 뜰 때 한 번, 그 뒤 하루 한 번(2026-09-16 검수 — 아무도 안 부르고 있었다).
+  startRetentionSweep();
 });

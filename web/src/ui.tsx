@@ -48,6 +48,41 @@ export function BackLink() {
   );
 }
 
+/**
+ * 동의 문안의 표준 양식 항목. **동의를 받는 자리마다 같은 것을 보여 준다**(2026-09-16 검수).
+ *
+ * 해시에 묶인 내용이 곧 이것이다 — 무엇을 받고, 왜 받고, 얼마나 두고, 거부하면 어떻게 되는지.
+ * 이걸 감춘 채 받은 동의는 당사자가 본 적 없는 문안에 대한 동의다.
+ */
+export function ConsentDetail({
+  copy,
+}: {
+  copy: {
+    items: string[];
+    purpose_text: string;
+    retention_text: string;
+    refusal_text: string;
+    recipient: string | null;
+    version: string;
+    hash: string;
+  };
+}) {
+  return (
+    <Fold title="자세히 보기">
+      <DataRows
+        rows={[
+          ['무엇을 받나', copy.items.join(' · ')],
+          ['왜 받나', copy.purpose_text],
+          ['얼마나 두나', copy.retention_text],
+          ...(copy.recipient ? ([['어디로 가나', copy.recipient]] as Array<[string, ReactNode]>) : []),
+          ['거부할 수 있나', copy.refusal_text],
+          ['문안 판', `${copy.version} · 지문 ${copy.hash}`],
+        ]}
+      />
+    </Fold>
+  );
+}
+
 export function PageHeader({ title, meta }: { title: string; meta?: ReactNode }) {
   return (
     <header className="page-header">

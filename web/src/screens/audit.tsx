@@ -68,7 +68,7 @@ const KEY_LABEL: Record<string, string> = {
 };
 
 /** `fields` 한 조각을 사람 말로 편다. */
-export function fieldText(field: string): string {
+function fieldText(field: string): string {
   if (WORD[field]) return WORD[field];
   if (field.includes(':')) {
     const [domain, decision] = field.split(':');

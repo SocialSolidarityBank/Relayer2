@@ -29,7 +29,7 @@ export function InviteScreen({ token, onDone }: { token: string; onDone: () => v
       <>
         <PageHeader title="쓸 수 없는 초대예요" />
         <Card title="다시 받아 주세요">
-          <p className="wire-hint">기한이 지났거나 이미 쓰인 링크예요. 초대한 분께 새 링크를 부탁해 주세요.</p>
+          <p className="panel-meta">기한이 지났거나 이미 쓰인 링크예요. 초대한 분께 새 링크를 부탁해 주세요.</p>
         </Card>
       </>
     );

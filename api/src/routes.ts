@@ -18,7 +18,14 @@ import {
 import { AiUnavailable, approveDraft, draftSession, latestDraft } from './ai.ts';
 import { audit, auditCsv, auditSummary, listAudit, AUDIT_KIND_LIST } from './audit.ts';
 import { accessState, issueAccess, openAccess, revokeAccess } from './participant-access.ts';
-import { CONSENT_COPY, CONSENT_DECISIONS, CONSENT_DOMAINS, COPY_VERSION, copyHash } from './consent.ts';
+import {
+  activeDomains,
+  CONSENT_COPY,
+  CONSENT_DECISIONS,
+  CONSENT_DOMAINS,
+  COPY_VERSION,
+  copyHash,
+} from './consent.ts';
 import { LIFE_AREAS } from './domain/types.ts';
 import * as service from './service.ts';
 import * as settings from './settings.ts';
@@ -595,12 +602,17 @@ app.post('/settings/requests/:id', async (c) => {
  */
 /**
  * 지금 쓰는 동의 문안. **읽기만 한다** — 문안은 코드가 정본이다(`consent.ts`).
- * 화면에서 고치게 하면 글자 하나에 이미 받은 동의가 전부 `확인 필요`로 떨어진다.
+ *
+ * 관리자 전용이 아니다. **동의를 받는 화면이 이것을 써야 한다** — 화면이 문안을 복사해 두면
+ * 서버 문안이 바뀌어도 화면은 옛 글을 보여 주며 동의를 받는다. 그렇게 받은 동의는
+ * 당사자가 본 적 없는 문안에 대한 동의다(2026-09-16 검수에서 실제로 그 상태였다).
+ *
+ * 꺼진 영역은 내지 않는다 — 음성이 꺼져 있으면 녹음 동의를 받을 이유가 없다.
  */
-app.get('/settings/consent-copy', async (c) => {
-  if (adminOnly(c)) return c.json(DENY, 403);
+app.get('/consent-copy', async (c) => {
+  const active = new Set(activeDomains());
   return c.json(
-    CONSENT_DOMAINS.map((domain) => {
+    CONSENT_DOMAINS.filter((d) => active.has(d)).map((domain) => {
       const c = CONSENT_COPY[domain];
       return {
         domain,
@@ -611,6 +623,8 @@ app.get('/settings/consent-copy', async (c) => {
         retention_text: c.retentionText,
         refusal_text: c.refusalText,
         recipient: c.provider ? `${c.provider.legalRecipient} (${c.provider.country})` : null,
+        // 개인정보 수집·이용이 없으면 사례를 열 수 없다. 나머지는 골라 받는다.
+        required: domain === 'personal_data_collection_use',
         version: COPY_VERSION,
         hash: copyHash(domain).slice(0, 12),
       };

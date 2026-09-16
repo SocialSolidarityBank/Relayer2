@@ -47,6 +47,7 @@ import {
   Badge,
   Button,
   Card,
+  ConsentDetail,
   DataRows,
   Empty,
   ErrorText,
@@ -296,7 +297,7 @@ function ProfilePane() {
       </Field>
       <FormActions>
         {err && <ErrorText>{err}</ErrorText>}
-        {saved && !err && <span className="wire-hint">저장했어요.</span>}
+        {saved && !err && <span className="panel-meta">저장했어요.</span>}
         <Button variant="primary" onClick={() => void save()}>
           저장하기
         </Button>
@@ -544,7 +545,7 @@ function InvitePane() {
         </FormActions>
         {link && (
           <div className="wire-repeat-card">
-            <p className="wire-hint">
+            <p className="panel-meta">
               <strong>지금 한 번만 보여요.</strong> 창을 닫으면 다시 볼 수 없어요.
             </p>
             <code style={{ wordBreak: 'break-all' }}>{link}</code>
@@ -680,7 +681,7 @@ function OrgPane() {
         <input id="og-tel" value={org.phone ?? ''} onChange={(e) => setOrg({ ...org, phone: e.target.value })} />
       </Field>
       <FormActions>
-        {saved && <span className="wire-hint">저장했어요.</span>}
+        {saved && <span className="panel-meta">저장했어요.</span>}
         <Button variant="primary" onClick={() => void saveOrg(org).then(setOrg).then(() => setSaved(true))}>
           저장하기
         </Button>
@@ -764,18 +765,10 @@ function ConsentPane() {
           <Empty>불러오는 중이에요.</Empty>
         ) : (
           rows.map((r) => (
-            <Fold key={r.domain} title={r.label} desc={r.body}>
-              <DataRows
-                rows={[
-                  ['무엇을 받나', r.items.join(' · ')],
-                  ['왜 받나', r.purpose_text],
-                  ['얼마나 두나', r.retention_text],
-                  ...(r.recipient ? ([['어디로 가나', r.recipient]] as Array<[string, string]>) : []),
-                  ['거부할 수 있나', r.refusal_text],
-                  ['문안 판', `${r.version} · 지문 ${r.hash}`],
-                ]}
-              />
-            </Fold>
+            <div className="wire-repeat-card" key={r.domain}>
+              <Item title={r.label} desc={r.body} />
+              <ConsentDetail copy={r} />
+            </div>
           ))
         )}
       </Card>

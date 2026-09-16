@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { applyTheme, followSystemTheme, initialTheme, type Theme } from './theme.ts';
 import { getMe, logout, Unauthorized, type Me } from './api.ts';
 import { AccessScreen } from './screens/access.tsx';
-import { AuditScreen } from './screens/audit.tsx';
 import { BackLink } from './ui.tsx';
 import { InviteScreen } from './screens/invite.tsx';
 import { SettingsScreen, visibleGroups } from './screens/settings.tsx';
@@ -100,7 +99,6 @@ export function Routes() {
     // 사례를 안 고른 채 상담 기록하기·상담 일정 등록을 누르면 여기로 온다.
     if (hash === '#/pick/record') return <ParticipantsScreen pickFor="record" />;
     if (hash === '#/pick/schedule') return <ParticipantsScreen pickFor="schedule" />;
-    if (hash === '#/audit') return <AuditScreen />;
     // 설정은 묶음 단위다. 낡은 항목 주소로 들어오면 그 항목이 든 묶음으로 보낸다.
     if (hash === '#/settings') { window.location.hash = '#/settings/me'; return null; }
     const inSettings = hash.match(/^#\/settings\/([a-z-]+)$/);
@@ -179,7 +177,9 @@ export function Routes() {
             <ul className="navigation-list">
               {link('#/participants', '당사자 목록')}
               {link('#/participants/new', '당사자 등록')}
-              {caseId && link(`#/cases/${caseId}/record`, '상담 기록하기')}
+              {/* 기록하기는 늘 선다. 사례를 안 열었으면 누구 것인지 고르는 자리로 보낸다 —
+                  메뉴에서 사라지면 "그 기능이 없다"로 읽힌다. */}
+              {link(caseId ? `#/cases/${caseId}/record` : '#/pick/record', '상담 기록하기')}
               {caseId && link(`#/cases/${caseId}/info`, '당사자 정보')}
             </ul>
           </div>

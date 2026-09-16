@@ -159,7 +159,20 @@ export type RecordInput = {
   outcomes?: OutcomeInput[];
 };
 
-export const CONSENT_DOMAINS = ['personal_data_collection_use', 'sensitive_information_processing'] as const;
+/**
+ * 일곱 영역. 서버 `api/src/consent.ts` 와 같은 순서·같은 이름이다.
+ * **문안은 여기 두지 않는다** — 화면이 문안을 복사해 두면 서버가 바뀌어도 옛 글로 동의를 받는다.
+ * 문안은 `getConsentCopy()` 로 받아 쓴다(2026-09-16 검수).
+ */
+export const CONSENT_DOMAINS = [
+  'personal_data_collection_use',
+  'sensitive_information_processing',
+  'counseling_recording',
+  'external_stt_processing',
+  'external_llm_cross_border_processing',
+  'voice_original_retention_period',
+  'document_attachment',
+] as const;
 export type ConsentDomain = (typeof CONSENT_DOMAINS)[number];
 export type ConsentDecision = 'grant' | 'withdraw' | 'decline';
 
@@ -477,7 +490,7 @@ export const decideRequest = (id: number, decision: 'approved' | 'rejected') =>
   json<{ ok: true }>(`/settings/requests/${id}`, { method: 'POST', body: JSON.stringify({ decision }) });
 
 export type ConsentCopy = {
-  domain: string;
+  domain: ConsentDomain;
   label: string;
   body: string;
   items: string[];
@@ -488,8 +501,10 @@ export type ConsentCopy = {
   recipient: string | null;
   version: string;
   hash: string;
+  /** 이것이 없으면 사례를 열 수 없다. */
+  required: boolean;
 };
-export const getConsentCopy = () => json<ConsentCopy[]>('/settings/consent-copy');
+export const getConsentCopy = () => json<ConsentCopy[]>('/consent-copy');
 
 export const getConnections = () => json<Connections>('/settings/connections');
 

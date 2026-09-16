@@ -1,23 +1,10 @@
 // 당사자 등록 — 당사자 + PII 금고 + 참여 사업 하나를 한 번에 만든다(GLOSSARY §2).
 // 정본 화면 이름이다. `사례 등록`이라는 이름은 존재하지 않는다.
 import { useEffect, useState } from 'react';
-import { createCase, listPrograms, CONSENT_DOMAINS, type ConsentDomain, type Program } from '../api.ts';
-import { Button, Card, Choice, ErrorText, Field, FormActions, PageHeader } from '../ui.tsx';
+import { createCase, getConsentCopy, listPrograms, type ConsentCopy, type Program } from '../api.ts';
+import { Button, Card, Choice, ConsentDetail, ErrorText, Field, FormActions, PageHeader } from '../ui.tsx';
 
 
-
-/** 문안은 정본(CCC S7)이다. 화면에서 줄이거나 바꾸지 않는다 — 바꾸면 해시가 달라진다. */
-const CONSENT_COPY: Record<ConsentDomain, { label: string; copy: string; required?: boolean }> = {
-  personal_data_collection_use: {
-    label: '개인정보 수집·이용',
-    copy: '개인정보를 상담과 사례관리 제공 및 상담 기록 관리 목적으로 수집·이용합니다.',
-    required: true,
-  },
-  sensitive_information_processing: {
-    label: '민감정보 처리',
-    copy: '건강·채무·주거 등 상담에 포함될 수 있는 민감정보를 사례관리 목적에 필요한 범위에서 처리합니다.',
-  },
-};
 
 export function ParticipantNewScreen() {
   const [name, setName] = useState('');
@@ -35,7 +22,12 @@ export function ParticipantNewScreen() {
   }, []);
   const [planned, setPlanned] = useState('');
   // 동의는 영역마다 따로 받는다. 한 번에 묶어 받지 않는다(P1).
+  // **문안은 서버에서 받는다** — 화면이 복사해 두면 서버가 바뀌어도 옛 글로 동의를 받는다(2026-09-16 검수).
+  const [copies, setCopies] = useState<ConsentCopy[]>([]);
   const [granted, setGranted] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    void getConsentCopy().then(setCopies);
+  }, []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,9 +42,9 @@ export function ParticipantNewScreen() {
         program_name: program.trim(),
         sessions_planned: planned ? Number(planned) : undefined,
         // 고르지 않은 영역은 거부로 남긴다. 빈 칸을 동의로 읽지 않는다.
-        consents: CONSENT_DOMAINS.map((domain) => ({
-          domain,
-          decision: granted[domain] ? ('grant' as const) : ('decline' as const),
+        consents: copies.map((c) => ({
+          domain: c.domain,
+          decision: granted[c.domain] ? ('grant' as const) : ('decline' as const),
         })),
       });
       // 정본 문구: '등록했어요. 이제 첫 상담을 기록할 수 있어요.'
@@ -113,21 +105,21 @@ export function ParticipantNewScreen() {
           </Field>
         </Card>
 
-        <Card title="동의" hint="영역마다 따로 받아요. 고르지 않으면 거부로 남아요.">
-          {CONSENT_DOMAINS.map((domain) => (
-            <div className="wire-repeat-card" key={domain}>
+        {/* 문안 전체를 보여 주고 받는다. 접어 둔 것을 펴면 무엇을 받고 얼마나 두고
+            거부하면 어떻게 되는지가 나온다 — 해시에 묶인 내용 그대로다. */}
+        <Card title="동의">
+          {copies.map((c) => (
+            <div className="wire-repeat-card" key={c.domain}>
               <Choice
                 type="checkbox"
-                label={`${CONSENT_COPY[domain].label}${CONSENT_COPY[domain].required ? ' (필수)' : ''}`}
-                hint={CONSENT_COPY[domain].copy}
-                checked={!!granted[domain]}
-                onChange={() => setGranted((prev) => ({ ...prev, [domain]: !prev[domain] }))}
+                label={`${c.label}${c.required ? ' (필수)' : ''}`}
+                hint={c.body}
+                checked={!!granted[c.domain]}
+                onChange={() => setGranted((prev) => ({ ...prev, [c.domain]: !prev[c.domain] }))}
               />
+              <ConsentDetail copy={c} />
             </div>
           ))}
-          <p className="panel-meta">
-            민감정보 처리에 동의하지 않으면 상담 기록을 저장할 수 없어요. 나중에 당사자 정보에서 받을 수 있어요.
-          </p>
         </Card>
 
         <FormActions>

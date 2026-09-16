@@ -5,6 +5,7 @@ import {
   documentHref,
   getAccess,
   getCaseDetail,
+  getConsentCopy,
   getConsents,
   issueAccess,
   listDocuments,
@@ -13,10 +14,23 @@ import {
   uploadDocument,
   type AccessState,
   type CaseDetail,
+  type ConsentCopy,
   type ConsentView,
   type DocumentRow,
 } from '../api.ts';
-import { Badge, Button, Card, DataRows, Empty, ErrorText, Field, FormActions, Item, PageHeader } from '../ui.tsx';
+import {
+  Badge,
+  Button,
+  Card,
+  ConsentDetail,
+  DataRows,
+  Empty,
+  ErrorText,
+  Field,
+  FormActions,
+  Item,
+  PageHeader,
+} from '../ui.tsx';
 import { BriefingScreen } from './briefing.tsx';
 
 const TABS = ['회차별 요약', '15초 다시보기', '목표', '정보'] as const;
@@ -158,10 +172,13 @@ function Goals({ detail }: { detail: CaseDetail }) {
 /** 동의 — 영역마다 현재 상태와 그 자리에서 받기·철회. 사건은 쌓이기만 한다. */
 function Consents({ caseId }: { caseId: number }) {
   const [rows, setRows] = useState<ConsentView | null>(null);
+  const [copies, setCopies] = useState<Record<string, ConsentCopy>>({});
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     void getConsents(caseId).then(setRows);
+    // 문안 전체를 서버에서 받는다. 받는 자리마다 같은 것을 보여 줘야 한다(2026-09-16 검수).
+    void getConsentCopy().then((list) => setCopies(Object.fromEntries(list.map((c) => [c.domain, c]))));
   }, [caseId]);
 
   const decide = async (domain: ConsentView[number]['domain'], decision: 'grant' | 'withdraw') => {
@@ -180,7 +197,7 @@ function Consents({ caseId }: { caseId: number }) {
   };
 
   return (
-    <Card title="동의" hint="지운 적 없는 사건을 접어 낸 현재 상태예요. 철회해도 지난 기록은 남아요.">
+    <Card title="동의">
       {rows === null ? (
         <Empty>불러오는 중이에요.</Empty>
       ) : (
@@ -202,6 +219,7 @@ function Consents({ caseId }: { caseId: number }) {
               }
             />
             {row.decided_at && <p className="panel-meta">{dateLabel(row.decided_at)}</p>}
+            {copies[row.domain] && <ConsentDetail copy={copies[row.domain]} />}
           </div>
         ))
       )}
