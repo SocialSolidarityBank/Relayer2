@@ -22,12 +22,25 @@ const AI_OFF_LABEL: Record<string, string> = {
 const source = (item: BriefingItem): string =>
   `${item.source_session_seq}회차${item.last_result === 'unchecked' ? ' · 지난 회차 미확인' : ''}`;
 
-/** `hideHeader` 는 당사자 정보 탭 안에서 쓸 때다. 제목이 두 번 뜨지 않게 한다. */
-export function BriefingScreen({ caseId, hideHeader }: { caseId: number; hideHeader?: boolean }) {
+/**
+ * `hideHeader` 는 당사자 정보 탭 안에서 쓸 때다. 제목이 두 번 뜨지 않게 한다.
+ * `seq` 를 주면 **그 회차까지 쌓인 것**을 본다 — 기록은 회차마다 쌓이므로
+ * 다시보기도 회차마다 다르다(2026-09-16 Q).
+ */
+export function BriefingScreen({
+  caseId,
+  hideHeader,
+  seq,
+}: {
+  caseId: number;
+  hideHeader?: boolean;
+  seq?: number;
+}) {
   const [briefing, setBriefing] = useState<Briefing | null>(null);
   useEffect(() => {
-    void getBriefing(caseId).then(setBriefing);
-  }, [caseId]);
+    setBriefing(null);
+    void getBriefing(caseId, seq).then(setBriefing);
+  }, [caseId, seq]);
 
   if (!briefing) return <p className="empty">불러오는 중이에요.</p>;
   const card = briefing.participant_card;

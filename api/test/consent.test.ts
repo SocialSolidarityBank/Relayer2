@@ -84,7 +84,7 @@ describe('음성 세 영역', () => {
   it('보유기간이 해시에 묶인다', () => {
     // 음성 보유기간은 "얼마나 갖고 있는가"가 동의의 내용이다. 기간이 바뀌면 다시 받아야 한다.
     expect(canonicalPreimage('voice_original_retention_period')).toContain(
-      'retentionDuration=default_temporary_d85',
+      'retentionDuration=institution_retention_1y',
     );
     expect(canonicalPreimage('personal_data_collection_use')).toContain('retentionDuration=<null>');
   });

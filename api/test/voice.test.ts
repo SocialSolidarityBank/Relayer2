@@ -46,7 +46,7 @@ describe('음성 동의 문안', () => {
     // "얼마나 갖고 있는가"가 동의의 내용이다. 기간이 바뀌면 다시 받아야 한다.
     const before = copyHash('voice_original_retention_period');
     expect(canonicalPreimage('voice_original_retention_period')).toContain(
-      'retentionDuration=default_temporary_d85',
+      'retentionDuration=institution_retention_1y',
     );
     expect(before).toMatch(/^[0-9a-f]{64}$/);
   });
@@ -58,8 +58,9 @@ describe('음성 동의 문안', () => {
     expect(CONSENT_COPY.external_stt_processing.provider?.id).toBe('azure');
   });
 
-  it('여섯 영역의 해시가 서로 다르다', () => {
+  it('영역마다 해시가 서로 다르다', () => {
     // 한 영역의 동의가 다른 영역을 대신하지 않는다(정본 §5).
+    // 일곱째 `document_attachment` 는 정본 밖이다(2026-09-16 Q).
     const hashes = [
       'personal_data_collection_use',
       'sensitive_information_processing',
@@ -67,7 +68,8 @@ describe('음성 동의 문안', () => {
       'external_stt_processing',
       'external_llm_cross_border_processing',
       'voice_original_retention_period',
+      'document_attachment',
     ].map((d) => copyHash(d as Parameters<typeof copyHash>[0]));
-    expect(new Set(hashes).size).toBe(6);
+    expect(new Set(hashes).size).toBe(7);
   });
 });

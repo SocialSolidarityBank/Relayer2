@@ -9,7 +9,14 @@ import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { assertConsent } from './service.ts';
 import { audit } from './audit.ts';
-import { CONSENT_COPY, sttEnabled, STT_PROVIDERS, voiceEnabled, type SttProviderId } from './consent.ts';
+import {
+  CONSENT_COPY,
+  RETENTION_DAYS,
+  sttEnabled,
+  STT_PROVIDERS,
+  voiceEnabled,
+  type SttProviderId,
+} from './consent.ts';
 import { sql } from './db.ts';
 import { maskAll } from './domain/masking.ts';
 import { decryptPii, decryptText, encryptText } from './pii.ts';
@@ -22,8 +29,7 @@ const REGION = process.env.AZURE_SPEECH_REGION ?? 'koreacentral';
 /** 음성이 사는 곳. 기관 디스크다. 백업 스크립트는 여기를 건드리지 않는다. */
 const VOICE_ROOT = resolve(process.env.VOICE_ROOT ?? './voice');
 
-/** 동의한 보유기간을 날 수로 옮긴다. 정본이 허용하는 값은 지금 하나뿐이다. */
-const RETENTION_DAYS: Record<string, number> = { default_temporary_d85: 85 };
+
 
 export class SttUnavailable extends Error {}
 

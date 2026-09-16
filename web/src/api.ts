@@ -134,7 +134,8 @@ export const closeCase = (caseId: number, body: { close_reason: string; unfinish
 export const listParticipants = () => json<ParticipantRow[]>('/participants');
 export const listSchedules = () => json<ScheduleRow[]>('/schedules');
 
-export const getBriefing = (caseId: number) => json<Briefing>(`/cases/${caseId}/briefing`);
+export const getBriefing = (caseId: number, seq?: number) =>
+  json<Briefing>(`/cases/${caseId}/briefing${seq ? `?seq=${seq}` : ''}`);
 export const getCase = (caseId: number) => json<CaseView>(`/cases/${caseId}`);
 
 export type OutcomeInput = {
@@ -229,6 +230,39 @@ export type AuditRow = {
 };
 
 export const listAudit = () => json<AuditRow[]>('/audit');
+
+export type DocumentRow = {
+  id: number;
+  case_id: number;
+  session_id: number | null;
+  label: string;
+  bytes: number;
+  content_type: string;
+  delete_after: string;
+  deleted_at: string | null;
+  created_at: string;
+};
+
+export const listDocuments = (caseId: number) => json<DocumentRow[]>(`/cases/${caseId}/documents`);
+
+/** 파일은 본문 그대로 보낸다. 이름과 회차는 쿼리로 간다. */
+export const uploadDocument = async (
+  caseId: number,
+  file: File,
+  label: string,
+  sessionId?: number,
+): Promise<DocumentRow> => {
+  const q = new URLSearchParams({ label });
+  if (sessionId) q.set('session_id', String(sessionId));
+  return json<DocumentRow>(`/cases/${caseId}/documents?${q}`, {
+    method: 'POST',
+    headers: { 'content-type': file.type },
+    body: file,
+  });
+};
+
+/** 내려받기는 서버가 감사에 남긴다. 화면은 주소만 연다. */
+export const documentHref = (id: number): string => `${BASE}/documents/${id}`;
 
 export const getConsents = (caseId: number) => json<ConsentView>(`/cases/${caseId}/consents`);
 

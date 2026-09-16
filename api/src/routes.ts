@@ -3,6 +3,12 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { actorFromCookie, clearCookie, issueCookie, login, type Actor } from './auth.ts';
 import {
+  DocumentRejected,
+  listDocuments,
+  readDocument,
+  saveDocument,
+} from './documents.ts';
+import {
   approveTranscript,
   draftTranscript,
   latestTranscript,
@@ -45,6 +51,8 @@ app.onError((err, c) => {
   if (err instanceof AiUnavailable || err instanceof SttUnavailable) {
     return c.json({ error: err.message }, 503);
   }
+  // 받지 않는 파일은 **보낸 쪽 잘못**이다. 서버 고장이 아니다.
+  if (err instanceof DocumentRejected) return c.json({ error: err.message }, 400);
   // 입력이 스키마에 안 맞으면 **보낸 쪽 잘못**이다. 500 으로 답하면 서버가 고장난 줄 안다.
   // 어느 자리가 틀렸는지만 알려 준다 — 보낸 값은 되돌려주지 않는다(PII 가 섞여 있다).
   if (err instanceof z.ZodError) {
@@ -332,6 +340,39 @@ app.post('/sessions/:id/transcript/approve', async (c) => {
   return c.json(await approveTranscript(Number(c.req.param('id')), c.get('actor').id, body.text));
 });
 
+/**
+ * 서면 문서(2026-09-16 Q). 본문 그대로 받는다 — 이름과 형식은 쿼리로 온다.
+ * multipart 로 감싸도 바이트는 같고, 파싱 단계가 늘면 그만큼 실패할 자리가 는다.
+ */
+app.post('/cases/:id/documents', async (c) => {
+  const sid = Number(c.req.query('session_id'));
+  return c.json(
+    await saveDocument({
+      caseId: Number(c.req.param('id')),
+      sessionId: Number.isFinite(sid) ? sid : null,
+      label: c.req.query('label') ?? '',
+      contentType: c.req.header('content-type') ?? '',
+      bytes: new Uint8Array(await c.req.arrayBuffer()),
+      actorId: c.get('actor').id,
+    }),
+    201,
+  );
+});
+
+app.get('/cases/:id/documents', async (c) => c.json(await listDocuments(Number(c.req.param('id')))));
+
+app.get('/documents/:id', async (c) => {
+  const { row, bytes } = await readDocument(Number(c.req.param('id')), c.get('actor').id);
+  // 파일 이름은 사람이 붙인 이름을 쓴다. 원본 파일명은 저장하지 않는다.
+  return new Response(bytes, {
+    headers: {
+      'content-type': row.content_type,
+      'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(row.label)}`,
+      'cache-control': 'no-store',
+    },
+  });
+});
+
 app.get('/audit', async (c) => {
   // 열람 기록은 관리자만 본다(GLOSSARY §6-7 설정 › 열람 기록).
   if (c.get('actor').role !== 'admin') return c.json({ error: '관리자만 볼 수 있어요.' }, 403);
@@ -369,7 +410,9 @@ app.get('/schedules', async (c) => {
 
 app.get('/cases/:id/briefing', async (c) => {
   const caseId = Number(c.req.param('id'));
-  const found = await service.getBriefing(caseId);
+  // `seq` 를 주면 그 회차를 준비하던 시점으로 잘라서 본다.
+  const seq = Number(c.req.query('seq'));
+  const found = await service.getBriefing(caseId, Number.isFinite(seq) && seq > 0 ? seq : undefined);
   if (!found) return c.json({ error: 'not found' }, 404);
   if (found.participant_card.name) {
     await audit({ actorId: c.get('actor').id, action: 'case.briefing', caseId, fields: ['name'] });

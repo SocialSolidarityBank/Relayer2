@@ -674,16 +674,41 @@ export async function listSchedules(from: string, to: string): Promise<ScheduleR
   return out;
 }
 
-export async function getBriefing(caseId: number): Promise<Briefing | null> {
+/**
+ * 15초 다시보기. `seq` 를 주면 **그 회차까지 쌓인 것**만 낸다(2026-09-16 Q).
+ *
+ * 기록은 회차마다 쌓이므로 다시보기도 회차마다 다르다. 3회차 다시보기는 3회차까지의
+ * 과제·질문·요약이고, 4회차에서 닫은 과제는 거기 없다 — 그때는 아직 열려 있었다.
+ *
+ * `seq` 가 없으면 지금이다 — 다음 상담을 준비하는 화면이고, 이것이 기본이다.
+ */
+export async function getBriefing(caseId: number, seq?: number): Promise<Briefing | null> {
   const loaded = await loadCase(caseId);
   if (!loaded) return null;
+
+  if (seq === undefined) {
+    return buildBriefing({
+      supportCase: loaded.supportCase,
+      pseudonym: loaded.pseudonym,
+      name: decryptPii(loaded.vault?.enc_name ?? null),
+      sessions: loaded.sessions,
+      cards: loaded.cards,
+      outcomes: loaded.outcomes,
+    });
+  }
+
+  // 그 회차까지만 남긴다. 회차를 모르는 자료는 버리지 않는다 — 있었다는 사실이 기록이다.
+  const seqBySession = new Map(loaded.sessions.map((s) => [s.id, s.seq]));
+  const upTo = (sessionId: number | null): boolean =>
+    sessionId === null || (seqBySession.get(sessionId) ?? 0) <= seq;
+
   return buildBriefing({
     supportCase: loaded.supportCase,
     pseudonym: loaded.pseudonym,
     name: decryptPii(loaded.vault?.enc_name ?? null),
-    sessions: loaded.sessions,
-    cards: loaded.cards,
-    outcomes: loaded.outcomes,
+    sessions: loaded.sessions.filter((s) => s.seq <= seq),
+    cards: loaded.cards.filter((c) => upTo(c.source_session_id)),
+    outcomes: loaded.outcomes.filter((o) => upTo(o.session_id)),
   });
 }
 

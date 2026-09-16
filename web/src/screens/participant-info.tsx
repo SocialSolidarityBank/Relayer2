@@ -2,17 +2,21 @@
 // 당사자 카드와 할 일 전체는 두지 않는다(요구 25·28). 종결 버튼은 `정보` 탭에 있다.
 import { useEffect, useState } from 'react';
 import {
+  documentHref,
   getAccess,
   getCaseDetail,
   getConsents,
   issueAccess,
+  listDocuments,
   recordConsent,
   revokeAccess,
+  uploadDocument,
   type AccessState,
   type CaseDetail,
   type ConsentView,
+  type DocumentRow,
 } from '../api.ts';
-import { Badge, Button, Card, DataRows, Empty, FormActions, Item, PageHeader } from '../ui.tsx';
+import { Badge, Button, Card, DataRows, Empty, ErrorText, Field, FormActions, Item, PageHeader } from '../ui.tsx';
 import { BriefingScreen } from './briefing.tsx';
 
 const TABS = ['회차별 요약', '15초 다시보기', '목표', '정보'] as const;
@@ -291,6 +295,130 @@ function Access({ participantId }: { participantId: number }) {
   );
 }
 
+/**
+ * 서면 문서 — 상담 중 받은 종이·파일을 사례에 붙인다(2026-09-16 Q).
+ * 올리려면 `서면 문서 보관` 동의가 있어야 하고, **내려받으면 감사에 남는다.**
+ */
+function Documents({ caseId }: { caseId: number }) {
+  const [rows, setRows] = useState<DocumentRow[] | null>(null);
+  const [label, setLabel] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void listDocuments(caseId).then(setRows);
+  }, [caseId]);
+
+  const add = async () => {
+    if (!file || !label.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await uploadDocument(caseId, file, label.trim());
+      setRows(await listDocuments(caseId));
+      setLabel('');
+      setFile(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '올리지 못했어요.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const size = (n: number) => (n < 1024 * 1024 ? `${Math.ceil(n / 1024)}KB` : `${(n / 1024 / 1024).toFixed(1)}MB`);
+
+  return (
+    <Card
+      title="서면 문서"
+      hint="상담에서 받은 종이·파일이에요. 기관 안에만 두고 1년 뒤 지워요. 누가 열었는지 기록에 남아요."
+    >
+      {rows === null ? (
+        <Empty>불러오는 중이에요.</Empty>
+      ) : rows.length === 0 ? (
+        <Empty>받은 문서가 없어요.</Empty>
+      ) : (
+        rows.map((d) => (
+          <div className="wire-repeat-card" key={d.id}>
+            <Item
+              title={d.label}
+              desc={`${size(d.bytes)} · ${dateLabel(d.created_at)} 받음 · ${dateLabel(d.delete_after)}에 지워요${
+                d.deleted_at ? ' · 지워짐' : ''
+              }`}
+              action={
+                d.deleted_at ? undefined : (
+                  <a className="wire-button" data-variant="secondary" href={documentHref(d.id)}>
+                    <span className="wire-button-text">내려받기</span>
+                  </a>
+                )
+              }
+            />
+          </div>
+        ))
+      )}
+
+      <Field label="문서 이름" htmlFor="doc-label" hint="예: 채무 내역서, 진단서. 파일 이름은 쓰지 않아요.">
+        <input id="doc-label" value={label} onChange={(e) => setLabel(e.target.value)} />
+      </Field>
+      <Field label="파일" htmlFor="doc-file" hint="PDF·이미지·문서 파일, 20MB 까지.">
+        <input
+          id="doc-file"
+          type="file"
+          accept=".pdf,.jpg,.jpeg,.png,.heic,.docx,.hwp"
+          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+        />
+      </Field>
+      <FormActions>
+        {error && <ErrorText>{error}</ErrorText>}
+        <Button variant="primary" disabled={busy || !file || !label.trim()} onClick={() => void add()}>
+          {busy ? '올리는 중…' : '문서 올리기'}
+        </Button>
+      </FormActions>
+    </Card>
+  );
+}
+
+/**
+ * 15초 다시보기 탭 — **회차를 골라 그때 화면을 본다**(2026-09-16 Q).
+ * 기본은 `지금`이다. 다음 상담을 준비하는 화면이고 그것이 이 제품의 본래 쓰임이다.
+ * 지난 회차를 고르면 그 회차까지 쌓여 있던 것이 그대로 선다.
+ */
+function BriefingTab({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
+  const done = detail.sessions.filter((s) => s.status === 'done');
+  const [seq, setSeq] = useState<number | undefined>(undefined);
+
+  return (
+    <>
+      {done.length > 0 && (
+        <Card title="언제 시점으로 볼까요" hint="지난 회차를 고르면 그때까지 쌓여 있던 것만 보여요.">
+          <div className="info-tabs">
+            <button
+              type="button"
+              className="wire-step"
+              data-active={seq === undefined}
+              onClick={() => setSeq(undefined)}
+            >
+              지금
+            </button>
+            {done.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                className="wire-step"
+                data-active={seq === s.seq}
+                onClick={() => setSeq(s.seq)}
+              >
+                {s.seq}회차
+              </button>
+            ))}
+          </div>
+        </Card>
+      )}
+      <BriefingScreen caseId={caseId} hideHeader seq={seq} />
+    </>
+  );
+}
+
 /** 정보 — 기본 정보와 상담 종결 버튼. */
 function Info({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
   const rows: Array<[string, string]> = [
@@ -307,6 +435,8 @@ function Info({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
         <DataRows rows={rows} />
       </Card>
       <Consents caseId={caseId} />
+
+      <Documents caseId={caseId} />
 
       <Access participantId={detail.case.participant_id} />
 
@@ -371,7 +501,7 @@ export function ParticipantInfoScreen({ caseId }: { caseId: number }) {
         {tab === '정보' && <Info detail={detail} caseId={caseId} />}
       </div>
       {/* 15초 다시보기는 같은 화면을 그대로 쓴다. 두 벌로 만들지 않는다. */}
-      {tab === '15초 다시보기' && <BriefingScreen caseId={caseId} hideHeader />}
+      {tab === '15초 다시보기' && <BriefingTab detail={detail} caseId={caseId} />}
     </>
   );
 }

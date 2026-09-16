@@ -11,6 +11,7 @@ export const CONSENT_DOMAINS = [
   'external_stt_processing',
   'external_llm_cross_border_processing',
   'voice_original_retention_period',
+  'document_attachment',
 ] as const;
 export type ConsentDomain = (typeof CONSENT_DOMAINS)[number];
 
@@ -36,9 +37,20 @@ export const STT_PROVIDERS = {
 } as const;
 export type SttProviderId = keyof typeof STT_PROVIDERS;
 
-/** 보유기간 문구. 정본이 허용하는 값은 지금 하나뿐이다. */
-export const RETENTION_DURATIONS = ['default_temporary_d85'] as const;
+/**
+ * 보유기간 문구.
+ *
+ * 정본(CCC S7)은 `default_temporary_d85`(85일) 하나만 둔다. 릴레이어는 **1년 하나로 통일**한다
+ * (2026-09-16 Q 확정) — 음성·기록·문서가 서로 다른 기한을 가지면 무엇이 언제 지워지는지
+ * 아무도 설명하지 못한다. 하나로 묶어야 당사자에게 한 문장으로 말할 수 있다.
+ *
+ * **정본에서 벗어나는 값이다.** 값 이름도 기간을 그대로 담아 오해를 없앤다.
+ */
+export const RETENTION_DURATIONS = ['institution_retention_1y'] as const;
 export type RetentionDuration = (typeof RETENTION_DURATIONS)[number];
+
+/** 보유기간을 날 수로. 한 자리에서만 센다. */
+export const RETENTION_DAYS: Record<RetentionDuration, number> = { institution_retention_1y: 365 };
 
 type DomainCopy = {
   label: string;
@@ -88,7 +100,17 @@ export const CONSENT_COPY: Record<ConsentDomain, DomainCopy> = {
     copy: '상담 음성 원본을 고지한 보유기간 동안 보관한 뒤 삭제합니다.',
     purpose: 'voice_original_retention',
     provider: { id: 'institution_private_storage', legalRecipient: '사회연대은행', country: 'KR' },
-    retentionDuration: 'default_temporary_d85',
+    retentionDuration: 'institution_retention_1y',
+  },
+  // 정본 여섯 영역 밖이다(2026-09-16 Q 확정). 서면·파일로 받은 문서에는
+  // 채무 내역서·진단서처럼 민감정보가 그대로 들어 있어, 민감정보 처리 동의로 덮지 않고 따로 받는다.
+  // 받은 문서는 기관 디스크에만 두고 밖으로 보내지 않는다.
+  document_attachment: {
+    label: '서면 문서 보관',
+    copy: '상담 중 받은 서면·파일 문서를 기관 안에 보관하며, 고지한 보유기간이 지나면 삭제합니다.',
+    purpose: 'document_retention',
+    provider: { id: 'institution_private_storage', legalRecipient: '사회연대은행', country: 'KR' },
+    retentionDuration: 'institution_retention_1y',
   },
 };
 
