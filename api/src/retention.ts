@@ -25,17 +25,23 @@ const SWEEPS: readonly Sweep[] = [
   { name: '열람 기록', run: sweepAudit },
 ];
 
-/** 한 판. 하나가 실패해도 나머지는 돈다 — 문서 오류로 음성이 안 지워지면 안 된다. */
+/**
+ * 한 판. 하나가 실패해도 나머지는 돈다 — 문서 오류로 음성이 안 지워지면 안 된다.
+ *
+ * **지울 것이 없어도 한 줄 남긴다.** 조용하면 돌았는지 안 돌았는지 구분할 수 없고,
+ * 그 구분이 안 되어 이 청소가 반년 동안 안 돌고 있었다(2026-09-16 검수).
+ */
 export async function sweepOnce(): Promise<void> {
+  const done: string[] = [];
   for (const { name, run } of SWEEPS) {
     try {
-      const deleted = await run();
-      if (deleted > 0) console.log(`[보유기간] ${name} ${deleted}건 지움`);
+      done.push(`${name} ${await run()}건`);
     } catch (error) {
-      // 청소가 막혀도 제품은 돈다. 다만 조용히 넘어가면 다음 검수까지 아무도 모른다.
+      done.push(`${name} 실패`);
       console.error(`[보유기간] ${name} 청소 실패`, error);
     }
   }
+  console.log(`[보유기간] 청소 ${new Date().toISOString()} · ${done.join(' · ')}`);
 }
 
 export function startRetentionSweep(): () => void {
