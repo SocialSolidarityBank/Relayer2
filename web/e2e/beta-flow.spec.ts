@@ -111,7 +111,8 @@ test('등록부터 15초 다시보기까지 한 바퀴', async ({ page }) => {
   // URL 을 외우지 않고 목록에서 이 사례로 되돌아올 수 있어야 한다.
   await page.getByRole('link', { name: '당사자 목록', exact: true }).click();
   await page.locator('#q').fill(NAME);
-  const row = page.locator('.wire-item', { hasText: NAME });
+  // 목록은 접힌 카드다. 찾아서 하나만 남으면 펼쳐진다.
+  const row = page.locator('details.wire-card-details', { hasText: NAME });
   await expect(row).toContainText('2회차까지 기록');
   await row.getByRole('button', { name: '15초 다시보기' }).click();
   await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
@@ -211,7 +212,7 @@ test('상담 종결은 회차를 만들지 않고 미완료 과제를 그대로 
   // 목록에서도 종결로 보인다
   await page.getByRole('link', { name: '당사자 목록', exact: true }).click();
   await page.locator('#q').fill(name);
-  await expect(page.locator('.wire-item', { hasText: name })).toContainText('종결');
+  await expect(page.locator('details.wire-card-details', { hasText: name })).toContainText('종결');
 });
 
 // 요구 5 — 기록 화면에서 `종결 상담`을 고르면 저장 성공 뒤 종결 화면으로 간다.
@@ -284,8 +285,16 @@ test('인테이크를 다시 열어 고쳐 쓴다', async ({ page }) => {
   await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
   await expect(page.getByRole('heading', { name: '상담 일정 등록' })).toBeVisible();
 
-  // 다시 열면 적어 둔 것이 그대로 있다
-  await page.getByRole('link', { name: '인테이크 작성하기' }).click();
+  // 다시 열면 적어 둔 것이 그대로 있다.
+  // 한 번 쓴 인테이크는 메뉴에 없다 — 회차별 요약에서 고쳐 쓴다.
+  await page.getByRole('link', { name: '당사자 정보' }).click();
+  await page.waitForURL(/\/info$/);
+  await page
+    .locator('section.wire-card')
+    .filter({ has: page.getByRole('heading', { name: '회차별 요약' }) })
+    .locator('.wire-item', { hasText: '인테이크' })
+    .getByRole('button', { name: '고쳐 쓰기' })
+    .click();
   await expect(page.getByRole('heading', { name: '인테이크 작성하기' })).toBeVisible();
   await expect(page.locator('#overall-goal')).toHaveValue('처음 적은 목표');
   await expect(page.locator('section.wire-card').filter({ has: page.getByRole('heading', { name: '수행할 과제' }) }))
@@ -395,8 +404,11 @@ test('민감정보 동의가 없으면 기록을 저장하지 못하고, 받으�
   await consent.locator('.wire-repeat-card', { hasText: '민감정보 처리' }).getByRole('button', { name: '동의 받기' }).click();
   await expect(consent).toContainText('민감정보 처리 · 동의함');
 
-  // 이제 저장된다
-  await page.getByRole('link', { name: '인테이크 작성하기' }).click();
+  // 이제 저장된다. 인테이크는 메뉴에 없다 —
+  // 아직 아무 기록이 없는 사례라 회차별 요약의 빈 상태에서 바로 연다.
+  await page.getByRole('tab', { name: '회차별 요약' }).click();
+  await page.getByRole('button', { name: '인테이크 작성하기' }).click();
+  await expect(page.getByRole('heading', { name: '인테이크 작성하기' })).toBeVisible();
   await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
   await expect(page.getByRole('heading', { name: '상담 일정 등록' })).toBeVisible();
 });

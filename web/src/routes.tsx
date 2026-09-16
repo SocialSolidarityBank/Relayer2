@@ -69,6 +69,9 @@ export function Routes() {
   const screen = (() => {
     if (hash === HOME) return <HomeScreen />;
     if (hash === '#/participants') return <ParticipantsScreen />;
+    // 사례를 안 고른 채 상담 기록하기·상담 일정 등록을 누르면 여기로 온다.
+    if (hash === '#/pick/record') return <ParticipantsScreen pickFor="record" />;
+    if (hash === '#/pick/schedule') return <ParticipantsScreen pickFor="schedule" />;
     if (hash === '#/audit') return <AuditScreen />;
     if (hash === '#/participants/new') return <ParticipantNewScreen />;
 
@@ -103,16 +106,13 @@ export function Routes() {
         <a href="#/participants/new">당사자 등록</a>
         {/* 열람 기록은 관리자만. 실무자 화면에 없는 것이 맞다(GLOSSARY §6-7). */}
         {me.role === 'admin' && <a href="#/audit">열람 기록</a>}
-        {caseId && (
-          <>
-            {/* 15초 다시보기는 메뉴가 아니다. 당사자 정보 안의 탭으로 본다(GLOSSARY §6-4).
-                당사자를 고르는 것이 먼저이고, 그 사람의 화면은 그 안에서 열린다. */}
-            <a href={`#/cases/${caseId}/info`}>당사자 정보</a>
-            <a href={`#/cases/${caseId}/intake`}>인테이크 작성하기</a>
-            <a href={`#/cases/${caseId}/record`}>상담 기록하기</a>
-            <a href={`#/cases/${caseId}/schedule`}>상담 일정 등록</a>
-          </>
-        )}
+        {/* 상담 기록하기·상담 일정 등록은 **누구의 것인지 정해야** 열린다.
+            사례가 이미 정해져 있으면 그리로 바로 가고, 아니면 당사자를 고르는 자리로 보낸다.
+            메뉴에서 사라지게 두면 "그 기능이 없다"로 읽힌다.
+            15초 다시보기와 인테이크 작성하기는 메뉴가 아니다 — 당사자 카드 안에 있다. */}
+        <a href={caseId ? `#/cases/${caseId}/record` : '#/pick/record'}>상담 기록하기</a>
+        <a href={caseId ? `#/cases/${caseId}/schedule` : '#/pick/schedule'}>상담 일정 등록</a>
+        {caseId && <a href={`#/cases/${caseId}/info`}>당사자 정보</a>}
         <span className="app-nav-me">
           {me.name}
           {/* 다크 토큰은 이미 이식돼 있었다. 없던 것은 켜는 장치뿐이라 그것만 붙인다. */}

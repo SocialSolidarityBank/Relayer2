@@ -1,8 +1,12 @@
-// 당사자 목록 — 기존 사례로 돌아가는 유일한 길.
+// 당사자 목록 — 기존 사례로 돌아가는 유일한 길이자, **당사자를 고르는 자리**다.
+//
+// 상담 기록하기·상담 일정 등록은 누구의 것인지 정해야 열린다. 사례가 안 정해진 채로 그 메뉴를
+// 누르면 여기로 온다. 그때는 무엇을 하러 왔는지 위에 적고, 카드마다 그 버튼을 앞세운다.
+//
 // 이름은 금고 암호문이라 서버가 검색하지 못한다. 받아 온 목록을 화면에서 거른다(기관 하나 규모).
 import { useEffect, useMemo, useState } from 'react';
 import { listParticipants, type ParticipantRow } from '../api.ts';
-import { Button, Card, Empty, Field, Item, PageHeader } from '../ui.tsx';
+import { Button, Card, Empty, Field, Fold, FormActions, PageHeader } from '../ui.tsx';
 
 const dateLabel = (iso: string): string => {
   const d = new Date(iso);
@@ -17,7 +21,15 @@ function sessionLabel(row: ParticipantRow): string {
   return parts.join(' · ');
 }
 
-export function ParticipantsScreen() {
+/** 무엇을 하러 왔는가. 메뉴에서 사례 없이 눌렀을 때 붙는다. */
+export type PickFor = 'record' | 'schedule' | null;
+
+const PURPOSE: Record<Exclude<PickFor, null>, { title: string; go: string; label: string }> = {
+  record: { title: '누구의 상담을 기록할까요', go: 'record', label: '상담 기록하기' },
+  schedule: { title: '누구의 일정을 잡을까요', go: 'schedule', label: '상담 일정 등록' },
+};
+
+export function ParticipantsScreen({ pickFor = null }: { pickFor?: PickFor }) {
   const [rows, setRows] = useState<ParticipantRow[] | null>(null);
   const [q, setQ] = useState('');
 
@@ -33,9 +45,15 @@ export function ParticipantsScreen() {
     );
   }, [rows, q]);
 
+  const purpose = pickFor ? PURPOSE[pickFor] : null;
+  const go = (caseId: number, where: string) => (window.location.hash = `#/cases/${caseId}/${where}`);
+
   return (
     <>
-      <PageHeader title="당사자 목록" meta={rows ? `${rows.length}명` : undefined} />
+      <PageHeader
+        title={purpose ? purpose.title : '당사자 목록'}
+        meta={rows ? `${rows.length}명` : undefined}
+      />
       <div className="wire-container">
         <Card>
           <Field label="찾기" htmlFor="q">
@@ -55,33 +73,38 @@ export function ParticipantsScreen() {
             <Empty>{q ? '찾는 사람이 없어요.' : '아직 등록한 당사자가 없어요.'}</Empty>
           </Card>
         )}
-        {shown.length > 0 && (
-          <Card title="목록">
-            {shown.map((row) => (
-              <Item
-                key={row.case_id}
-                title={`${row.name ?? row.pseudonym} · ${row.pseudonym}`}
-                desc={sessionLabel(row)}
-                action={
-                  <>
-                    <Button onClick={() => (window.location.hash = `#/cases/${row.case_id}/info`)}>
-                      당사자 정보
-                    </Button>
-                    <Button onClick={() => (window.location.hash = `#/cases/${row.case_id}/briefing`)}>
-                      15초 다시보기
-                    </Button>
-                    <Button onClick={() => (window.location.hash = `#/cases/${row.case_id}/record`)}>
-                      상담 기록하기
-                    </Button>
-                    <Button onClick={() => (window.location.hash = `#/cases/${row.case_id}/schedule`)}>
-                      상담 일정 등록
-                    </Button>
-                  </>
-                }
-              />
-            ))}
-          </Card>
-        )}
+
+        {/* 카드는 접혀 있다. 이름과 한 줄 요약만 보고 고르고, 펼쳐야 할 일이 나온다.
+            사람이 많아도 한 화면에 들어오게 하려는 것이다. */}
+        {shown.map((row) => (
+          <Fold
+            key={row.case_id}
+            title={row.name ?? row.pseudonym}
+            desc={sessionLabel(row)}
+            // 찾아서 하나만 남았으면 펼쳐 둔다. 한 명을 보려고 또 누르게 하지 않는다.
+            open={shown.length === 1}
+          >
+            <FormActions>
+              {purpose && (
+                <Button variant="primary" onClick={() => go(row.case_id, purpose.go)}>
+                  {purpose.label}
+                </Button>
+              )}
+              <Button onClick={() => go(row.case_id, 'info')}>당사자 정보</Button>
+              <Button onClick={() => go(row.case_id, 'briefing')}>15초 다시보기</Button>
+              {/* 인테이크는 아직 안 쓴 사람에게만 뜬다. 다 쓴 사람에게 또 권하지 않는다. */}
+              {!row.last_session_seq && (
+                <Button onClick={() => go(row.case_id, 'intake')}>인테이크 작성하기</Button>
+              )}
+              {!purpose && (
+                <>
+                  <Button onClick={() => go(row.case_id, 'record')}>상담 기록하기</Button>
+                  <Button onClick={() => go(row.case_id, 'schedule')}>상담 일정 등록</Button>
+                </>
+              )}
+            </FormActions>
+          </Fold>
+        ))}
       </div>
     </>
   );

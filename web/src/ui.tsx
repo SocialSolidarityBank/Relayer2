@@ -62,6 +62,42 @@ export function Card({
   );
 }
 
+/**
+ * 접히는 카드. 이식한 `wire-card-details` 계약을 그대로 쓴다(CCC DESIGN §5 · RULES:316-322).
+ *
+ * 접힌 상태는 제목 줄만 남은 카드이고, 펼치면 `surface-card[open]` 의 그라데이션 테두리를 받는다.
+ * 접혀 있을 때는 **카드 면 전체가 누를 자리**다 — 제목 글자만 눌리면 22px 표적이 된다.
+ * 그 규칙은 CSS 에 이미 있고(`wire.css:566`), 여기서는 마크업만 맞춘다.
+ */
+export function Fold({
+  title,
+  desc,
+  open,
+  children,
+}: {
+  title: string;
+  /** 접힌 채로도 보이는 한 줄. 펼치지 않고 고를 수 있어야 한다. */
+  desc?: ReactNode;
+  open?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <details className="surface-card wire-card wire-card-details" open={open}>
+      <summary className="wire-card-summary">
+        <span className="wire-card-title">
+          {title}
+          {desc && <span className="wire-item-desc">{desc}</span>}
+        </span>
+        <span className="wire-card-summary-right">
+          <Chevron dir="down" />
+        </span>
+      </summary>
+      <div className="wire-card-divider" />
+      <div className="wire-card-body">{children}</div>
+    </details>
+  );
+}
+
 export function Button({
   variant = 'secondary',
   children,
