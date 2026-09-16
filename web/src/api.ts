@@ -64,7 +64,10 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
     res = await fetch(`${BASE}${path}`, {
       ...init,
       credentials: 'same-origin',
-      headers: init?.body ? { 'content-type': 'application/json' } : undefined,
+      // 부르는 쪽이 정한 형식을 이긴 적이 있었다(2026-09-16 검수) — 문서 올리기가
+      // `content-type: application/pdf` 를 주는데 여기서 JSON 으로 덮어써 **업로드가 전부 막혔다.**
+      // 형식을 안 주면 그때만 JSON 으로 본다.
+      headers: init?.headers ?? (init?.body ? { 'content-type': 'application/json' } : undefined),
     });
   } catch {
     // 네트워크가 끊겼거나 서버가 죽었다. 둘 다 사람이 할 일은 같다 — 잠시 뒤 다시.

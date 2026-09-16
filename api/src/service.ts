@@ -570,8 +570,9 @@ export async function getCaseDetail(caseId: number): Promise<CaseDetail | null> 
       held_at: s.held_at,
       scheduled_at: s.scheduled_at,
       line: buildSessionLine(s, cards),
-      memo: s.memo,
-      today_goal_text: s.today_goal_text,
+      // 금고에서 꺼내 보낸다. 안 꺼내면 화면에 암호문이 그대로 뜬다(2026-09-16 검수).
+      memo: decryptText(s.memo),
+      today_goal_text: decryptText(s.today_goal_text),
     })),
     goal_revisions: revisions,
     open_cards: openCards(cards, outcomes, sessions).map((c) => ({

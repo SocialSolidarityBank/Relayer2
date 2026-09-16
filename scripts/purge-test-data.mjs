@@ -7,7 +7,7 @@
  * **이름 꼴로만 고른다.** 사람이 손으로 지은 이름은 이 꼴이 될 수 없다 — 뒤에 붙은
  * 13자리 숫자는 `Date.now()` 다. 이름은 금고 안이라 SQL 로 못 고르고, 여기서 복호화해서 가른다.
  *
- * **감사는 append-only 다**(`audit_log_append_only` 트리거가 update·delete 를 막는다).
+ * **감사는 append-only 다**(`audit_log_retention` 트리거가 update 를 막고, delete 는 3년 지난 줄만 연다).
  * 사례를 지우면 `on delete set null` 이 감사 줄을 고치려 들어 그 트리거에 걸린다 —
  * 즉 지금 설계에서는 감사가 가리키는 사례를 지울 수 없다. 그것이 옳다.
  *
@@ -58,10 +58,12 @@ const pids = [...new Set(junk.map((r) => r.participant_id))];
 
 // append-only 표는 감사 하나가 아니다. 붙어 있는 잠금을 전부 찾아 푼다 —
 // 이름을 손으로 적어 두면 표가 늘 때마다 여기서 조용히 새 구멍이 난다.
+// 이름 꼴로 찾는다. `audit_log` 는 2026-09-16 에 `_retention` 으로 바뀌었고,
+// 그때 이 목록이 그것을 놓쳐 감사 줄 삭제가 조용히 실패했다.
 const locks = await sql`
   select t.tgname, c.relname
   from pg_trigger t join pg_class c on c.oid = t.tgrelid
-  where t.tgname like '%append_only' and not t.tgisinternal`;
+  where (t.tgname like '%append_only' or t.tgname like '%_retention') and not t.tgisinternal`;
 console.log('잠긴 표:', locks.map((l) => l.relname).join(' · '));
 
 for (const l of locks) await sql.unsafe(`alter table ${l.relname} disable trigger ${l.tgname}`);
@@ -104,8 +106,11 @@ for (const u of junkUsers) {
 }
 
 // 잠금이 제자리로 돌아왔는지 확인한다. 말로 끝내지 않는다.
+// **푼 것과 같은 목록으로 센다.** 전에는 확인 쿼리만 `%append_only` 라서, 감사 잠금이
+// 안 걸린 채로도 '제자리' 라고 말했다(2026-09-16 검수).
 const after = await sql`
-  select tgname, tgenabled from pg_trigger where tgname like '%append_only' and not tgisinternal`;
+  select tgname, tgenabled from pg_trigger
+  where tgname = any(${locks.map((l) => l.tgname)}) and not tgisinternal`;
 const loose = after.filter((t) => t.tgenabled !== 'O');
 if (loose.length) throw new Error(`잠금이 안 걸린 표: ${loose.map((t) => t.tgname).join(', ')}`);
 console.log(`append-only 잠금 ${after.length}개: 제자리`);
