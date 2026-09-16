@@ -948,7 +948,7 @@ v1 → v2 로 판이 올라, **이미 받은 동의는 전부 `확인 필요`로
 상담 기록 화면의 저장된 회차 또는 예정 회차에서 `음성·수기 기록 불일치`를 연다.
 업로드 → 전사하기 → 전사 확인 → 불일치 확인 순서이며, 수기 기록을 자동으로 덮어쓰지 않는다.
 
-- WAV·MP3·M4A·FLAC·OGG·WebM 컨테이너를 최대 50MiB까지 받는다. 파일 형식과 바이트 상한을 서버에서도 검사한다.
+- WAV·MP3·M4A·FLAC·OGG·WebM 컨테이너를 최대 **200MiB**까지 받는다(2026-09-16 Q, 브라우저 녹음 한두 시간 분량. Azure 한도 300MB·2시간 안). 파일 형식과 바이트 상한을 서버에서도 검사한다.
 - 음성 원본은 `VOICE_ROOT`에 저장한다. 파일명은 서버가 생성하고 디렉터리/파일 권한은 0700/0600이다.
 - 외부 전사는 Azure Fast Transcription의 multipart API를 사용한다. 실제 전사에는 유효한 Speech 키와 해당 리소스의 지역 설정이 필요하다.
 - 전사문과 시간 구간은 암호화해 저장한다. 승인할 초안 ID를 확인하며, 문구를 수정한 승인본에는 이전 시간 구간을 그대로 붙이지 않는다.
@@ -962,3 +962,40 @@ v1 → v2 로 판이 올라, **이미 받은 동의는 전부 `확인 필요`로
 
 외부 계약 출처: [Azure Fast Transcription](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/fast-transcription-create),
 [지원 지역](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/regions?tabs=stt).
+
+## 23. 시작이 곧 회차, 자동 전사 (2026-09-16 Q)
+
+### 시작 경로
+
+상담은 수기든 녹음이든 **시작하는 순간 회차**다. 부족한 정보는 나중에 채운다. 임시저장·예정 같은 중간 상태를 두지 않는다.
+
+- `POST /cases/:id/sessions/start` — 본문 `{ session_id?, method?, is_closing? }`. 응답 `{ session_id, seq }`, 201.
+  회차를 `status='done'`·`held_at=now`·`memo=null` 로 만든다. `session_id` 로 예정(planned) 회차를 주면 그 회차가 기록됨이 된다.
+  지정한 회차가 이 사례 것이 아니면 404, 이미 기록됨이면 409, 사례가 종결됐거나 민감정보 처리 동의가 없으면 409.
+- 화면은 회차 id 가 없는 상태에서 녹음 시작 또는 수기 첫 입력 때 이 경로를 **한 번** 부르고, 이후 업로드·저장에 그 id 를 쓴다.
+- `PATCH /sessions/:id` 의 `memo` 는 **선택**이다. 안 보내면 있던 것을 지키고, 빈 글을 보내면 없음으로 둔다.
+  수기가 없어도 회차 번호·회차 수·15초 다시보기·회차 한 줄에 포함되는 정식 회차다.
+- `GET /cases/:id/detail` 의 `sessions[]` 에 `written`(수기 있음)과 `voice { recordings, transcript }` 가 붙는다.
+  `transcript` 는 `none|pending|draft|approved|failed|skipped` — 전사문이 있으면 그 상태, 없으면 가장 최근 녹음의 진행 상태다.
+  화면은 `written=false` 를 `수기 미작성` 으로 그린다.
+
+### 자동 전사
+
+업로드 응답은 전사를 기다리지 않는다. 서버가 응답 뒤 같은 프로세스에서 전사를 이어 돌린다 — 잡 큐·워커를 두지 않는다.
+
+- 진행 상태는 `recordings.transcribe_state` 가 갖는다(`0023`). `pending` 전사 중 · `done` 초안 있음 · `failed` 오류 · `skipped` 외부 STT 동의 없음 또는 제공자 설정 없음. 이유는 `transcribe_note` 한 줄.
+  `transcripts` 는 그대로 append-only 다 — 상태를 전사문 행에 적지 않는다.
+- 외부 STT 동의가 없으면 보내지 않고 `skipped` 로 남긴다. 상담 녹음·보유기간 동의가 없으면 업로드 자체가 409 다.
+- 실패하면 `failed` 와 이유를 남기고, `POST /recordings/:id/transcript`(전사하기)로 다시 돌린다. 자동·수동은 같은 길을 지난다.
+- 서버가 다시 뜨면 `pending` 이던 녹음을 `failed` 로 바꾼다 — 끊긴 전사를 영원히 '전사 중'으로 두지 않는다.
+- 전사 초안은 승인 전에도 `GET /sessions/:id/transcript` 로 읽힌다. 승인 게이트는 불일치 비교·기록 반영에만 남는다(§16-3).
+- 감사: 자동 전사도 `voice.transcribe`. 보낸 음성·전사 원문은 감사에 남기지 않는다.
+
+### 동의 철회와 종결
+
+- 어느 사례에서 `counseling_recording` 또는 `voice_original_retention_period` 가 `withdraw` 로 기록되면 **그 사례**의 음성 원본을
+  그 자리에서 지우고 `deleted_at` 을 찍는다(문안: "글로 옮긴 뒤 음성 원본을 바로 지워요"). 다른 사례는 건드리지 않는다(§22 사례 단위 동의 범위).
+  전사문(글)은 남는다. 감사 라벨은 `voice.withdraw`.
+- 종결(`support_cases.status='closed'`)된 사례에는 새 녹음 업로드·전사 요청·시작 경로를 409 로 거절한다. 이미 붙은 녹음의 재생과 전사문 열람은 그대로다.
+
+화면 계약은 `docs/handoff-voice-ui-2026-09-16.md`(DESIGN 레인).

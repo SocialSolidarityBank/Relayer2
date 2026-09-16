@@ -37,6 +37,7 @@ export const AUDIT_KINDS = {
   'voice.transcribe': { kind: '기록', label: '전사함', fold: false },
   'voice.approve': { kind: '기록', label: '전사 승인', fold: false },
   'voice.sweep': { kind: '기록', label: '기한 지난 녹음 삭제', fold: false },
+  'voice.withdraw': { kind: '기록', label: '동의 철회로 녹음 삭제', fold: false },
 
   'assignment.request': { kind: '운영', label: '담당 배정 요청', fold: false },
   'assignment.decide': { kind: '운영', label: '담당 배정 결정', fold: false },
