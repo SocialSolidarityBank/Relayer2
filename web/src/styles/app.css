@@ -18,6 +18,11 @@ body { margin: 0; }
 /* 회차별 요약 안 승인된 AI 정리(2026-09-16 검수). 원문 위, 제목 아래 본문 단이다. */
 .info-ai-summary { display: grid; gap: var(--space-1); margin-top: var(--space-2); }
 .info-ai-summary > p { margin: 0; }
+/* 접힌 카드 제목(2026-09-16). 제목은 줄바꿈하지 않고, 긴 한 줄 설명(AI 요약)만 말줄임한다 —
+   설명이 길면 제목이 "AI / 요약" 두 줄로 쪼개졌다. */
+.fold-title-text { flex: none; white-space: nowrap; }
+.fold-title-desc { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wire-card-details[open] > .wire-card-summary .fold-title-desc { white-space: normal; }
 
 .wire-choice-hint { display: block; margin-top: var(--space-1); font-size: var(--text-sm); font-weight: 400; color: var(--sub); }
 
