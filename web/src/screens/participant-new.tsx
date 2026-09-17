@@ -194,11 +194,14 @@ export function ParticipantNewScreen() {
           makeLabel="동의 요청 링크 만들기"
           onMake={() => void save('link')}
         >
-          <FormActions>
-            <Button onClick={() => (window.location.hash = `#/cases/${issued?.caseId}/intake`)}>
-              인테이크 쓰기
-            </Button>
-          </FormActions>
+          {/* 발급 전에는 갈 사례가 없다 — 링크를 만든 뒤에만 다음 화면이 선다. */}
+          {issued && (
+            <FormActions>
+              <Button onClick={() => (window.location.hash = `#/cases/${issued.caseId}/intake`)}>
+                인테이크 쓰기
+              </Button>
+            </FormActions>
+          )}
         </ConsentLinkCard>
 
         {/* 동의는 **항목마다 상위 접힘 카드 하나**다(2026-09-18 Q). 묶음 카드(`동의`)를 걷고
