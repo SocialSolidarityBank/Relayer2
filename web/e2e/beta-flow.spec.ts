@@ -21,6 +21,17 @@ const openInfo = async (page: Page) => {
   await page.goto(`/#/cases/${caseId}/info`);
 };
 
+/**
+ * 기록·일정 등록 메뉴는 **늘 누구 것인지 먼저 묻는다**(2026-09-17 Q — 구 '마지막으로 연
+ * 사례 기억' 폐지). 메뉴를 누르고 고르는 자리에서 그 사람 카드를 집는 두 걸음이 사람이
+ * 쓰는 동선이다.
+ */
+const pickFromMenu = async (page: Page, kind: 'record' | 'schedule', name: string) => {
+  const label = kind === 'record' ? '상담 기록하기' : '상담 일정 등록';
+  await page.locator('.navigation-list').getByRole('link', { name: label }).first().click();
+  await page.getByRole('link', { name: new RegExp(`^${name},.*${label}$`) }).click();
+};
+
 test('등록부터 15초 다시보기까지 한 바퀴', async ({ page }) => {
   // ── 로그인 ──────────────────────────────────────────────────
   // 로그인하지 않으면 어떤 화면도 열리지 않는다. 계정은 시드가 만든다.
@@ -75,7 +86,7 @@ test('등록부터 15초 다시보기까지 한 바퀴', async ({ page }) => {
   await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
 
   // ── 2회차 상담 기록하기 ─────────────────────────────────────
-  await scheduleMenu.getByRole('link', { name: '상담 기록하기' }).click();
+  await pickFromMenu(page, 'record', NAME);
   await expect(page.getByRole('heading', { name: '상담 기록하기' })).toBeVisible();
 
   // 인테이크에서 만든 질문이 레일에 올라와 있다.
@@ -94,7 +105,7 @@ test('등록부터 15초 다시보기까지 한 바퀴', async ({ page }) => {
 
   // ── 3회차 일정 등록 ─────────────────────────────────────────
   await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
-  await page.getByRole('link', { name: '상담 일정 등록' }).click();
+  await pickFromMenu(page, 'schedule', NAME);
   await page.locator('#at').fill('2026-10-08T10:00');
   await page.getByRole('radio', { name: '전화' }).check();
   await page.getByRole('button', { name: '등록', exact: true }).click();
@@ -162,7 +173,7 @@ test('예정 회차가 없어도 상담 기록하기에서 일시를 적고 기�
 
   // 일정 등록 화면이 떠도 등록하지 않고 바로 기록하기로 간다
   await expect(page.getByRole('heading', { name: '상담 일정 등록' })).toBeVisible();
-  await page.getByRole('link', { name: '상담 기록하기' }).click();
+  await pickFromMenu(page, 'record', name);
 
   await page.locator('#held-at').fill('2026-09-20T14:00');
   await page.getByRole('radio', { name: '전화' }).check();
@@ -195,7 +206,7 @@ test('상담 종결은 회차를 만들지 않고 미완료 과제를 그대로 
 
   // 예정 없이 2회차를 기록하면서 과제를 하나 남긴다
   await expect(page.getByRole('heading', { name: '상담 일정 등록' })).toBeVisible();
-  await page.getByRole('link', { name: '상담 기록하기' }).click();
+  await pickFromMenu(page, 'record', name);
   await page.locator('#held-at').fill('2026-09-20T14:00');
   await page.locator('#memo').fill('서류를 떼어 오기로 함');
   await page.getByRole('textbox', { name: '수행할 과제' }).fill(task);
@@ -262,7 +273,7 @@ test('종결 상담으로 저장하면 종결 화면으로 이어진다', async 
 
   // 기록 화면이 그 표시를 이어받는다
   await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
-  await page.getByRole('link', { name: '상담 기록하기' }).click();
+  await pickFromMenu(page, 'record', name);
   await expect(page.getByRole('checkbox', { name: '이번이 마지막 상담이에요' })).toBeChecked();
   await page.locator('#memo').fill('마지막으로 정리하고 마무리함');
   await page.getByRole('button', { name: '저장하고 종결로' }).click();
@@ -365,7 +376,7 @@ test('회차를 고쳐 쓰고, 적어만 둔 줄도 저장된다', async ({ page
 
   // 2회차를 예정 없이 기록한다. 과제는 진행 전으로.
   await expect(page.getByRole('heading', { name: '상담 일정 등록' })).toBeVisible();
-  await page.getByRole('link', { name: '상담 기록하기' }).click();
+  await pickFromMenu(page, 'record', name);
   const rail = page
     .locator('section.wire-card')
     .filter({ has: page.getByRole('heading', { name: '확인할 과제' }) });
@@ -504,7 +515,7 @@ test('자유 글을 저장하고 다시 열면 그대로 읽힌다', async ({ pa
   await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
 
   await expect(page.getByRole('heading', { name: '상담 일정 등록' })).toBeVisible();
-  await page.getByRole('link', { name: '상담 기록하기' }).click();
+  await pickFromMenu(page, 'record', name);
   await page.locator('#held-at').fill('2026-10-05T10:00');
   await page.locator('#memo').fill(memo);
   await page.getByRole('button', { name: '저장' }).click();
@@ -602,7 +613,7 @@ test('외부 LLM 동의가 없으면 AI 정리를 하지 않는다', async ({ pa
 
   // 예정 없이 2회차를 기록한다
   await expect(page.getByRole('heading', { name: '상담 일정 등록' })).toBeVisible();
-  await page.getByRole('link', { name: '상담 기록하기' }).click();
+  await pickFromMenu(page, 'record', name);
   await page.locator('#held-at').fill('2026-10-05T10:00');
   await page.locator('#memo').fill('연체 2건 확인. 서류는 다음 주에 떼기로 함.');
   await page.getByRole('button', { name: '저장' }).click();

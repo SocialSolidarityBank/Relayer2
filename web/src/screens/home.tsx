@@ -37,9 +37,9 @@ export function HomeScreen() {
 
   return (
     <>
-      {/* 사례를 열기 전에는 위 메뉴에 사례 메뉴가 없다. 그 사실을 미리 알려 둔다 —
-          없다고 생각하고 찾다가 나중에 생기면 메뉴가 불안정한 것으로 읽힌다. */}
-      <PageHeader title="일정" meta="앞으로 30일 · 당사자를 열면 위 메뉴에 그 사람의 화면이 붙어요" />
+      {/* 메뉴는 사례에 따라 바뀌지 않는다(2026-09-17 Q — 구 '마지막으로 연 사례 기억' 폐지).
+          기록·일정 등록은 늘 누구 것인지 먼저 묻는다. */}
+      <PageHeader title="일정" meta="앞으로 30일" />
       <div className="wire-container">
         {rows === null && <Empty>불러오는 중이에요.</Empty>}
         {rows?.length === 0 && (
