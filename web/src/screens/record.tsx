@@ -418,6 +418,27 @@ export function RecordScreen({
         </aside>
 
         <main className="record-main">
+          {/* 목표는 기록하면서 봐야 한다(2026-09-18 UI-9). 전체 상담 목표 + 이 회차가 이어받은 오늘 상담 목표.
+              둘 다 없으면 카드를 안 그린다. 고치는 자리는 목표 탭이다(SPEC §4-2) — 여기선 보내기만. */}
+          {briefing.goals && (
+            <Card title="목표">
+              <Item
+                title={briefing.goals.overall ?? '전체 상담 목표 없음'}
+                desc="전체 상담 목표"
+              />
+              <Item
+                title={briefing.goals.today?.text ?? '오늘 상담 목표 없음'}
+                desc={
+                  briefing.goals.today?.from_session_seq
+                    ? `오늘 상담 목표 · ${briefing.goals.today.from_session_seq}회차에서 이어받음`
+                    : '오늘 상담 목표'
+                }
+                action={
+                  <Button onClick={() => (window.location.hash = `#/cases/${caseId}/info/goals`)}>수정</Button>
+                }
+              />
+            </Card>
+          )}
 
           {/* 일시·방식·장소는 한 묶음이다. 장소는 대면일 때만 나오고 방식 바로 아래에 붙는다(요구 14). */}
           <Card title="1. 오늘 상담 내용">
