@@ -40,10 +40,50 @@ docker run -p 8787:8787 --env-file .env relayer:0.1.0
 
 ## 올리기 전에
 
-1. `node api/src/seed.ts` 로 시험 계정(`test1`·`test2`·`test3`)과 합성 사례를 만든다.
+1. `node api/src/seed.ts` 로 시험 계정(`test1`·`test4` 관리자, `test2` 실무자, `test3` 당사자)과 기관·사업·합성 사례를 만든다.
+   시드는 기관 이름을 적으므로 마법사(`#/onboarding`)를 건너뛴다.
 2. **합성 데이터만 올린다.** 실데이터는 P1 게이트가 갖춰졌어도 별도 결정(D2 국내 리전)이 남아 있다.
 3. 공개 주소가 생기면 `docs/beta-scenario.md` §0-B 의 접속 안내를 그 주소로 바꾼다.
 4. 번호표(`docs/qa-steps.js`)와 계수기(`docs/measure.js`)는 그대로 쓴다 — 콘솔에 붙여 넣는 조각이라 배포와 무관하다.
+
+## 새 DB 의 첫 가입 (2026-09-17)
+
+시드를 넣지 않은 새 기관 배포는 **첫 가입(signup)** 으로 연다(`SPEC.md` §24-1). 초대 규율의 유일한 예외다.
+
+```
+node api/src/migrate.ts && node api/src/index.ts     # 마이그레이션이 organization 행(id=1)을 만든다
+curl -s http://localhost:8787/auth/signup             # → {"open":true}  활성 관리자가 없다
+```
+
+1. 브라우저로 `/` 를 열면 로그인 화면 아래 `기관 만들고 시작하기` 가 보인다(`#/signup`). 기관 이름·주소 이름(slug)·첫 관리자 아이디·비밀번호·이름을 적는다.
+2. 가입이 끝나면 바로 로그인된 채 마법사 `#/onboarding` 으로 간다 — 기관 정보 → 사업 1개 이상 → 실무자 초대(건너뛰기 가능) → API 연결 → 완료.
+   마치기 전에는 관리자가 다른 화면으로 가도 마법사로 돌아온다. 완료가 `onboarded_at` 을 찍고 당사자 등록으로 보낸다.
+3. 그 뒤 `GET /auth/signup` 은 `{"open":false}` 이고 `POST /auth/signup` 은 403 이다. 실무자·추가 관리자는 **설정 › 실무자 관리 › 초대** 링크로만 들어온다.
+4. 실수로 마지막 관리자를 잃었을 때만 문이 다시 열린다(활성 관리자 0명). 탈퇴·역할 변경은 마지막 관리자를 막으므로 평소엔 열리지 않는다.
+
+`.env` 에 `OPENAI_API_KEY` 를 두지 않아도 된다 — 관리자가 마법사(또는 설정 › 시스템 › API 연결 관리)에서 키를 넣으면 검증 뒤 암호문으로 DB 에 저장되고 호출마다 DB → env 순으로 읽는다.
+STT(Azure)·DB 는 여전히 환경 변수다.
+
+## 기관별 서브도메인 (2026-09-17)
+
+기관마다 `기관.relayer.kr` 을 주되 **앱은 하나의 기관만 안다** — 배포 하나가 기관 하나다(PLAN A3, `organization` 단일 행).
+앱 코드는 `Host` 를 읽지 않으므로 서브도메인은 전부 DNS·프록시 층의 일이다.
+
+```
+가입 때 적은 slug            ┐
+DNS  <slug>.relayer.kr  CNAME → Cloudflare Tunnel (또는 A → 그 기관의 서버)
+Tunnel/프록시 ingress        <slug>.relayer.kr → http://localhost:<그 기관 앱의 PORT>
+앱 프로세스                  기관마다 하나 — 자기 DATABASE_URL·PII_ENC_KEY·SESSION_SECRET·PORT
+```
+
+절차:
+
+1. 기관마다 DB 하나(Supabase 프로젝트 또는 스키마)·`.env` 하나·앱 프로세스 하나를 둔다. 포트를 달리 준다(`PORT`).
+2. Cloudflare DNS 에 `<slug>` CNAME 을 터널 주소로 더한다(또는 A 레코드). 와일드카드 `*.relayer.kr` 을 터널에 물려 두면 DNS 는 한 번이다.
+3. 터널 `config.yml` 의 `ingress` 에 `hostname: <slug>.relayer.kr → service: http://localhost:<PORT>` 한 줄을 더하고 터널만 재시작한다(`launchctl kickstart -k … or.bss.relayer-tunnel`).
+4. 그 주소로 `/auth/signup` 이 `{"open":true}` 인지 확인하고 위 **새 DB 의 첫 가입** 절차를 밟는다. 가입 화면의 `주소 이름` 에 같은 slug 를 적는다 — 앱은 그 값을 표시·기록용으로만 쓴다.
+
+한 프로세스가 여러 기관을 받는 멀티테넌트(`org_id`)와 앱 안의 서브도메인 라우팅은 범위 밖이다. 필요해지면 그때 결정한다.
 
 ## D2 배포처 (2026-09-15 확정)
 

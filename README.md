@@ -25,7 +25,7 @@ docker compose up -d                               # Postgres 17 (localhost:5543
 printf 'PII_ENC_KEY=%s\nSESSION_SECRET=%s\n' "$(openssl rand -base64 32)" "$(openssl rand -base64 32)" > .env
 set -a && . ./.env && set +a
 node api/src/migrate.ts                            # 스키마 적용 (--check 로 미적용 여부만 확인)
-node api/src/seed.ts                               # 합성 사례 1건 + 시험 계정 2개
+node api/src/seed.ts                               # 합성 사례 1건 + 기관·사업 + 시험 계정 4개 (시드 없이 띄우면 #/signup 첫 가입으로 연다)
 node api/src/index.ts                              # API  http://localhost:8787
 pnpm --dir web exec vite                           # 화면 http://localhost:5173
 pnpm --dir api exec vitest run                     # 조립 로직 단위 테스트
@@ -52,6 +52,7 @@ E2E는 실행할 때마다 새 합성 당사자를 만들어 이전 데이터에
 | `test1` | 관리자 | 된다 |
 | `test2` | 실무자 | 된다 — 대본은 이 계정으로 |
 | `test3` | 당사자 | **되지 않는 것이 정상**. 당사자는 실무자가 보낸 링크와 코드로 열람한다(P2) |
+| `test4` | 관리자 | 된다 — 역할 바꾸기·마지막 관리자 보호를 시험할 둘째 관리자 |
 
 **합성 데이터 전용**이며 실데이터 전환(P1) 때 계정과 비밀번호 정책을 다시 정한다.
 

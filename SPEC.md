@@ -725,11 +725,14 @@ AI 와 같은 원칙이다 — **없으면 없다고 한다.** 가짜로 켜 두
 상담 기록은 사례의 것이지 계정의 것이 아니다. 마지막 관리자와 맡은 당사자가 있는 실무자는
 나갈 수 없다 — 나가면 워크스페이스를 고칠 사람이 없거나 당사자가 미아가 된다.
 
-**초대장 없이 가입하는 길은 없다.** 주소만 알면 누구나 들어오는 문은 상담 기록을 다루는
-제품에 있어서는 안 된다. 토큰은 해시로만 저장하고 만든 순간 한 번만 보여 준다. 7일 뒤 만료된다.
+**초대장 없이 가입하는 길은 하나뿐이다 — 기관을 여는 첫 가입**(2026-09-17 Q, §24-1). 활성 관리자가
+한 명도 없는 새 배포에서만 `#/signup` 이 열리고, 첫 관리자가 들어오면 닫힌다. 그 뒤 합류는 초대 링크뿐이다.
+주소만 알면 누구나 들어오는 문은 상담 기록을 다루는 제품에 있어서는 안 된다. 토큰은 해시로만 저장하고
+만든 순간 한 번만 보여 준다. 7일 뒤 만료된다. 메일 발송은 없다(링크 수동 복사).
 
-**열쇠는 화면에 넣지 않는다.** `API 연결 관리`는 붙었는지 여부와 제공자까지만 보여 준다.
-화면에서 넣게 하면 그 값이 브라우저와 기록을 거쳐 흐른다.
+**열쇠는 화면에 보이지 않는다.** `API 연결 관리`는 붙었는지 여부·제공자·출처(`db|env`)까지만 보여 준다.
+OpenAI 키는 화면에서 넣을 수 있되(§24-3) 서버가 검증한 뒤 암호문으로 저장하고, 어떤 응답·감사·로그에도
+값을 싣지 않는다. STT·DB 열쇠는 여전히 기관 서버의 환경 변수다.
 
 ### 18-4. 배정
 
@@ -739,14 +742,16 @@ AI 와 같은 원칙이다 — **없으면 없다고 한다.** 가짜로 켜 두
 미배정 사례는 서버가 허용한 가명·사업·담당자·상태만 표시하며 상세 링크를 만들지 않는다.
 이름·회차·일정을 비워 받은 것은 자료가 없다는 뜻이 아니므로 `기록 없음`으로 표시하지 않는다.
 
-### 18-5. 사업은 고르기만
+### 18-5. 사업은 고르기만 — 그리고 사업은 실체다
 
 `support_cases.program_name` 이 자유 텍스트라 `함께온기금 울타리대출`과 `함께온기금울타리대출`이
 다른 사업으로 갈렸다. `programs` 표를 두고 **당사자 등록에서는 고르기만** 한다. 목록은
 관리자가 `기관 정보 관리`에서 만든다. 이미 쌓인 사례의 사업 이름은 그대로 목록으로 옮겼다 —
 지금 있는 것이 곧 정본이다.
 
-내린 사업은 지우지 않는다. 이름이 사라지면 그 사업으로 열린 사례를 설명할 말이 없어진다.
+2026-09-17(§24-4)부터 사례는 이름이 아니라 **`support_cases.program_id` FK** 로 사업에 묶인다.
+이름을 바꿔도 사례가 따라오고, 종료는 잠금이지 삭제가 아니며, 다시 열 수 있다.
+종료한 사업은 지우지 않는다. 이름이 사라지면 그 사업으로 열린 사례를 설명할 말이 없어진다.
 
 ---
 
@@ -1016,3 +1021,73 @@ v1 → v2 로 판이 올라, **이미 받은 동의는 전부 `확인 필요`로
 - 종결(`support_cases.status='closed'`)된 사례에는 새 녹음 업로드·전사 요청·시작 경로를 409 로 거절한다. 이미 붙은 녹음의 재생과 전사문 열람은 그대로다.
 
 화면 계약은 `docs/handoff-voice-ui-2026-09-16.md`(DESIGN 레인).
+
+## 24. 기관 준비 — 첫 가입·마법사·사업 실체·역할 (2026-09-17 Q)
+
+테넌시는 그대로 기관 하나다(PLAN A3). `organizations` 표·`org_id` 를 만들지 않는다. `organization` 단일 행에
+`slug`(`^[a-z0-9-]+$`)·`onboarded_at`·`enc_openai_key` 컬럼만 더한다(`0024`). 기관별 서브도메인(기관.relayer.kr)은
+DNS·리버스 프록시 절차(`docs/deploy.md`)이고 **앱은 Host 를 읽지 않는다.**
+
+### 24-1. 기관을 여는 첫 가입
+
+- `GET /auth/signup` → `{ open: boolean }`. 활성 관리자(`role='admin' and deactivated_at is null`)가 0명일 때만 `true`. 로그인 앞.
+- `POST /auth/signup { org_name, slug, email, password, name }`. 로그인 앞. 한 트랜잭션에서 `organization` 행을 `for update` 로 잠근 뒤
+  활성 관리자가 0명일 때만 관리자 계정을 만들고 기관 이름·슬러그를 적는다. Argon2 해싱은 트랜잭션 밖이다(초대 수락과 같은 모양).
+  성공은 초대 수락과 같은 모양 — 로그인 쿠키(`relayer_session`) + `{ ok: true }`. 활성 관리자가 있으면 **403** 이고 계정을 만들지 않는다.
+  같은 아이디가 이미 있으면 409. 동시에 둘이 두드려도 관리자는 한 명만 생긴다. 감사 `org.bootstrap`(fields `name`·`slug`·`user=<id>`).
+- **관리자 수를 바꾸는 트랜잭션은 모두 같은 `organization` 행 잠금을 먼저 잡는다** — 가입·초대 수락·역할 변경·탈퇴.
+  마지막 활성 관리자는 실무자로 내리거나 탈퇴시킬 수 없다(409).
+- 초대 규율은 그대로다. 기관을 만드는 첫 가입만 예외고 그 뒤 합류는 초대 링크뿐이다. 메일 발송은 없다.
+- 화면: 로그인 화면은 문이 열려 있을 때만 `기관 만들고 시작하기` 를 보이고 `#/signup` 으로 보낸다. 닫혀 있으면 `#/signup` 은 초대 안내만 낸다.
+
+### 24-2. 마법사 `#/onboarding`
+
+관리자 전용 단계형 화면. **기관 정보(reg_no·address·phone — 이름은 가입에서 이미) → 사업 1개 이상(이름·기간·한 줄 설명) →
+실무자 초대(건너뛰기 가능) → API 연결 → 완료.** 설정의 기관 정보·사업 목록·초대·API 연결 폼을 그대로 쓴다 — 새 스타일·토큰이 없다.
+
+- 완료는 `POST /settings/onboarding/complete`(관리자 전용) 로 `onboarded_at` 을 찍고(두 번 눌러도 처음 시각) `#/participants/new` 로 보낸다.
+- `GET /me` 에 `onboarded: boolean` 이 실린다. `onboarded_at` 이 비어 있는 동안 관리자는 **클라이언트 리다이렉트**로 마법사에 머문다 —
+  서버 잠금은 없다. 실무자는 영향이 없다. 마친 뒤 `#/onboarding` 으로 오면 당사자 등록으로 보낸다.
+- `0024` 는 `update organization set onboarded_at = now() where name <> ''` 로 **기존 배포는 마법사를 건너뛴다.** `PUT /settings/org` 의 `name` 은 `min(1)`.
+
+### 24-3. API 연결 — 키만 넣으면 되는 것과 설치가 필요한 것
+
+`API 연결 관리` 는 둘을 갈라 보여 준다. **키만 넣으면 되는 것**: OpenAI API 키(→ gpt-5.5). **설치가 필요한 것**: STT(Azure)·DB — 상태·안내만.
+
+- `PUT /settings/ai-key { key: string | null }` 관리자 전용. 저장 전 OpenAI `GET /v1/models` 로 검증해 실패하면 **400** 이고 저장하지 않는다.
+  유효하면 `pii.ts` 의 `encryptPii` 로 `organization.enc_openai_key` 에 넣고, `null` 이면 지운다. 감사 `ai.key.set`(fields `provider=openai` 또는 `removed=1`).
+- `ai.ts` 의 `callOpenAi` 는 **호출마다** DB 키 → `OPENAI_API_KEY` 순으로 고른다. provider 가 `openai` 일 때만 DB 키를 쓴다.
+- `GET /settings/connections` 의 `ai` 에 `source: 'db' | 'env' | null` 이 붙는다. **키 값은 어떤 응답·감사·로그에도 싣지 않는다.**
+- STT·Supabase 키 입력 방식은 이번 범위 밖이다.
+
+### 24-4. 사업은 실체다
+
+`programs` 에 `starts_on date`·`ends_on date`·`description text` 를 더한다(`starts_on ≤ ends_on` 검사, `ends_on` 은 정보용 — 지나도 잠기지 않는다).
+`support_cases.program_id bigint not null references programs` 를 더하고 `program_name` 컬럼을 없앤다. 백필 규칙(`0024`):
+목록에 없는 `program_name` 은 사업으로 만들고, `''` 은 `(미지정)` 사업(내린 채로 만들거나 재사용)에 붙인다.
+
+- 사업 이름은 어디서나 `programs` 를 join 해서 읽는다. 응답의 `program_name` 은 파생값이고 `program_id` 가 열쇠다. `POST /cases` 와 당사자 등록 화면은 `program_id` 를 보낸다.
+- `POST /settings/programs { name, starts_on?, ends_on?, description? }` → 201 사업 한 건. 이름이 겹치면 **409** — 되살리지 않는다(종료된 사업이면 다시 열기가 길이다).
+- `PATCH /settings/programs/:id { name?, starts_on?, ends_on?, description? }` 관리자 전용, id 고정. 종료된 사업은 409(다시 열기 뒤에만).
+  과거 열람 기록·당사자 화면에도 새 이름이 보인다. 감사 `program.update`.
+- `DELETE /settings/programs/:id` — 열린 사례 수·열린 사례의 예정 회차 수가 0 이 아니면 **409 `{ open_cases, planned_sessions }`** 를 돌려주고 멈춘다.
+  `?confirm=1` 이면 `retired_at` 을 찍는다. 화면은 그 사이에 `scripts/backup.sh` 를 권한다. 종료된 사업은 당사자 등록 선택지·기본 목록에서 빠진다(`?all=1` 에는 남는다). 감사 `program.retire`.
+- `POST /settings/programs/:id/reopen` 관리자 전용, `retired_at` 만 `null` 로 되돌린다. 종결된 사례는 되살리지 않는다. 감사 `program.reopen`.
+- **종료 잠금** — `access.ts` 의 `assertProgramActive(caseId)`. 사례 생성·인테이크 저장·새 일정·새 회차 시작·기록된 회차 고쳐 쓰기·문서 저장·동의 기록·열람 링크 발급·배정 요청은 **409** 이고 메시지가 사업 종료를 말한다.
+  **예외**: 사례 종결, 열람 링크 회수, 관리자 배정 변경(`/settings/assign`), 이미 잡힌 예정 회차의 기록(`recordSession`·`startSession` 의 `session_id` 지정).
+- 닫힌 사례의 예정 회차는 일정 목록(`GET /schedules`)에서 숨긴다 — 일정 취소 API 는 없다.
+- **사업별 보기는 새 페이지가 아니다.** 사업 목록에서 사업을 고르면 사업명·기간·설명·담당 실무자(그 사업의 열린 사례에 배정된 실무자 — 파생)·참여 당사자 수가 보이고
+  `#/participants?program=<id>`·`#/settings/staff?program=<id>` 로 걸개가 걸린 채 건너간다. `GET /participants` 행에 `program_id` 가 실리고 화면이 사업·이름·상태로 거른다.
+  `GET /settings/workers?program=<id>` 는 그 사업의 열린 사례를 맡은 실무자만 돌려준다. `program_workers` 같은 명시 배정 표를 만들지 않는다.
+
+### 24-5. 역할 바꾸기
+
+`PUT /settings/workers/:id/role { role: 'worker' | 'admin' }` 관리자 전용. 자기 자신을 내리는 것도 되지만 **마지막 활성 관리자는 409**.
+세션 캐시가 없어 다음 요청부터 새 역할이다. 실무자 관리 › 실무자 목록의 줄마다 `관리자로`/`실무자로` 가 선다. 감사 `user.role.update`(fields `user=<id>`, `role=<new>`).
+
+### 24-6. 감사·시드·검증
+
+- `AUDIT_KINDS` 운영 종류에 `org.bootstrap`·`program.update`·`program.reopen`·`user.role.update`·`ai.key.set` 이 붙는다. fields 에 키 값·이름 외 개인정보를 넣지 않는다.
+- `seed.ts` 는 `test4`(둘째 관리자)를 더하고 기관 이름·슬러그·`onboarded_at` 과 사업 하나를 심어 `createCase` 에 `program_id` 를 넘긴다. 가입 문은 seed 없는 새 DB 에서 검증한다.
+- 통합 테스트: `signup`·`role-change`·`migration-0024`·`program-lifecycle`·`program-filter`·`ai-key`. 새 DB 가 필요한 둘(가입·역할, 0024 백필)은 `api/test/scratch-db.ts` 로
+  `relayer_shared_check_scratch_*` DB 를 만들어 쓰고 끝나면 지운다. E2E `web/e2e/onboarding.spec.ts` 도 같은 헬퍼로 새 DB·서버를 띄운다.
