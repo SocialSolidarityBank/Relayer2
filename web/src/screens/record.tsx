@@ -56,7 +56,16 @@ const taskResultLabel = (o: OutcomeInput | undefined): string | null => {
   return null;
 };
 
-export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number; sessionId?: number }) {
+export function RecordScreen({
+  caseId,
+  sessionId: editingId,
+  startClosing = false,
+}: {
+  caseId: number;
+  sessionId?: number;
+  /** 당사자 카드에서 `상담 종결`로 들어왔으면 종결 체크를 켜고 시작한다(2026-09-17 Q). */
+  startClosing?: boolean;
+}) {
   const [briefing, setBriefing] = useState<Briefing | null>(null);
   // 당사자 카드의 연락처·이메일은 사례 상세가 준다(2026-09-17 Q).
   const [detail, setDetail] = useState<CaseDetail | null>(null);
@@ -71,7 +80,7 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
   const [heldAt, setHeldAt] = useState(nowDateTime);
   const [method, setMethod] = useState<NewSessionInput['method']>('in_person');
   // 종결 상담(요구 5). 일정에서 미리 골랐으면 이어받고, 여기서 바꿀 수도 있다.
-  const [isClosing, setIsClosing] = useState(false);
+  const [isClosing, setIsClosing] = useState(startClosing);
   const [outcomes, setOutcomes] = useState<Record<number, OutcomeInput>>({});
   const [taskDraft, setTaskDraft] = useState<Line>({ text: '' });
   const [questionDraft, setQuestionDraft] = useState<Line>({ text: '' });
@@ -113,7 +122,7 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
         setPlace(rec.place ?? '');
         setHeldAt(rec.held_at ? dateTimeFromIso(rec.held_at) : nowDateTime());
         setMethod((rec.method as NewSessionInput['method']) ?? 'in_person');
-        setIsClosing(rec.is_closing);
+        setIsClosing(startClosing || rec.is_closing);
         setNextGoal(rec.next_goal_text ?? '');
         setTasks(rec.cards.filter((c) => c.kind === 'promise').map((c) => ({ text: c.text })));
         setQuestions(rec.cards.filter((c) => c.kind === 'question').map((c) => ({ text: c.text })));
@@ -151,7 +160,8 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
       setTaskDraft({ text: '' });
       setQuestionDraft({ text: '' });
       setPlace(planned?.place ?? '');
-      setIsClosing(planned?.is_closing ?? false);
+      // 당사자 카드에서 종결로 들어온 경우가 예정 회차의 표시보다 세다(2026-09-17 Q).
+      setIsClosing(startClosing || (planned?.is_closing ?? false));
       setMethod((planned?.method as NewSessionInput['method']) ?? 'in_person');
       setHeldAt(planned?.scheduled_at ? dateTimeFromIso(planned.scheduled_at) : nowDateTime());
     })().catch((failure: unknown) => {
@@ -291,6 +301,18 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
 
       <div className="wire-container rail-grid record-grid" data-grid="true">
         <aside className="record-side">
+          {/* 종결 상담 체크는 레일 **맨 위**다(2026-09-17 Q — 구 레일 아래). 이번이 마지막인지가
+              과제 결과보다 먼저 정해지는 일이고, 당사자 카드에서 `상담 종결`로 들어오면 이미
+              켜진 채로 열린다. */}
+          <Card title="종결 상담">
+            <Choice
+              type="checkbox"
+              label="이번이 마지막 상담이에요"
+              hint="저장하면 상담 종결 화면으로 이어져요. 저장에 실패하면 사례를 닫지 않아요."
+              checked={isClosing}
+              onChange={() => setIsClosing((v) => !v)}
+            />
+          </Card>
           <Card title="확인할 과제" hint="누르지 않으면 이번에 확인 안 함으로 남고, 다음에 다시 올라와요.">
             {openTasks.length === 0 ? (
               <Empty>아직 없어요.</Empty>
@@ -363,16 +385,6 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
                 </div>
               ))
             )}
-          </Card>
-          {/* 종결 상담은 구획 하나를 차지할 일이 아니다. 레일 아래 체크 하나로 둔다(2026-09-15 Q). */}
-          <Card title="종결 상담">
-            <Choice
-              type="checkbox"
-              label="이번이 마지막 상담이에요"
-              hint="저장하면 상담 종결 화면으로 이어져요. 저장에 실패하면 사례를 닫지 않아요."
-              checked={isClosing}
-              onChange={() => setIsClosing((v) => !v)}
-            />
           </Card>
         </aside>
 

@@ -262,6 +262,16 @@ test('상담 종결은 회차를 만들지 않고 미완료 과제를 그대로 
   await openInfo(page);
   await page.getByRole('tab', { name: '당사자 정보' }).click();
   await page.locator('.wire-container').getByRole('button', { name: '상담 종결' }).click();
+  // 종결 앞에는 경고가 선다(2026-09-17 Q): 남은 과제·예정 회차·앞으로의 일정을 세어 보여 준다.
+  const warning = page.locator('.confirm-dialog');
+  await expect(warning).toContainText('확인하지 못한 과제가 1건');
+  await warning.getByRole('button', { name: '종결 기록 쓰기' }).click();
+  await page.waitForURL(/\/record\?closing=1$/);
+  // 종결도 상담이라 기록이 먼저다 — 체크는 이미 켜져 있고 레일 맨 위에 선다.
+  await expect(page.getByRole('checkbox', { name: '이번이 마지막 상담이에요' })).toBeChecked();
+  await pickDateTime(page, 'held-at', '2026-09-21T14:00');
+  await page.locator('#memo').fill('마지막으로 정리하고 마무리함');
+  await page.getByRole('button', { name: '저장' }).click();
   await page.waitForURL(/\/close$/);
   await expect(page.getByRole('heading', { name: '종결 사유' })).toBeVisible();
 
@@ -488,9 +498,18 @@ test('민감정보 동의가 없으면 기록을 저장하지 못하고, 받으�
   const consent = page
     .locator('section.wire-card')
     .filter({ has: page.getByRole('heading', { name: '동의' }) });
-  await expect(consent).toContainText('민감정보 처리 · 동의 없음');
-  await consent.locator('.wire-repeat-card', { hasText: '민감정보 처리' }).getByRole('button', { name: '동의 받기' }).click();
-  await expect(consent).toContainText('민감정보 처리 · 동의함');
+  // 동의 항목은 접힘 카드 하나다(2026-09-17 Q). 접힌 머리에 상태가 서고, 펼치면 동의문 전문과
+  // 체크 하나가 있다 — `동의 받기`·`철회` 버튼은 걷었다.
+  const sensitive = consent.locator('details', { has: page.getByText('민감정보 처리', { exact: true }) });
+  await expect(sensitive.locator('.fold-title-desc')).toContainText('동의 없음');
+  await sensitive.locator('summary').click();
+  await expect(sensitive.getByText('동의문', { exact: true })).toBeVisible();
+  const sensitiveCheck = sensitive.getByRole('checkbox', { name: '이 항목에 동의함' });
+  await expect(sensitiveCheck).not.toBeChecked();
+  // `check()` 대신 클릭이다 — 저장 동안 입력이 잠시 잠겨 Playwright 의 즉시 확인이 어긋난다.
+  await sensitiveCheck.click();
+  await expect(sensitive.locator('.fold-title-desc')).toContainText('동의함');
+  await expect(sensitiveCheck).toBeChecked();
 
   // 이제 저장된다. 인테이크는 메뉴에 없다 —
   // 아직 아무 기록이 없는 사례라 회차별 요약의 빈 상태에서 바로 연다.

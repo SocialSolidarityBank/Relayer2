@@ -92,20 +92,31 @@ export function Routes() {
       </div>
     );
 
+  /**
+   * 주소 뒤 물음표는 화면의 **첫 상태**를 얹는 자리다(2026-09-17 Q):
+   * `#/schedule?case=12`(그 당사자만 보기), `#/cases/12/record?closing=1`(종결 체크 켜고 시작).
+   * 경로 자체는 갈라지지 않는다 — 걸개 하나를 얹는 것뿐이라 새 라우트를 만들지 않는다.
+   */
+  const [path, rawQuery = ''] = hash.split('?');
+  const query = new URLSearchParams(rawQuery);
+
   const screen = (() => {
-    if (hash === HOME) return <HomeScreen />;
-    if (hash === '#/participants') return <ParticipantsScreen />;
+    if (path === HOME) {
+      const focus = Number(query.get('case'));
+      return <HomeScreen focusCaseId={Number.isFinite(focus) && focus > 0 ? focus : null} />;
+    }
+    if (path === '#/participants') return <ParticipantsScreen />;
     // 사례를 안 고른 채 상담 기록하기·상담 일정 등록을 누르면 여기로 온다.
-    if (hash === '#/pick/record') return <ParticipantsScreen pickFor="record" />;
-    if (hash === '#/pick/schedule') return <ParticipantsScreen pickFor="schedule" />;
+    if (path === '#/pick/record') return <ParticipantsScreen pickFor="record" />;
+    if (path === '#/pick/schedule') return <ParticipantsScreen pickFor="schedule" />;
     // 설정은 묶음 단위다. 낡은 항목 주소로 들어오면 그 항목이 든 묶음으로 보낸다.
-    if (hash === '#/settings') { window.location.hash = '#/settings/me'; return null; }
-    const inSettings = hash.match(/^#\/settings\/([a-z-]+)$/);
+    if (path === '#/settings') { window.location.hash = '#/settings/me'; return null; }
+    const inSettings = path.match(/^#\/settings\/([a-z-]+)$/);
     if (inSettings) return <SettingsScreen module={inSettings[1]} me={me} />;
-    if (hash === '#/participants/new') return <ParticipantNewScreen />;
+    if (path === '#/participants/new') return <ParticipantNewScreen />;
 
     // 저장해 둔 회차 고쳐 쓰기. 기록 화면을 그대로 쓰되 대상 회차를 준다.
-    const editing = hash.match(/^#\/cases\/(\d+)\/sessions\/(\d+)\/edit$/);
+    const editing = path.match(/^#\/cases\/(\d+)\/sessions\/(\d+)\/edit$/);
     if (editing)
       return (
         <RecordScreen
@@ -115,18 +126,19 @@ export function Routes() {
         />
       );
 
-    const reviewing = hash.match(/^#\/cases\/(\d+)\/sessions\/(\d+)\/review$/);
+    const reviewing = path.match(/^#\/cases\/(\d+)\/sessions\/(\d+)\/review$/);
     if (reviewing) return <ReviewScreen caseId={Number(reviewing[1])} sessionId={Number(reviewing[2])} />;
 
     // 수기·음성 전문 보기(2026-09-16 인계). 읽기 전용 — 편집·승인은 기록 화면이 담당한다.
-    const full = hash.match(/^#\/cases\/(\d+)\/sessions\/(\d+)\/full$/);
+    const full = path.match(/^#\/cases\/(\d+)\/sessions\/(\d+)\/full$/);
     if (full) return <SessionFullScreen caseId={Number(full[1])} sessionId={Number(full[2])} />;
 
-    const byCase = hash.match(/^#\/cases\/(\d+)\/(record|schedule|intake|info|close)$/);
+    const byCase = path.match(/^#\/cases\/(\d+)\/(record|schedule|intake|info|close)$/);
     if (byCase) {
       const caseId = Number(byCase[1]);
             // `key` 로 갈아 끼운다. 고쳐 쓰기와 새 기록이 같은 부품이라 상태가 새면 남의 회차를 덮는다.
-      if (byCase[2] === 'record') return <RecordScreen key={`new-${caseId}`} caseId={caseId} />;
+      if (byCase[2] === 'record')
+        return <RecordScreen key={`new-${caseId}`} caseId={caseId} startClosing={query.get('closing') === '1'} />;
       if (byCase[2] === 'intake') return <IntakeScreen caseId={caseId} />;
       if (byCase[2] === 'info') return <ParticipantInfoScreen caseId={caseId} />;
       if (byCase[2] === 'close') return <CloseScreen caseId={caseId} />;
