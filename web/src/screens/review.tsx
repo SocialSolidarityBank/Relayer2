@@ -82,7 +82,7 @@ export function ReviewScreen({ caseId, sessionId }: { caseId: number; sessionId:
         pseudonym={detail?.pseudonym ?? '확인 중'}
         details={[
           ['당사자 ID', detail?.pseudonym ?? '확인 중'],
-          ['참여 사업', `${detail?.case.program_name ?? '확인 중'}${seq ? ` · ${seq}회차` : ''}`],
+          ['참여 사업', `${detail?.case.program_name ?? '확인 중'}${seq ? `, ${seq}회차` : ''}`],
           ['연락처', detail?.participant.phone ?? ''],
           ['이메일', detail?.participant.email ?? ''],
         ]}
@@ -125,7 +125,7 @@ export function ReviewScreen({ caseId, sessionId }: { caseId: number; sessionId:
               desc={
                 masked.length === 0
                   ? '마스킹한 값 없음'
-                  : masked.map(([kind, n]) => `${MASK_LABEL[kind] ?? kind} ${n}건`).join(' · ')
+                  : masked.map(([kind, n]) => `${MASK_LABEL[kind] ?? kind} ${n}건`).join(', ')
               }
             >
               <p className="panel-meta">

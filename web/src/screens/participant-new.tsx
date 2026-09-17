@@ -98,7 +98,7 @@ export function ParticipantNewScreen() {
               ))}
             </select>
           </Field>
-          <Field label="예정 회차 수" htmlFor="planned" hint="선택 · 예: 6">
+          <Field label="예정 회차 수" htmlFor="planned" hint="선택, 예: 6">
             <input
               id="planned"
               type="text"

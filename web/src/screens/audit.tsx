@@ -195,7 +195,7 @@ export function AuditScreen({ embedded }: { embedded?: boolean } = {}) {
           <input
             id="audit-q"
             type="search"
-            placeholder="김민희 · otter-001 · 내려받기 · 함께온기금"
+            placeholder="김민희, otter-001, 내려받기, 함께온기금"
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />

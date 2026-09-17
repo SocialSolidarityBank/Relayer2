@@ -59,9 +59,12 @@ body { margin: 0; }
    말줄임으로 물러난다 — 설명(`1 1 0`)이 먼저 줄어들고 제목이 나중에 줄어든다. */
 .fold-title-text { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fold-title-desc { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* 카드 안에 접힘 카드를 넣으면 grid 항목의 `min-width:auto` 가 안쪽 제목의 최소폭을 그대로
-   물려받는다 — 390 화면에서 페이지가 473px 로 늘어났다(2026-09-17 실측). 항목마다 0 을 박는다. */
-.wire-card-body > .wire-card-details { min-width: 0; }
+/* 접힘 카드는 **어디에 놓여도** `min-width: 0` 이어야 한다. grid·flex 항목의 `min-width: auto`
+   가 접힌 머리(제목 + 말줄임 요약)의 최소폭을 그대로 물려받아 390 화면에서 페이지가 473px,
+   519px 로 늘어났다(2026-09-17 실측 두 번). 안쪽 조각에 0 을 박아도 막지 못한다 — 항목
+   자신에게 박아야 한다. 접힌 카드는 마지막으로 그려진 폭을 기억하므로(닫힌 details 의
+   `content-visibility`) 데스크톱에서 넓게 그려진 카드가 좁은 화면에서 그 폭을 요구한다. */
+.wire-card-details { min-width: 0; }
 .wire-card-details[open] > .wire-card-summary .fold-title-desc { white-space: normal; }
 /* 펼친 접힘 카드의 제목 줄 아래 선을 끈다(2026-09-17 Q "의미 없는 가로선"). 이식 CSS 는
    WireCard 의 제목 구분선과 같은 선을 여기에도 두지만, 접힘 카드는 제목 줄 하나와 본문
@@ -192,3 +195,28 @@ body { margin: 0; }
     align-items: start;
   }
 }
+
+/* 회차 정보 카드의 회차×상태 표(2026-09-17 Q — C안 확정, 최신순). */
+.seq-scroll { min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; }
+.seq-scroll:focus-visible { outline: 2px solid var(--blue-deep); outline-offset: 2px; }
+@media (max-width: 767px) { .seq-table { min-width: 420px; } }
+.seq-table { width: 100%; border-collapse: collapse; margin-top: var(--space-2); }
+.seq-table :is(th, td) { padding: var(--space-2) var(--space-3); text-align: left; font-size: var(--text-sm); border-bottom: 1px solid var(--line); }
+.seq-table thead th { color: var(--sub); font-weight: 600; }
+.seq-table tbody th { font-weight: 600; }
+.seq-table tbody tr:last-child :is(th, td) { border-bottom: 0; }
+
+/* 확인 대화상자(2026-09-17 Q). 날짜 선택기와 같은 카드 면·라운드를 쓰고 폭만 좁다. */
+.confirm-dialog { width: min(420px, calc(100vw - var(--space-6) * 2)); padding: var(--space-6); border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--panel); color: var(--ink); }
+.confirm-dialog::backdrop { background: rgb(0 0 0 / 40%); }
+.confirm-dialog h2 { margin: 0 0 var(--space-4); font-size: var(--text-lg); font-weight: 600; }
+.confirm-lines { display: grid; gap: var(--space-2); margin: 0 0 var(--space-5); padding-left: var(--space-5); color: var(--sub); font-size: var(--text-sm); }
+
+/* 파일 업로드 한 행(2026-09-17 Q): [파일 선택 | 문서 이름] 입력칸 + 업로드 버튼.
+   선택 버튼은 **입력칸 안**이다(전역 통일) — 칸 왼쪽에 붙고 글자 입력은 그 오른쪽을 쓴다. */
+.doc-upload-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.doc-upload-row > .wire-button { flex: none; }
+.doc-upload-box { flex: 1 1 320px; min-width: 0; display: flex; align-items: center; gap: var(--space-2); padding-inline-start: var(--space-1-5); }
+.doc-upload-box > input { flex: 1 1 auto; min-width: 0; }
+.doc-upload-pick { flex: none; min-height: 30px; }
+.doc-upload-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }

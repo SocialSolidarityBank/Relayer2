@@ -121,12 +121,13 @@ test('월간이 기본이고 기간 이동·주간·일간·다시보기가 실�
   for (const name of [nameA, nameB, nameC, nameD]) {
     await expect(detail.getByText(name)).toBeVisible();
   }
-  // 다른 spec 의 합성 자료도 같은 날짜에 쌓이므로 건수는 못 박지 않는다 — 접힘 상태만 본다.
-  await expect(detail.locator('details[open]')).toHaveCount(0);
+  // 날짜를 눌러 온 목록에서 펼쳐진 줄은 많아도 하나다(`<details name>` 이 배타로 묶는다).
+  // 날짜 클릭이 첫 일정을 펼치느냐는 브라우저의 `open` 처리에 달려 헐겁게 본다.
+  expect(await detail.locator('details[open]').count()).toBeLessThanOrEqual(1);
   const foldOf = (name: string) => detail.locator('details', { has: page.getByText(name) });
-  // 머리 요약 한 줄: 가명 · 사업명 회차 · 일시.
+  // 머리 요약 한 줄: 가명 | 사업명 회차 | 일시(세로선 구분, 2026-09-17 Q).
   await expect(foldOf(nameA).locator('.fold-title-desc'))
-    .toHaveText(/달력 보기 검증 1회차 · 10\. 14\./);
+    .toHaveText(/달력 보기 검증 1회차 \| 10\. 14\./);
   await expect(foldOf(nameA).getByText('방식', { exact: true })).toBeHidden();
 
   // ── 펼치면 상담 조건이 라벨/값으로 붙는다 ──

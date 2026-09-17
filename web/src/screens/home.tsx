@@ -21,11 +21,15 @@ const EMPTY_EVENTS: CalendarEvent[] = [];
 const UPCOMING_LIMIT = 5;
 /** 접힌 줄의 12px 한 줄. 잘리면 전체는 `title` 로 남는다(이식 규칙: 말줄임 + title). */
 const metaLine = (parts: Array<string | null>) => {
-  const text = parts.filter(Boolean).join(' · ');
+  const text = parts.filter(Boolean).join(' | ');
   return <span title={text}>{text}</span>;
 };
 
-export function HomeScreen() {
+/**
+ * `focusCaseId` 가 오면 그 당사자의 일정만 본다(2026-09-17 Q — 당사자 카드의 `상담 일정 보기`).
+ * 주소(`#/schedule?case=12`)가 상태를 들고 있어 링크를 공유하거나 뒤로 가도 그대로 산다.
+ */
+export function HomeScreen({ focusCaseId = null }: { focusCaseId?: number | null }) {
   const [view, setView] = useState<CalendarView>('month');
   const [anchor, setAnchor] = useState(() => koreanDay());
   const [selectedDay, setSelectedDay] = useState(anchor);
@@ -50,8 +54,16 @@ export function HomeScreen() {
   const [loaded, setLoaded] = useState<{ key: string; rows: ScheduleRow[] | null; error: string | null }>({ key: '', rows: null, error: null });
   const period = useMemo(() => calendarPeriod(view, anchor), [view, anchor]);
   const requestKey = `${period.start}/${period.end}`;
-  const rows = loaded.key === requestKey ? loaded.rows : null;
+  const loadedRows = loaded.key === requestKey ? loaded.rows : null;
+  // 걸개는 화면이 받은 자료를 좁힌다 — 서버 질의와 기간 계산은 그대로다.
+  const rows = focusCaseId && loadedRows ? loadedRows.filter(row => row.case_id === focusCaseId) : loadedRows;
   const error = loaded.key === requestKey ? loaded.error : null;
+  // 걸린 사람의 이름은 받아 둔 줄에서 집는다 — 이름만 얻으려고 사례를 따로 부르지 않는다.
+  const focusRow = focusCaseId
+    ? (loadedRows ?? []).find(row => row.case_id === focusCaseId)
+      ?? (upcoming ?? []).find(row => row.case_id === focusCaseId)
+    : undefined;
+  const focusLabel = focusRow ? (focusRow.name ?? focusRow.pseudonym) : '고른 당사자';
   const detail = useRef<HTMLElement>(null);
   const timeScroll = useRef<HTMLDivElement>(null);
   const today = koreanDay();
@@ -128,7 +140,7 @@ export function HomeScreen() {
     const name = row.name ?? row.pseudonym;
     const label = `${dayFormatter.format(new Date(`${time.day}T00:00:00Z`))} ${time.label} ${name} ${row.seq}회차 일정 상세`;
     return <button key={row.session_id} type="button" className="sc-event" data-session-id={row.session_id}
-      aria-label={label} title={`${label} · ${row.program_name}`} onClick={e => { e.stopPropagation(); showDay(time.day, row.session_id); }}>
+      aria-label={label} title={`${label}, ${row.program_name}`} onClick={e => { e.stopPropagation(); showDay(time.day, row.session_id); }}>
       <span className="sc-event-time">{time.label}</span><strong className="sc-event-name">{name}</strong>
     </button>;
   };
@@ -138,10 +150,11 @@ export function HomeScreen() {
   const upcomingEvents: CalendarEvent[] = useMemo(() => {
     const now = Date.now();
     return (upcoming ?? [])
+      .filter(row => !focusCaseId || row.case_id === focusCaseId)
       .filter(row => new Date(row.scheduled_at).getTime() >= now - 3_600_000)
       .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at))
       .map(row => ({ row, time: calendarTime(row.scheduled_at) }));
-  }, [upcoming]);
+  }, [upcoming, focusCaseId]);
   const listed = dayPicked
     ? rows === null
       ? null
@@ -153,12 +166,21 @@ export function HomeScreen() {
     upcoming === null
       ? undefined
       : upcomingEvents.length > upcomingShown
-        ? `가까운 ${upcomingShown}건 · 모두 ${upcomingEvents.length}건`
+        ? `가까운 ${upcomingShown}건, 모두 ${upcomingEvents.length}건`
         : `${upcomingEvents.length}건`;
 
   return <>
-    {/* 제목 아래 설명 줄은 걷었다(2026-09-17 Q). 건수는 아래 카드가, 시간대는 값이 말한다. */}
-    <PageHeader title="상담 일정" />
+    {/* 제목 아래 설명 줄은 걷었다(2026-09-17 Q). 건수는 아래 카드가, 시간대는 값이 말한다.
+        당사자 걸개가 걸리면 제목 옆에 걷는 칩이 선다 — 걸개가 걸린 줄 모르는 채 "일정이
+        없다"고 읽는 일을 막는다. */}
+    <PageHeader
+      title="상담 일정"
+      actions={focusCaseId ? (
+        <Button onClick={() => { window.location.hash = '#/schedule'; }}>
+          {focusLabel}만 보기 ✕
+        </Button>
+      ) : undefined}
+    />
     <div className="wire-container sc-page">
       <div className="sc-toolbar">
         <div className="sc-view-select">
@@ -231,7 +253,7 @@ export function HomeScreen() {
             펼치면 회차·일시·사업명·장소가 라벨/값으로 붙는다. */}
         <section ref={detail} tabIndex={-1} aria-labelledby="sc-detail-label" className="sc-details">
           <span id="sc-detail-label" hidden>
-            {dayPicked ? `선택한 날짜의 상담 일정 · ${selectedDateLabel}` : '다가오는 상담 일정'}
+            {dayPicked ? `선택한 날짜의 상담 일정, ${selectedDateLabel}` : '다가오는 상담 일정'}
           </span>
           <Card
             title={dayPicked ? selectedDateLabel : '다가오는 일정'}

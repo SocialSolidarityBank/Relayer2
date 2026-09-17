@@ -1,6 +1,6 @@
 // CCC wire 계약을 쓰는 최소 부품. 클래스 이름과 구조는 정본 그대로이며 새 이름을 만들지 않는다.
 // 근거: web/src/styles/wire.css(=CCC wire-styles.ts), web/src/styles/shell.css(=CCC layout.tsx).
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { LIFE_AREAS } from './areas.ts';
 import { API_FAILED } from './api.ts';
 
@@ -50,6 +50,55 @@ export function BackLink() {
 }
 
 /**
+ * 확인 대화상자(2026-09-17 Q). 되돌리기 어려운 행동 앞에 선다 — 지금은 상담 종결 하나다.
+ * 네이티브 `<dialog>` 의 모달을 쓴다(날짜 선택기와 같은 방식): Escape·바깥 클릭이 곧 취소고,
+ * 초점은 브라우저가 가둔다. 확인 버튼은 danger 톤이고 기본 초점은 취소다 —
+ * 잘못 눌러 열렸을 때 Enter 가 종결로 이어지면 안 된다.
+ */
+export function Confirm({
+  open,
+  title,
+  lines,
+  confirmLabel,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  title: string;
+  /** 왜 멈춰 세웠는지. 조건마다 한 줄이고, 없으면 확인만 묻는다. */
+  lines: string[];
+  confirmLabel: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const el = dialog.current;
+    if (!el) return;
+    if (open && !el.open) el.showModal();
+    if (!open && el.open) el.close();
+  }, [open]);
+  return (
+    <dialog ref={dialog} className="confirm-dialog" aria-labelledby="confirm-title" onCancel={onCancel} onClose={onCancel}>
+      <h2 id="confirm-title">{title}</h2>
+      {lines.length > 0 && (
+        <ul className="confirm-lines">
+          {lines.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+      )}
+      <div className="wire-form-actions">
+        <Button onClick={onCancel}>취소</Button>
+        <Button variant="danger" onClick={onConfirm}>
+          {confirmLabel}
+        </Button>
+      </div>
+    </dialog>
+  );
+}
+
+/**
  * 동의 문안의 표준 양식 항목. **동의를 받는 자리마다 같은 것을 보여 준다**(2026-09-16 검수).
  *
  * 해시에 묶인 내용이 곧 이것이다 — 무엇을 받고, 왜 받고, 얼마나 두고, 거부하면 어떻게 되는지.
@@ -77,7 +126,7 @@ export function ConsentDetail({
           ['얼마나 두나', copy.retention_text],
           ...(copy.recipient ? ([['어디로 가나', copy.recipient]] as Array<[string, ReactNode]>) : []),
           ['거부할 수 있나', copy.refusal_text],
-          ['문안 판', `${copy.version} · 지문 ${copy.hash}`],
+          ['문안 판', `${copy.version}, 지문 ${copy.hash}`],
         ]}
       />
     </Fold>
@@ -370,6 +419,7 @@ export function Choice({
   label,
   hint,
   checked,
+  disabled,
   onChange,
 }: {
   type: 'radio' | 'checkbox';
@@ -378,6 +428,8 @@ export function Choice({
   label: string;
   hint?: string;
   checked: boolean;
+  /** 저장 중에는 같은 체크를 두 번 누르지 못하게 막는다. */
+  disabled?: boolean;
   onChange: () => void;
 }) {
   return (
@@ -387,6 +439,7 @@ export function Choice({
         className={type === 'radio' ? 'wire-radio' : 'wire-checkbox'}
         name={name}
         checked={checked}
+        disabled={disabled}
         onChange={onChange}
       />
       <span className="wire-choice-text">
@@ -472,7 +525,7 @@ export function LineList({
       {lines.map((line, i) => (
         <div className="wire-repeat-card" key={`${line.text}-${i}`}>
           <Item
-            title={`${withArea ? `${LIFE_AREAS.find((a) => a.key === line.area)?.label} · ` : ''}${line.text}`}
+            title={`${withArea ? `${LIFE_AREAS.find((a) => a.key === line.area)?.label} | ` : ''}${line.text}`}
             action={<Button onClick={() => onChange(lines.filter((_, j) => j !== i))}>지우기</Button>}
           />
         </div>
