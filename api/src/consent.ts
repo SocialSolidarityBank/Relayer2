@@ -36,13 +36,23 @@ export const AI_PROVIDERS = {
 export type AiProviderId = keyof typeof AI_PROVIDERS;
 
 /**
+ * 기관이 고른 LLM 제공자. 허용 목록 밖의 값이면 부팅에서 멈춘다(2026-09-17 ASTRA 검토) —
+ * 이전에는 엉뚱한 값이 OpenAI 로 보내지면서 동의 문안의 수신자는 비어 있었다. 동의에 적힌
+ * 수신자와 실제 전송처는 한 값에서 나와야 한다. `ai.ts` 도 이것을 쓴다.
+ */
+const rawAiProvider = process.env.AI_PROVIDER ?? 'openai';
+if (!Object.hasOwn(AI_PROVIDERS, rawAiProvider)) {
+  throw new Error(`AI_PROVIDER 는 ${Object.keys(AI_PROVIDERS).join('|')} 중 하나여야 해요: ${rawAiProvider}`);
+}
+export const AI_PROVIDER = rawAiProvider as AiProviderId;
+
+/**
  * 승인된 STT 제공자. 정본은 외부 STT 의 provider 를 **정확히 `azure`** 로 못박는다(§매트릭스).
  * 다른 곳으로 음성을 보내려면 정본을 먼저 고쳐야 한다.
  */
 export const STT_PROVIDERS = {
   azure: { id: 'azure', legalRecipient: 'Microsoft Corporation', country: 'US' },
 } as const;
-export type SttProviderId = keyof typeof STT_PROVIDERS;
 
 /**
  * 보유기간 문구.
@@ -117,7 +127,8 @@ export const CONSENT_COPY: Record<ConsentDomain, DomainCopy> = {
     purposeText: '녹음을 글로 옮겨 기록 작성을 돕기 위해서예요.',
     retentionText: '보낸 음성은 전사가 끝나면 제공자 쪽에 남기지 않도록 요청해요. 기관 안 원본은 1년 뒤 지워요.',
     refusalText: '동의하지 않을 수 있어요. 녹음은 기관 안에만 두고 글로 옮기는 일은 하지 않아요.',
-    provider: STT_PROVIDERS[(process.env.STT_PROVIDER as SttProviderId) ?? 'azure'],
+    // `stt.ts` 가 azure 로 못박았다. 환경변수로 다른 값을 읽으면 동의 수신자만 어긋난다.
+    provider: STT_PROVIDERS.azure,
   },
   external_llm_cross_border_processing: {
     label: '외부 LLM·국외 처리',
@@ -129,7 +140,7 @@ export const CONSENT_COPY: Record<ConsentDomain, DomainCopy> = {
     refusalText: '동의하지 않을 수 있어요. 요약을 사람이 직접 쓰고, 상담은 그대로 받으실 수 있어요.',
     // 수신자는 기관이 고른 제공자다. **바뀌면 문안 해시가 달라지고 기존 동의는 `확인 필요`로 떨어진다** —
     // 누구에게 보내는지가 동의의 본체이기 때문이다(정본 §2.1).
-    provider: AI_PROVIDERS[(process.env.AI_PROVIDER as AiProviderId) ?? 'openai'],
+    provider: AI_PROVIDERS[AI_PROVIDER],
   },
   voice_original_retention_period: {
     label: '음성 원본 보유기간',
