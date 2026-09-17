@@ -22,9 +22,12 @@ const source = (item: BriefingItem): string =>
   `${item.source_session_seq}회차${item.last_result === 'unchecked' ? ' · 지난 회차 미확인' : ''}`;
 
 /**
- * `hideHeader` 는 당사자 정보 탭 안에서 쓸 때다. 제목이 두 번 뜨지 않게 한다.
+ * `hideHeader` 는 다른 화면 안에서 쓸 때다. 제목이 두 번 뜨지 않게 한다.
  * `seq` 를 주면 **그 회차까지 쌓인 것**을 본다 — 기록은 회차마다 쌓이므로
  * 다시보기도 회차마다 다르다(2026-09-16 Q).
+ *
+ * 제목 줄에 **회차 고르기**를 둔다(2026-09-17 Q — 구 당사자 정보 탭 안에 있던 자리).
+ * 기본은 `지금`이다. 다음 상담을 준비하는 화면이고 그것이 이 제품의 본래 쓰임이다.
  */
 export function BriefingScreen({
   caseId,
@@ -35,11 +38,13 @@ export function BriefingScreen({
   hideHeader?: boolean;
   seq?: number;
 }) {
+  const [pickedSeq, setPickedSeq] = useState<number | undefined>(undefined);
+  const shownSeq = seq ?? pickedSeq;
   const [briefing, setBriefing] = useState<Briefing | null>(null);
   useEffect(() => {
     setBriefing(null);
-    void getBriefing(caseId, seq).then(setBriefing);
-  }, [caseId, seq]);
+    void getBriefing(caseId, shownSeq).then(setBriefing);
+  }, [caseId, shownSeq]);
 
   if (!briefing) return <p className="empty">불러오는 중이에요.</p>;
   const card = briefing.participant_card;
@@ -48,7 +53,36 @@ export function BriefingScreen({
   return (
     <>
       {!hideHeader && (
-        <PageHeader title="15초 다시보기" meta={`${card.name ?? card.pseudonym} · ${card.program_name}`} />
+        <PageHeader
+          title="15초 다시보기"
+          meta={`${card.name ?? card.pseudonym} · ${card.program_name}`}
+          actions={
+            // 기록된 회차가 둘 이상일 때만 고를 것이 있다. `지금`은 마지막 기록까지다.
+            (card.session_seq ?? 0) > 1 ? (
+              <div className="info-tabs">
+                <button
+                  type="button"
+                  className="wire-step"
+                  aria-pressed={pickedSeq === undefined}
+                  onClick={() => setPickedSeq(undefined)}
+                >
+                  지금
+                </button>
+                {Array.from({ length: card.session_seq ?? 0 }, (_, i) => i + 1).map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    className="wire-step"
+                    aria-pressed={pickedSeq === n}
+                    onClick={() => setPickedSeq(n)}
+                  >
+                    {n}회차
+                  </button>
+                ))}
+              </div>
+            ) : undefined
+          }
+        />
       )}
 
       <div className="wire-container">

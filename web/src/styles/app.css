@@ -61,6 +61,12 @@ body { margin: 0; }
   .wire-item > .wire-item-action { justify-content: flex-start; }
 }
 
+/* 당사자 카드(HERO)의 세로 스택을 되살린다(2026-09-17). 이식 CSS 는 `.participant-hero-card`
+   에 `align-items:stretch` 를 주지만(`wire.css:275`), 같은 특이도의 `.page-header{align-items:center}`
+   가 **뒤 파일**(`shell.css:301`)에 있어 그쪽이 이긴다 — CCC 는 두 규칙이 한 시트에 있어
+   순서가 반대였다. 실측: 이름·정보 격자가 가운데로 모이고 내용 폭(416px)으로 줄었다. */
+.participant-hero-card { align-items: stretch; }
+
 .wire-choice-hint { display: block; margin-top: var(--space-1); font-size: var(--text-sm); font-weight: 400; color: var(--sub); }
 
 /* 라벨 행이 없는 반복 입력: 입력칸과 버튼이 한 행 중앙에 선다.

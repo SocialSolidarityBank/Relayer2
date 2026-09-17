@@ -1,5 +1,6 @@
-// 당사자 정보 — 탭 4(GLOSSARY §6-4): 회차별 요약 · 15초 다시보기 · 목표 · 정보.
-// 당사자 카드와 할 일 전체는 두지 않는다(요구 25·28). 종결 버튼은 `정보` 탭에 있다.
+// 당사자 정보 — **당사자 카드(HERO)가 머리**이고 그 아래 탭 4개가 화면을 가른다
+// (2026-09-17 Q): 당사자 정보 · 회차별 요약 · 회차별 전문 보기 · 목표.
+// 15초 다시보기는 카드의 행동 버튼으로 간다(구 5번째 탭 대체 — 회차 고르기는 그 화면이 갖는다).
 import { useEffect, useState } from 'react';
 import {
   documentHref,
@@ -31,11 +32,10 @@ import {
   Fold,
   FormActions,
   Item,
-  PageHeader,
+  ParticipantHero,
 } from '../ui.tsx';
-import { BriefingScreen } from './briefing.tsx';
 
-const TABS = ['회차별 요약', '15초 다시보기', '목표', '정보'] as const;
+const TABS = ['당사자 정보', '회차별 요약', '회차별 전문 보기', '목표'] as const;
 type Tab = (typeof TABS)[number];
 
 const dateLabel = (iso: string | null): string => {
@@ -105,13 +105,8 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
                 }
                 action={
                 <>
-                  <Button
-                    onClick={() =>
-                      (window.location.hash = `#/cases/${caseId}/sessions/${s.id}/full`)
-                    }
-                  >
-                    전문 보기
-                  </Button>
+                  {/* `전문 보기`는 `회차별 전문 보기` 탭이 갖는다(2026-09-17 Q) — 한 행동에
+                      입구가 둘이면 어느 것이 정본인지 알 수 없다. */}
                   <Button
                     onClick={() =>
                       setOpenIds((prev) =>
@@ -446,43 +441,42 @@ function Documents({ caseId }: { caseId: number }) {
 }
 
 /**
- * 15초 다시보기 탭 — **회차를 골라 그때 화면을 본다**(2026-09-16 Q).
- * 기본은 `지금`이다. 다음 상담을 준비하는 화면이고 그것이 이 제품의 본래 쓰임이다.
- * 지난 회차를 고르면 그 회차까지 쌓여 있던 것이 그대로 선다.
+ * 회차별 전문 보기 탭 — 회차를 골라 **수기·음성 전문**으로 간다(2026-09-17 Q).
+ * 전문 자체는 `상담 내용 원문 보기` 화면이 그린다. 두 벌로 만들지 않는다.
  */
-function BriefingTab({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
+function Fulls({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
   const done = detail.sessions.filter((s) => s.status === 'done');
-  const [seq, setSeq] = useState<number | undefined>(undefined);
-
+  if (done.length === 0) {
+    return (
+      <Card title="회차별 전문 보기">
+        <Empty>아직 기록한 상담이 없어요.</Empty>
+      </Card>
+    );
+  }
   return (
-    <>
-      {done.length > 0 && (
-        <Card title="언제 시점으로 볼까요" hint="지난 회차를 고르면 그때까지 쌓여 있던 것만 보여요.">
-          <div className="info-tabs">
-            <button
-              type="button"
-              className="wire-step"
-              data-active={seq === undefined}
-              onClick={() => setSeq(undefined)}
-            >
-              지금
-            </button>
-            {done.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                className="wire-step"
-                data-active={seq === s.seq}
-                onClick={() => setSeq(s.seq)}
+    <Card title="회차별 전문 보기" hint="회차를 고르면 그 회차의 수기·음성 전문을 읽어요.">
+      {done.map((s) => (
+        <div className="wire-repeat-card" key={s.id}>
+          <Item
+            title={`${s.seq}회차 · ${dateLabel(s.held_at)}${s.kind === 'intake' ? ' · 인테이크' : ''}`}
+            desc={
+              <>
+                {s.written ? '수기 있음' : '수기 미작성'}
+                {s.voice.recordings > 0 && ` · 녹음 ${s.voice.recordings}`}
+                {s.voice.recordings > 0 && ` · ${TRANSCRIPT_LABEL[s.voice.transcript]}`}
+              </>
+            }
+            action={
+              <Button
+                onClick={() => (window.location.hash = `#/cases/${caseId}/sessions/${s.id}/full`)}
               >
-                {s.seq}회차
-              </button>
-            ))}
-          </div>
-        </Card>
-      )}
-      <BriefingScreen caseId={caseId} hideHeader seq={seq} />
-    </>
+                전문 보기
+              </Button>
+            }
+          />
+        </div>
+      ))}
+    </Card>
   );
 }
 
@@ -528,7 +522,7 @@ function Info({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
 
 export function ParticipantInfoScreen({ caseId }: { caseId: number }) {
   const [detail, setDetail] = useState<CaseDetail | null>(null);
-  const [tab, setTab] = useState<Tab>('회차별 요약');
+  const [tab, setTab] = useState<Tab>('당사자 정보');
 
   useEffect(() => {
     void getCaseDetail(caseId).then(setDetail);
@@ -536,18 +530,44 @@ export function ParticipantInfoScreen({ caseId }: { caseId: number }) {
 
   if (!detail) return <p className="empty">불러오는 중이에요.</p>;
 
+  const done = detail.sessions.filter((s) => s.status === 'done');
+  const next = detail.sessions
+    .filter((s) => s.status === 'planned' && s.scheduled_at)
+    .sort((a, b) => (a.scheduled_at ?? '').localeCompare(b.scheduled_at ?? ''))[0];
+
+  // HERO 정보는 **이 화면이 이미 받는 값**만 쓴다. 연락처·이메일은 `당사자 정보` 탭의
+  // 기본 정보에 있고, 머리에 올리면 같은 개인정보가 화면마다 늘어난다.
+  const heroDetails: Array<[string, string]> = [
+    ['당사자 ID', detail.pseudonym],
+    ['참여 사업', detail.case.program_name],
+    ['상담 기록', done.length > 0 ? `${Math.max(...done.map((s) => s.seq))}회차까지 기록` : '아직 없음'],
+    ['다음 상담', next?.scheduled_at ? new Date(next.scheduled_at).toLocaleString('ko-KR') : '예정 없음'],
+    ['상태', detail.case.status === 'closed' ? '종결' : '진행 중'],
+  ];
+
   return (
     <>
-      <PageHeader
-        title="당사자 정보"
-        meta={
+      {/* 여기가 이 사람의 카드다(CCC D38). 화면 용도는 아래 탭이 말하고, 머리는 사람을 말한다. */}
+      <ParticipantHero
+        name={detail.participant.name}
+        pseudonym={detail.pseudonym}
+        details={heroDetails}
+        actions={
           <>
-            {`${detail.participant.name ?? detail.pseudonym} · ${detail.case.program_name}`}
-            {detail.case.status === 'closed' && <Badge>종결</Badge>}
+            <Button onClick={() => (window.location.hash = `#/cases/${caseId}/briefing`)}>
+              15초 다시보기
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => (window.location.hash = `#/cases/${caseId}/record`)}
+            >
+              상담 기록하기
+            </Button>
           </>
         }
       />
       <div className="wire-container">
+        {/* 탭은 카드 아래에서 이 사람의 화면을 가른다(2026-09-17 Q 최종 4탭). */}
         <div className="info-tabs" role="tablist">
           {TABS.map((t) => (
             <button
@@ -563,12 +583,11 @@ export function ParticipantInfoScreen({ caseId }: { caseId: number }) {
           ))}
         </div>
 
+        {tab === '당사자 정보' && <Info detail={detail} caseId={caseId} />}
         {tab === '회차별 요약' && <Sessions detail={detail} caseId={caseId} />}
+        {tab === '회차별 전문 보기' && <Fulls detail={detail} caseId={caseId} />}
         {tab === '목표' && <Goals detail={detail} />}
-        {tab === '정보' && <Info detail={detail} caseId={caseId} />}
       </div>
-      {/* 15초 다시보기는 같은 화면을 그대로 쓴다. 두 벌로 만들지 않는다. */}
-      {tab === '15초 다시보기' && <BriefingTab detail={detail} caseId={caseId} />}
     </>
   );
 }

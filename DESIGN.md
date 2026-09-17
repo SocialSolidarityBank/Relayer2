@@ -147,6 +147,21 @@ CCC는 블루 채움 배지를 시간 축으로 제한하지만, 릴레이어의
 
 새 화면과 기존 화면을 수정할 때 이 원칙으로 검수한다. 이 절은 사용자가 확정한 준수 규칙이며, 모든 기존 페이지의 적용·렌더 검증이 끝났다는 뜻은 아니다.
 
+### 당사자 카드(HERO)와 탭
+
+**한 사람을 다루는 화면의 머리는 당사자 카드다**(2026-09-17 Q — CCC `ParticipantHeroCard`, D38). "여기가 이 사람의 카드다"가 첫 문장이 되게, 화면 용도가 아니라 **이름**이 제목(`h1`, 18px·600)이다. 이식 CSS(`wire.css:269-293`)를 그대로 쓰고 새 클래스를 만들지 않는다.
+
+- 구분선 **위에는 이름과 행동만** 둔다. 행동은 오른쪽 끝에서 세로 가운데이고 최대 두 개다(당사자 정보: `15초 다시보기` · `상담 기록하기`).
+- 구분선 **아래는 라벨/값 정보 격자**다. 카드 내부 폭 760px 초과는 3열, 그 아래는 80px 라벨 행이다(실측 1440: 열 폭 327px · 390: 라벨 80px + 값 203px).
+- **배지를 두지 않는다** — 상태도 라벨/값이다(`상태: 진행 중`·`종결`). CCC 2026-09-08 Q와 같다.
+- 정보가 없으면 구분선과 아래 영역을 만들지 않는다. 이름이 없으면 가명이 이름 자리를 대신하고, 이름이 있으면 가명은 `당사자 ID` 값으로 내려간다.
+- 정보는 **그 화면이 이미 받는 값**만 올린다. 연락처·이메일은 `당사자 정보` 탭의 기본 정보에 두고 머리에 올리지 않는다 — 같은 개인정보가 화면마다 늘어난다.
+- 스크롤을 따라오지 않는다(`sticky`는 셸과 기록 레일의 것이다). 페이지의 첫 블록이라는 뜻의 상단 고정이다.
+
+**탭은 카드 아래에서 이 사람의 화면을 가른다.** 최종 네 개이며 순서를 바꾸지 않는다(2026-09-17 Q): `당사자 정보` · `회차별 요약` · `회차별 전문 보기` · `목표`. 기본 탭은 `당사자 정보`다. `15초 다시보기`는 탭이 아니라 카드의 행동 버튼이고, 회차를 골라 그 시점으로 보는 조작은 그 화면의 제목 줄이 갖는다. 전문은 `회차별 전문 보기` 탭이 유일한 입구다 — `회차별 요약`에서는 그 버튼을 걷었다(한 행동에 입구를 둘 두지 않는다).
+
+지금 적용된 화면은 `당사자 정보` 하나다. 상담 기록하기·인테이크·15초 다시보기·검토·종결·원문 보기·일정 등록은 아직 `PageHeader`(화면 이름 + meta)를 쓴다 — 한 화면씩 옮기며 검수한다(2026-09-17 Q).
+
 ### 당사자 목록
 
 CCC의 `apps/web/app/components/wire/participant-card.tsx`와 `participants/page.tsx`에서 이름 중심 카드 구조를 가져왔다. 기존 `.participant-row-list`, `.participant-card`, `.participant-name-group`, `.wire-field-row` 스타일을 그대로 사용하며 아코디언이나 카드 안 행동 버튼 묶음은 두지 않는다.
@@ -198,6 +213,7 @@ CCC의 `apps/web/app/components/wire/participant-card.tsx`와 `participants/page
 | 부품 | 클래스와 구조 | 언제 쓰는가 |
 |---|---|---|
 | `PageHeader` | `.page-header`, `h1.wire-page-title`, 선택적인 `.panel-meta`와 `.page-actions` | 화면 제목과 설명을 표시한다. 화면 하나짜리 행동(되돌이·이동 버튼)은 `actions`로 넘겨 **제목과 같은 행에서 세로 가운데·오른쪽 끝**에 세운다(2026-09-17 Q). 767px 이하에서는 이식 규칙이 제목 아래 오른쪽으로 내린다. |
+| `ParticipantHero` | `header.page-header.surface-card.participant-hero-card`, `h1.participant-hero-title`, `.page-actions`, `.participant-hero-divider`, `.participant-hero-details` | 한 사람을 다루는 화면의 머리다. 이름이 제목이고 정보는 라벨/값이다 — 규칙은 §4 당사자 카드(HERO)와 탭. |
 | `Card` | `section.surface-card.wire-card`, 선택적인 `h2.wire-card-title`와 `.wire-card-divider`, `.wire-card-body` | 정보나 폼을 하나로 묶는다. 제목 없는 카드에는 제목 구분선을 만들지 않는다. |
 | `Button` | `.wire-button > .wire-button-text` | 현재 화면은 `primary`와 기본 `secondary`를 쓴다. 최소 높이는 32px이고 글자 폭에 좌우 14px 패딩과 테두리를 더한다. |
 | `Field` | `.wire-form-field` 안 라벨·`.wire-input-box`·선택적 도움말 | 입력·선택·여러 줄 입력을 같은 위계로 표시한다. `htmlFor` 연결을 유지한다. |
@@ -306,7 +322,6 @@ web/src/theme.ts              고르기·저장·기기 설정 따라가기
 | 아코디언 | ~90 | `.wire-card-details` · `.wire-card-summary` · `.wire-disclosure-chevron` | `wire.css:97-156, 558-590` |
 | 일정 화면 | ~150 | `.schedule-nav` · `.schedule-day-list` · `.schedule-candidate-*` | `shell.css:815-908` |
 | 날짜·시각 피커 | ~135 | `.wire-date-popover` · `.wire-time-slot` | `wire.css:1277-1410` |
-| 당사자 HERO | — | `.participant-hero-card` | `wire.css:269-293` |
 | 고대비 토큰 | ~40 | `[data-contrast="high"]` | `tokens.css:359-399` |
 
 상담 일정 입력의 월간 7열 격자는 A안 승인 후 `.schedule-date-grid`로 구현했다.

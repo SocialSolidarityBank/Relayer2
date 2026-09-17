@@ -15,11 +15,15 @@ const OVERALL_GOAL = '연체를 정리하고 생활을 안정시킨다';
  * 지금 보고 있는 사례의 당사자 정보로 간다. `당사자 정보`는 2026-09-17 Q 지시로 메뉴에서
  * 빠졌다 — 사람이 쓰는 입구는 당사자 목록 카드이고(그 동선은 `participant-list.spec.ts`가
  * 지킨다), 여기서는 흐름 중간에 그 화면을 열어 보는 것이 목적이라 주소로 간다.
+ *
+ * 화면은 당사자 카드(HERO) + 탭 4개이고 기본 탭은 `당사자 정보`다. 다른 탭이 필요하면
+ * 이름을 준다 — 사람도 카드 아래 탭을 눌러 옮긴다.
  */
-const openInfo = async (page: Page) => {
+const openInfo = async (page: Page, tab?: '당사자 정보' | '회차별 요약' | '회차별 전문 보기' | '목표') => {
   const caseId = page.url().match(/#\/cases\/(\d+)\//)?.[1];
   expect(caseId, '사례 주소에서 왔어야 한다').toBeTruthy();
   await page.goto(`/#/cases/${caseId}/info`);
+  if (tab) await page.getByRole('tab', { name: tab, exact: true }).click();
 };
 
 /**
@@ -150,8 +154,9 @@ test('등록부터 15초 다시보기까지 한 바퀴', async ({ page }) => {
   const row = page.getByRole('link', { name: new RegExp(NAME) });
   await expect(row.getByText('2회차까지 기록', { exact: true })).toBeVisible();
   await row.click();
-  await page.getByRole('tab', { name: '15초 다시보기', exact: true }).click();
-  await expect(page.getByRole('tab', { name: '15초 다시보기', exact: true })).toHaveAttribute('aria-selected', 'true');
+  // 15초 다시보기는 탭이 아니라 당사자 카드의 행동 버튼이다(2026-09-17 Q 최종 4탭).
+  await page.getByRole('button', { name: '15초 다시보기' }).click();
+  await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
   await expect(page.locator('section.wire-card', { hasText: '확인할 과제' })).toContainText(TASK);
 });
 
@@ -219,7 +224,7 @@ test('상담 종결은 회차를 만들지 않고 미완료 과제를 그대로 
 
   // 당사자 정보 › 정보 탭에서 종결로 들어간다
   await openInfo(page);
-  await page.getByRole('tab', { name: '정보' }).click();
+  await page.getByRole('tab', { name: '당사자 정보' }).click();
   await page.locator('.wire-container').getByRole('button', { name: '상담 종결' }).click();
   await page.waitForURL(/\/close$/);
   await expect(page.getByRole('heading', { name: '종결 사유' })).toBeVisible();
@@ -236,7 +241,8 @@ test('상담 종결은 회차를 만들지 않고 미완료 과제를 그대로 
   await page.getByRole('button', { name: '종결 확정' }).click();
 
   // 회차별 요약: 마지막 상담과 상담 종결이 두 항목. 종결은 회차 번호를 받지 않는다.
-  await expect(page.getByRole('tab', { name: '회차별 요약' })).toBeVisible();
+  // 기본 탭은 `당사자 정보`라 요약을 보려면 탭을 고른다(2026-09-17 Q 최종 4탭).
+  await page.getByRole('tab', { name: '회차별 요약' }).click();
   const closure = page
     .locator('section.wire-card')
     .filter({ has: page.getByRole('heading', { name: '상담 종결' }) });
@@ -286,7 +292,7 @@ test('종결 상담으로 저장하면 종결 화면으로 이어진다', async 
   await expect(page.getByRole('heading', { name: '종결 사유' })).toBeVisible();
   await page.getByRole('radio', { name: '목표 달성' }).check();
   await page.getByRole('button', { name: '종결 확정' }).click();
-  await expect(page.getByRole('tab', { name: '정보' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
 });
 
 // 당사자는 비밀번호가 맞아도 들어오지 못한다. 열람은 실무자가 보낸 링크와 코드다(GLOSSARY §3).
@@ -326,7 +332,7 @@ test('인테이크를 다시 열어 고쳐 쓴다', async ({ page }) => {
 
   // 다시 열면 적어 둔 것이 그대로 있다.
   // 한 번 쓴 인테이크는 메뉴에 없다 — 회차별 요약에서 고쳐 쓴다.
-  await openInfo(page);
+  await openInfo(page, '회차별 요약');
   await page.waitForURL(/\/info$/);
   await page
     .locator('section.wire-card')
@@ -347,7 +353,7 @@ test('인테이크를 다시 열어 고쳐 쓴다', async ({ page }) => {
   await expect(page.locator('.wire-container')).toContainText('고쳐 적은 목표');
 
   // 회차가 늘지 않았다 — 고쳐 쓰기는 새 회차를 만들지 않는다
-  await openInfo(page);
+  await openInfo(page, '회차별 요약');
   const sessions = page
     .locator('section.wire-card')
     .filter({ has: page.getByRole('heading', { name: '회차별 요약' }) });
@@ -391,7 +397,7 @@ test('회차를 고쳐 쓰고, 적어만 둔 줄도 저장된다', async ({ page
   await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
 
   // 당사자 정보 › 회차별 요약에서 그 회차를 고쳐 쓴다
-  await openInfo(page);
+  await openInfo(page, '회차별 요약');
   const summary = page
     .locator('section.wire-card')
     .filter({ has: page.getByRole('heading', { name: '회차별 요약' }) });
@@ -409,7 +415,7 @@ test('회차를 고쳐 쓰고, 적어만 둔 줄도 저장된다', async ({ page
 
   // 완료로 바꿨으니 확인할 과제에서 빠지고, 회차는 늘지 않는다
   await expect(page.locator('.wire-container')).not.toContainText(task);
-  await openInfo(page);
+  await openInfo(page, '회차별 요약');
   await expect(summary).toContainText('2회차');
   await expect(summary).not.toContainText('3회차');
 });
@@ -439,7 +445,7 @@ test('민감정보 동의가 없으면 기록을 저장하지 못하고, 받으�
 
   // 당사자 정보 › 정보 탭에서 동의를 받는다
   await openInfo(page);
-  await page.getByRole('tab', { name: '정보' }).click();
+  await page.getByRole('tab', { name: '당사자 정보' }).click();
   const consent = page
     .locator('section.wire-card')
     .filter({ has: page.getByRole('heading', { name: '동의' }) });
@@ -465,7 +471,7 @@ test('PII 를 본 조회가 열람 기록에 남고, 관리자만 본다', async
   await page.getByRole('button', { name: '로그인' }).click();
   await expect(page.getByRole('heading', { name: '일정', exact: true })).toBeVisible();
   await page.goto('/#/cases/1/info');
-  await expect(page.getByRole('tab', { name: '정보' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
 
   // 실무자 사이드바에는 `시스템` 묶음이 서지 않는다(2026-09-16 Q 3차 — 묶음마다 메뉴 하나).
   await expect(page.getByRole('link', { name: '시스템' })).toHaveCount(0);
@@ -525,7 +531,7 @@ test('자유 글을 저장하고 다시 열면 그대로 읽힌다', async ({ pa
   await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
 
   // 회차별 요약의 원문 보기에 그대로 뜬다
-  await openInfo(page);
+  await openInfo(page, '회차별 요약');
   const summary = page
     .locator('section.wire-card')
     .filter({ has: page.getByRole('heading', { name: '회차별 요약' }) });
@@ -561,7 +567,7 @@ test('당사자는 링크와 코드로 자기 일정만 본다', async ({ page, 
   await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
   await openInfo(page);
   await page.waitForURL(/\/info$/);
-  await page.getByRole('tab', { name: '정보' }).click();
+  await page.getByRole('tab', { name: '당사자 정보' }).click();
   const access = page
     .locator('section.wire-card')
     .filter({ has: page.getByRole('heading', { name: '당사자 열람' }) });
@@ -623,7 +629,7 @@ test('외부 LLM 동의가 없으면 AI 정리를 하지 않는다', async ({ pa
   await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
 
   // 회차별 요약 → AI 정리
-  await openInfo(page);
+  await openInfo(page, '회차별 요약');
   await page.waitForURL(/\/info$/);
   const summary = page
     .locator('section.wire-card')
