@@ -26,8 +26,9 @@ describe.skipIf(!enabled)('migration 0024', () => {
       insert into support_cases (participant_id, program_name) values (${p.id}, '자유 입력 사업') returning id`;
     const [{ id: blank }] = await db<Array<{ id: number }>>`
       insert into support_cases (participant_id, program_name) values (${p.id}, '') returning id`;
-    // 기존 배포 = 기관 이름이 있다. 마법사를 건너뛰어야 한다.
+    // 기존 배포 = 기관 이름과 관리자가 있다. 마법사와 첫 가입 문을 둘 다 건너뛰어야 한다.
     await db`update organization set name = '기존 기관' where id = 1`;
+    await db`insert into users (email, name, role) values ('old-admin', '기존 관리자', 'admin')`;
 
     expect(await scratch.migrate()).toEqual(['0024_onboarding_programs.sql']);
 
@@ -49,10 +50,11 @@ describe.skipIf(!enabled)('migration 0024', () => {
       { id: blank, name: '(미지정)', retired_at: expect.anything() },
     ]);
 
-    const [org] = await db<Array<{ onboarded_at: string | null; slug: string | null }>>`
-      select onboarded_at, slug from organization where id = 1`;
+    // 기존 배포: 이름이 있으니 마법사를 지난 것으로, 관리자가 있으니 첫 가입 문은 닫힌 것으로 본다.
+    const [org] = await db<Array<{ onboarded_at: Date | null; bootstrap_closed_at: Date | null }>>`
+      select onboarded_at, bootstrap_closed_at from organization where id = 1`;
     expect(org.onboarded_at).not.toBeNull();
-    expect(org.slug).toBeNull();
+    expect(org.bootstrap_closed_at).not.toBeNull();
 
     // 기간 검사 제약이 붙었다.
     await expect(

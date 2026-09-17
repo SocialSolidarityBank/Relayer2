@@ -725,8 +725,9 @@ AI 와 같은 원칙이다 — **없으면 없다고 한다.** 가짜로 켜 두
 상담 기록은 사례의 것이지 계정의 것이 아니다. 마지막 관리자와 맡은 당사자가 있는 실무자는
 나갈 수 없다 — 나가면 워크스페이스를 고칠 사람이 없거나 당사자가 미아가 된다.
 
-**초대장 없이 가입하는 길은 하나뿐이다 — 기관을 여는 첫 가입**(2026-09-17 Q, §24-1). 활성 관리자가
-한 명도 없는 새 배포에서만 `#/signup` 이 열리고, 첫 관리자가 들어오면 닫힌다. 그 뒤 합류는 초대 링크뿐이다.
+**초대장 없이 가입하는 길은 하나뿐이다 — 새 배포의 첫 가입**(2026-09-17 Q, §24-1). 활성 관리자가
+한 명도 없는 새 배포에서만 `#/signup` 이 열리고, 첫 관리자가 들어오면 영구히 닫힌다(`bootstrap_closed_at`). 그 뒤 합류는 초대 링크뿐이다.
+`가입하기` 문구는 늘 보이되 닫힌 문 앞에서는 계정을 만들지 않고 초대 안내만 낸다.
 주소만 알면 누구나 들어오는 문은 상담 기록을 다루는 제품에 있어서는 안 된다. 토큰은 해시로만 저장하고
 만든 순간 한 번만 보여 준다. 7일 뒤 만료된다. 메일 발송은 없다(링크 수동 복사).
 
@@ -1025,29 +1026,48 @@ v1 → v2 로 판이 올라, **이미 받은 동의는 전부 `확인 필요`로
 ## 24. 기관 준비 — 첫 가입·마법사·사업 실체·역할 (2026-09-17 Q)
 
 테넌시는 그대로 기관 하나다(PLAN A3). `organizations` 표·`org_id` 를 만들지 않는다. `organization` 단일 행에
-`slug`(`^[a-z0-9-]+$`)·`onboarded_at`·`enc_openai_key` 컬럼만 더한다(`0024`). 기관별 서브도메인(기관.relayer.kr)은
-DNS·리버스 프록시 절차(`docs/deploy.md`)이고 **앱은 Host 를 읽지 않는다.**
+`onboarded_at`·`enc_openai_key`·`bootstrap_closed_at` 컬럼만 더한다(`0024`). **주소 이름(slug)은 DB 가 아니라 배포 설정
+(`RELAYER_SLUG`)이다** — 배포자가 정하고 화면은 읽기만 한다. 기관별 서브도메인(기관.relayer.kr)은 DNS·리버스 프록시 절차
+(`docs/deploy.md`)이고 **앱은 Host 를 읽지 않는다.** 설계 근거는 ASTRA 검토(2026-09-17, `local://astra-onboarding-design.md`)다.
 
-### 24-1. 기관을 여는 첫 가입
+### 24-1. 랜딩·로그인·가입하기
 
-- `GET /auth/signup` → `{ open: boolean }`. 활성 관리자(`role='admin' and deactivated_at is null`)가 0명일 때만 `true`. 로그인 앞.
-- `POST /auth/signup { org_name, slug, email, password, name }`. 로그인 앞. 한 트랜잭션에서 `organization` 행을 `for update` 로 잠근 뒤
-  활성 관리자가 0명일 때만 관리자 계정을 만들고 기관 이름·슬러그를 적는다. Argon2 해싱은 트랜잭션 밖이다(초대 수락과 같은 모양).
-  성공은 초대 수락과 같은 모양 — 로그인 쿠키(`relayer_session`) + `{ ok: true }`. 활성 관리자가 있으면 **403** 이고 계정을 만들지 않는다.
-  같은 아이디가 이미 있으면 409. 동시에 둘이 두드려도 관리자는 한 명만 생긴다. 감사 `org.bootstrap`(fields `name`·`slug`·`user=<id>`).
+로그아웃 상태의 **루트**(`/`, `#/`, `#/schedule`)는 랜딩이다 — `로그인하기`(`#/login`)·`가입하기`(`#/signup`) 둘. 로그인 폼 옆에도
+`가입하기` 가 **늘** 보인다. 보이는 것과 가입이 되는 것은 별개다 — 가입 권한은 **첫 관리자 예외**와 **초대 링크**에만 있다.
+
+- `GET /auth/signup` → `{ open: boolean, workspace: { name, slug } | null }`. 로그인 앞. `open` 은 `bootstrap_closed_at is null` 이고
+  활성 관리자(`role='admin' and deactivated_at is null`)가 0명일 때만 `true`. `workspace` 는 닫힌 문 앞의 사람에게 어느 기관인지 말해 주기 위한 것이다(이름·주소 이름은 비밀이 아니다).
+- `POST /auth/signup { email, password, name }` — **계정만** 만든다. 로그인 앞. 한 트랜잭션에서 `organization` 행을 `for update` 로 잠근 뒤
+  마감 표식이 없고 활성 관리자가 0명일 때만 관리자 계정을 만들고 **같은 트랜잭션에서 `bootstrap_closed_at` 을 찍어 문을 영구히 닫는다.**
+  Argon2 해싱은 트랜잭션 밖이다(초대 수락과 같은 모양). 성공은 초대 수락과 같은 모양 — 로그인 쿠키(`relayer_session`) + `{ ok: true }`.
+  닫혀 있으면 **403** 이고 계정을 만들지 않는다. 같은 아이디가 이미 있으면 409. 동시에 둘이 두드려도 관리자는 한 명만 생긴다.
+  **관리자가 사고로 0명이 돼도 문은 다시 열리지 않는다**(복구는 DB 절차). 감사 `org.bootstrap`(fields `first_admin`·`user=<id>`).
+- `0024` 는 관리자가 있는 기존 배포에 `bootstrap_closed_at` 을 백필한다.
+- 닫힌 문 앞의 `#/signup` 은 **계정을 만들지 않는다** — `이 기관은 초대 링크로만 가입할 수 있어요` + 기관 이름 + `로그인하기`.
+  소속 없는 계정은 이 배포(기관 하나)에서 할 일이 없다(ASTRA 검토 A).
 - **관리자 수를 바꾸는 트랜잭션은 모두 같은 `organization` 행 잠금을 먼저 잡는다** — 가입·초대 수락·역할 변경·탈퇴.
   마지막 활성 관리자는 실무자로 내리거나 탈퇴시킬 수 없다(409).
-- 초대 규율은 그대로다. 기관을 만드는 첫 가입만 예외고 그 뒤 합류는 초대 링크뿐이다. 메일 발송은 없다.
-- 화면: 로그인 화면은 문이 열려 있을 때만 `기관 만들고 시작하기` 를 보이고 `#/signup` 으로 보낸다. 닫혀 있으면 `#/signup` 은 초대 안내만 낸다.
+- 초대 규율은 그대로다. 첫 가입만 예외고 그 뒤 합류는 초대 링크뿐이다. 메일 발송은 없다.
+- **세션 끊김 복귀**: 로그아웃 상태로 깊은 주소(`#/cases/12/info`)에 오면 랜딩을 거치지 않고 로그인 폼이 뜨고, 그 주소를 `sessionStorage`
+  에 적어 두었다가 로그인 뒤 돌아간다. 내부 라우트만 담고 `#/login`·`#/signup`·루트는 담지 않는다. 로그아웃은 루트(랜딩)로 돌린다.
 
-### 24-2. 마법사 `#/onboarding`
+### 24-2. 마법사 `#/onboarding` — 0단계가 기관 워크스페이스 만들기
 
-관리자 전용 단계형 화면. **기관 정보(reg_no·address·phone — 이름은 가입에서 이미) → 사업 1개 이상(이름·기간·한 줄 설명) →
-실무자 초대(건너뛰기 가능) → API 연결 → 완료.** 설정의 기관 정보·사업 목록·초대·API 연결 폼을 그대로 쓴다 — 새 스타일·토큰이 없다.
+관리자 전용 단계형 화면. **0 기관 워크스페이스 만들기(기관 이름 · 주소 이름 확인) → 1 기관 정보(reg_no·address·phone) →
+2 사업 1개 이상(이름·기간·한 줄 설명) → 3 실무자 초대(건너뛰기 가능) → 4 API 연결 → 완료.** 설정의 기관 정보·사업 목록·초대·API 연결
+폼을 그대로 쓴다 — 새 스타일·토큰이 없다. 계정 가입과 기관 만들기를 갈라 둔 자리가 0단계다(ASTRA 검토 B).
 
-- 완료는 `POST /settings/onboarding/complete`(관리자 전용) 로 `onboarded_at` 을 찍고(두 번 눌러도 처음 시각) `#/participants/new` 로 보낸다.
-- `GET /me` 에 `onboarded: boolean` 이 실린다. `onboarded_at` 이 비어 있는 동안 관리자는 **클라이언트 리다이렉트**로 마법사에 머문다 —
-  서버 잠금은 없다. 실무자는 영향이 없다. 마친 뒤 `#/onboarding` 으로 오면 당사자 등록으로 보낸다.
+- **기관 워크스페이스** = `organization.name` 이 비어 있지 않은 상태. 0단계는 `PUT /settings/org { name }` 로 이름을 적는 것이고 새 API·새 표가 없다.
+  이름이 비어 있던 행에 이름이 적히면 감사는 `org.bootstrap`, 그 뒤 고치면 `org.update`. 주소 이름은 읽기 전용으로 보여 주기만 한다.
+  워크스페이스가 있으면 0단계는 서지 않는다(기존 배포).
+- `GET /me` 에 `onboarded: boolean` 과 `workspace: { name, slug } | null` 이 실린다. **서버 잠금은 없고 클라이언트 리다이렉트다**:
+  관리자는 워크스페이스가 없거나 `onboarded` 가 거짓이면 `#/onboarding` 에, 실무자는 그동안 `#/setup-pending`(`기관을 준비하고 있어요`,
+  `다시 확인하기`)에 머문다. 마법사 도중 초대로 먼저 들어온 실무자가 반쯤 열린 화면을 헤매지 않게 하는 안내다.
+- 완료는 `POST /settings/onboarding/complete`(관리자 전용) 로 `onboarded_at` 을 찍는다(두 번 눌러도 처음 시각). 완료 화면은 기관 요약
+  `#/workspace?done=1`(`기관 설정을 마쳤어요`) 이고 `상담 일정으로 이동하기` 가 `#/schedule` 로 보낸다. 마친 뒤 `#/onboarding`·`#/setup-pending`·
+  루트로 오면 홈으로 보낸다.
+- `#/workspace` 는 로그인한 누구나 **필요할 때 보는** 기관 요약이다(이름·주소 이름·내 계정·준비 상태·관리자에게 `기관 설정 보기`).
+  평소 로그인은 `#/schedule` 로 바로 간다 — 매번 거치는 중간 화면이 아니다(ASTRA 검토 C). `대시보드`라는 화면명은 없다(GLOSSARY §15-2).
 - `0024` 는 `update organization set onboarded_at = now() where name <> ''` 로 **기존 배포는 마법사를 건너뛴다.** `PUT /settings/org` 의 `name` 은 `min(1)`.
 
 ### 24-3. API 연결 — 키만 넣으면 되는 것과 설치가 필요한 것
@@ -1088,6 +1108,6 @@ DNS·리버스 프록시 절차(`docs/deploy.md`)이고 **앱은 Host 를 읽지
 ### 24-6. 감사·시드·검증
 
 - `AUDIT_KINDS` 운영 종류에 `org.bootstrap`·`program.update`·`program.reopen`·`user.role.update`·`ai.key.set` 이 붙는다. fields 에 키 값·이름 외 개인정보를 넣지 않는다.
-- `seed.ts` 는 `test4`(둘째 관리자)를 더하고 기관 이름·슬러그·`onboarded_at` 과 사업 하나를 심어 `createCase` 에 `program_id` 를 넘긴다. 가입 문은 seed 없는 새 DB 에서 검증한다.
+- `seed.ts` 는 `test4`(둘째 관리자)를 더하고 기관 이름·`onboarded_at`·`bootstrap_closed_at` 과 사업 하나를 심어 `createCase` 에 `program_id` 를 넘긴다. 가입 문은 seed 없는 새 DB 에서 검증한다.
 - 통합 테스트: `signup`·`role-change`·`migration-0024`·`program-lifecycle`·`program-filter`·`ai-key`. 새 DB 가 필요한 둘(가입·역할, 0024 백필)은 `api/test/scratch-db.ts` 로
   `relayer_shared_check_scratch_*` DB 를 만들어 쓰고 끝나면 지운다. E2E `web/e2e/onboarding.spec.ts` 도 같은 헬퍼로 새 DB·서버를 띄운다.

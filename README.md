@@ -25,7 +25,7 @@ docker compose up -d                               # Postgres 17 (localhost:5543
 printf 'PII_ENC_KEY=%s\nSESSION_SECRET=%s\n' "$(openssl rand -base64 32)" "$(openssl rand -base64 32)" > .env
 set -a && . ./.env && set +a
 node api/src/migrate.ts                            # 스키마 적용 (--check 로 미적용 여부만 확인)
-node api/src/seed.ts                               # 합성 사례 1건 + 기관·사업 + 시험 계정 4개 (시드 없이 띄우면 #/signup 첫 가입으로 연다)
+node api/src/seed.ts                               # 합성 사례 1건 + 기관·사업 + 시험 계정 4개 (시드 없이 띄우면 랜딩 › 가입하기 › 첫 가입으로 연다)
 node api/src/index.ts                              # API  http://localhost:8787
 pnpm --dir web exec vite                           # 화면 http://localhost:5173
 pnpm --dir api exec vitest run                     # 조립 로직 단위 테스트

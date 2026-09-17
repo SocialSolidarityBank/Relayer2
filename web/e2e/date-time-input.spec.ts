@@ -10,7 +10,7 @@ test.use({ timezoneId: 'America/Los_Angeles' });
 
 /** 로그인하고 인테이크·기록 저장에 필요한 동의까지 갖춘 합성 사례를 하나 만든다. */
 const newCase = async (page: Page) => {
-  await page.goto('/');
+  await page.goto('/#/login');
   await page.locator('#email').fill('test2');
   await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인', exact: true }).click();

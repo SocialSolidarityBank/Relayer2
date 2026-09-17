@@ -6,7 +6,7 @@ test.use({ timezoneId: 'America/Los_Angeles' });
 
 test('날짜 선택은 저장하지 않고, 취소를 보존하며 한국 시간으로 일정을 저장한다', async ({ page }) => {
   await page.clock.install({ time: new Date('2026-12-31T15:30:00Z') });
-  await page.goto('/');
+  await page.goto('/#/login');
   await page.locator('#email').fill('test2');
   await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인', exact: true }).click();

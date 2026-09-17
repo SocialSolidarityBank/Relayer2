@@ -1,17 +1,16 @@
 -- 온보딩·사업 실체(2026-09-17 Q). 기관은 여전히 한 행이다(PLAN A3) — organizations 표를 만들지 않는다.
 
--- 기관: 슬러그(서브도메인용 이름 조각)·마법사 완료 시각·OpenAI 키 암호문.
--- 슬러그는 DNS 라벨 규칙을 그대로 쓴다. 앱은 Host 를 읽지 않는다(docs/deploy.md).
-alter table organization add column if not exists slug text;
-alter table organization drop constraint if exists organization_slug_format;
-alter table organization add constraint organization_slug_format
-  check (slug is null or slug ~ '^[a-z0-9-]+$');
+-- 기관: 마법사 완료 시각·OpenAI 키 암호문·첫 가입 영구 마감.
+-- 주소 이름(slug)은 배포 식별 정보라 DB 가 아니라 환경 변수(RELAYER_SLUG)다 — 앱은 Host 를 읽지 않는다(docs/deploy.md).
 alter table organization add column if not exists onboarded_at timestamptz;
 alter table organization add column if not exists enc_openai_key text;
+-- 첫 가입 문은 한 번 닫히면 영구히 닫힌다. 관리자 수가 사고로 0 이 돼도 다시 열리지 않는다(복구는 DB 절차).
+alter table organization add column if not exists bootstrap_closed_at timestamptz;
 
--- 이미 기관 이름이 있는 배포는 마법사를 지난 것으로 본다. 새 DB 만 첫 가입 → 마법사로 간다.
+-- 이미 기관 이름이 있는 배포는 마법사를 지난 것으로, 관리자가 있는 배포는 첫 가입이 끝난 것으로 본다.
 update organization set onboarded_at = now() where name <> '' and onboarded_at is null;
-
+update organization set bootstrap_closed_at = now()
+where bootstrap_closed_at is null and exists (select 1 from users where role = 'admin');
 -- 사업: 기간과 한 줄 설명. ends_on 은 정보용이다 — 지나도 잠기지 않는다(종료는 retired_at).
 alter table programs add column if not exists starts_on date;
 alter table programs add column if not exists ends_on date;

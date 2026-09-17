@@ -45,7 +45,7 @@ export const AUDIT_KINDS = {
   'invite.create': { kind: '운영', label: '초대 링크 만듦', fold: false },
   'invite.revoke': { kind: '운영', label: '초대 취소', fold: false },
   'invite.accept': { kind: '운영', label: '초대로 들어옴', fold: false },
-  'org.bootstrap': { kind: '운영', label: '기관 첫 가입', fold: false },
+  'org.bootstrap': { kind: '운영', label: '기관 열기(첫 가입·워크스페이스 만들기)', fold: false },
   'org.update': { kind: '운영', label: '기관 정보 고침', fold: false },
   'program.add': { kind: '운영', label: '사업 더함', fold: false },
   'program.update': { kind: '운영', label: '사업 고침', fold: false },

@@ -21,7 +21,7 @@ const NAME = `E2E 녹음${stamp}`;
 
 test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진다', async ({ page }) => {
   // ── 로그인 ──────────────────────────────────────────────────
-  await page.goto('/');
+  await page.goto('/#/login');
   await page.locator('#email').fill('test2');
   await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인' }).click();

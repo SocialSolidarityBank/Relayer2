@@ -6,7 +6,7 @@ const api = process.env.PLAYWRIGHT_API_PREFIX ?? '/api';
 test.use({ timezoneId: 'America/Los_Angeles' });
 
 async function register(page: Page) {
-  await page.goto('/');
+  await page.goto('/#/login');
   await page.locator('#email').fill('test2');
   await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인', exact: true }).click();

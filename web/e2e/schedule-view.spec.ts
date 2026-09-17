@@ -13,7 +13,7 @@ const NOW = new Date('2026-09-30T15:30:00.000Z'); // KST 2026-10-01 00:30
 const KST = (day: string, time: string) => `${day}T${time}:00+09:00`;
 
 const login = async (page: Page) => {
-  await page.goto('/');
+  await page.goto('/#/login');
   await page.locator('#email').fill('test2');
   await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인', exact: true }).click();

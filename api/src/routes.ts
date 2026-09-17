@@ -149,22 +149,24 @@ app.post('/auth/invite/:token', async (c) => {
 });
 
 /**
- * 기관을 여는 첫 가입(2026-09-17 Q). 활성 관리자가 없을 때만 열린다 — 그 뒤는 초대 링크뿐이다.
- * 열렸는지(GET)와 가입(POST) 둘 다 로그인 앞이다. 응답 모양은 초대 수락과 같다(쿠키 + ok).
+ * 첫 가입(2026-09-17 Q). 활성 관리자가 없을 때만 열린다 — 그 뒤는 초대 링크뿐이다.
+ * 열렸는지(GET)와 가입(POST) 둘 다 로그인 앞이다. GET 은 기관 워크스페이스 정보도 함께 낸다 —
+ * 문이 닫힌 사람에게 어느 기관인지 보여 주고 로그인으로 보내기 위해서다(이름·슬러그는 비밀이 아니다).
+ * POST 는 계정만 만든다. 기관 워크스페이스는 로그인 뒤 `POST /settings/workspace` 다.
  */
-app.get('/auth/signup', async (c) => c.json({ open: await settings.signupOpen() }));
+app.get('/auth/signup', async (c) =>
+  c.json({ open: await settings.signupOpen(), workspace: await settings.workspaceInfo() }),
+);
 
 app.post('/auth/signup', async (c) => {
   const body = z
     .object({
-      org_name: z.string().trim().min(1, '기관 이름을 적어 주세요.'),
-      slug: z.string().trim().regex(/^[a-z0-9-]+$/, '주소 이름은 영문 소문자·숫자·붙임표만 써요.'),
       email: z.string().trim().min(2, '아이디를 적어 주세요.'),
       password: z.string().min(4, '비밀번호는 네 자 이상이어야 해요.'),
       name: z.string().trim().min(1, '이름을 적어 주세요.'),
     })
     .parse(await c.req.json());
-  const out = await settings.bootstrapOrg(body);
+  const out = await settings.bootstrapAdmin(body);
   if ('error' in out) return c.json({ error: out.error }, out.status);
   c.header('set-cookie', issueCookie(out.userId));
   return c.json({ ok: true });
@@ -249,8 +251,11 @@ const documentAccess = async (raw: string, actorId: number): Promise<number> => 
   return documentId;
 };
 
-// 마법사를 마쳤는지도 함께 싣는다 — 화면이 이것으로 관리자를 #/onboarding 에 붙들어 둔다(서버 잠금 없음).
-app.get('/me', async (c) => c.json({ ...c.get('actor'), onboarded: await settings.isOnboarded() }));
+// 마법사를 마쳤는지와 기관 워크스페이스(이름·주소 이름)도 함께 싣는다 — 화면이 이것으로 관리자를 마법사에,
+// 실무자를 '기관 준비 중' 에 붙들어 둔다(서버 잠금 없음).
+app.get('/me', async (c) =>
+  c.json({ ...c.get('actor'), onboarded: await settings.isOnboarded(), workspace: await settings.workspaceInfo() }),
+);
 
 app.post('/cases', async (c) => {
   const body = z

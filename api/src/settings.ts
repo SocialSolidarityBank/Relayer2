@@ -85,41 +85,71 @@ export async function deactivate(userId: number): Promise<{ ok: true } | { error
 
 // ── 기관 정보 ──────────────────────────────────────────────────────────────
 
+/**
+ * 주소 이름(slug)은 배포자가 환경 변수로 정한다(2026-09-17 Q·ASTRA). DB 하나만 보는 앱은 전체 배포에서의
+ * 중복도, DNS 가 실제로 붙었는지도 알 수 없다 — 그래서 화면은 읽기 전용으로 보여 주기만 한다.
+ */
+export const deploymentSlug = (): string | null => process.env.RELAYER_SLUG?.trim() || null;
+
 export type Org = { name: string; reg_no: string | null; address: string | null; phone: string | null };
 export type OrgView = Org & { slug: string | null; onboarded: boolean };
 
 export async function getOrg(): Promise<OrgView> {
-  const [row] = await sql<Array<Org & { slug: string | null; onboarded_at: string | null }>>`
-    select name, reg_no, address, phone, slug, onboarded_at from organization where id = 1`;
-  if (!row) return { name: '', reg_no: null, address: null, phone: null, slug: null, onboarded: false };
+  const [row] = await sql<Array<Org & { onboarded_at: string | null }>>`
+    select name, reg_no, address, phone, onboarded_at from organization where id = 1`;
+  if (!row) return { name: '', reg_no: null, address: null, phone: null, slug: deploymentSlug(), onboarded: false };
   const { onboarded_at, ...org } = row;
-  return { ...org, onboarded: onboarded_at !== null };
+  return { ...org, slug: deploymentSlug(), onboarded: onboarded_at !== null };
 }
 
+/**
+ * 기관 정보 저장. **기관 워크스페이스 만들기(마법사 0단계)도 이 길이다** — 이름이 비어 있던 행에 이름이 적히는 순간
+ * 워크스페이스가 생긴다. 새 표·새 API 를 두지 않는다(단일 행 id=1).
+ */
 export async function updateOrg(actorId: number, patch: Org): Promise<OrgView> {
+  const [before] = await sql<Array<{ name: string }>>`select name from organization where id = 1`;
   await sql`
     update organization
     set name = ${patch.name}, reg_no = ${patch.reg_no}, address = ${patch.address},
         phone = ${patch.phone}, updated_at = now(), updated_by = ${actorId}
     where id = 1`;
-  await audit({ actorId, action: 'org.update', fields: ['name', 'reg_no', 'address', 'phone'] });
+  await audit({
+    actorId,
+    action: before?.name === '' ? 'org.bootstrap' : 'org.update',
+    fields: ['name', 'reg_no', 'address', 'phone'],
+  });
   return getOrg();
 }
 
-/** 가입 문이 열려 있나 — 활성 관리자가 한 명도 없을 때만. 로그인 앞에서 부른다. */
+export type Workspace = { name: string; slug: string | null };
+
+/** 기관 워크스페이스 — 기관 이름이 적힌 순간 생긴다. 이름이 비어 있으면 아직 없다(null). 이름·주소 이름은 비밀이 아니다. */
+export async function workspaceInfo(): Promise<Workspace | null> {
+  const [row] = await sql<Array<{ name: string }>>`select name from organization where id = 1`;
+  return row && row.name !== '' ? { name: row.name, slug: deploymentSlug() } : null;
+}
+
+/**
+ * 가입 문이 열려 있나 — 활성 관리자가 한 명도 없고 **아직 한 번도 닫힌 적이 없을 때만.**
+ * 첫 관리자가 생기면 `bootstrap_closed_at` 이 찍혀 영구히 닫힌다(사고로 관리자가 0명이 돼도 안 열린다).
+ */
 export async function signupOpen(): Promise<boolean> {
+  const [row] = await sql<Array<{ closed: boolean }>>`
+    select (bootstrap_closed_at is not null) as closed from organization where id = 1`;
+  if (!row || row.closed) return false;
   return (await activeAdmins(sql)) === 0;
 }
 
 /**
- * 기관을 여는 첫 가입(2026-09-17 Q). 초대 규율의 **유일한 예외**다 — 그 뒤 합류는 초대 링크뿐이다.
+ * 첫 가입(2026-09-17 Q). 초대 규율의 **유일한 예외**다 — 그 뒤 합류는 초대 링크뿐이다.
+ * 계정만 만든다. 기관 워크스페이스(이름)는 로그인 뒤 마법사 0단계(`PUT /settings/org`)에서 만든다 —
+ * 계정과 기관 설정을 갈라 두어야 "누가 이 기관을 만드는가"와 "기관이 무엇인가"가 섞이지 않는다.
  *
- * 기관 행을 잠근 채 활성 관리자 수를 세고, 0 일 때만 계정을 만들고 이름·슬러그를 적는다.
- * 동시에 두 번 와도 잠금 뒤에 다시 센 쪽은 닫힌 문을 본다. 해싱은 잠금 밖이다(초대 수락과 같은 모양).
+ * 기관 행을 잠근 채 마감 표식과 활성 관리자 수를 보고, 둘 다 비어 있을 때만 관리자 계정을 만들고
+ * **같은 트랜잭션에서 문을 영구히 닫는다.** 동시에 두 번 와도 잠금 뒤에 다시 본 쪽은 닫힌 문을 본다.
+ * 해싱은 잠금 밖이다(초대 수락과 같은 모양).
  */
-export async function bootstrapOrg(input: {
-  org_name: string;
-  slug: string;
+export async function bootstrapAdmin(input: {
   email: string;
   password: string;
   name: string;
@@ -129,17 +159,16 @@ export async function bootstrapOrg(input: {
   try {
     result = await sql.begin(async (tx) => {
       await lockOrg(tx as unknown as typeof sql);
-      if ((await activeAdmins(tx as unknown as typeof sql)) > 0) {
-        return { error: '이미 관리자가 있는 기관이에요. 초대 링크로 들어와 주세요.', status: 403 } as const;
+      const [org] = await tx<Array<{ closed: boolean }>>`
+        select (bootstrap_closed_at is not null) as closed from organization where id = 1`;
+      if (!org || org.closed || (await activeAdmins(tx as unknown as typeof sql)) > 0) {
+        return { error: '이 기관은 초대 링크로만 가입할 수 있어요. 관리자에게 초대 링크를 요청해 주세요.', status: 403 } as const;
       }
       const [user] = await tx<Array<{ id: number }>>`
         insert into users (email, password_hash, name, role)
         values (${input.email}, ${passwordHash}, ${input.name}, 'admin')
         returning id`;
-      await tx`
-        update organization set name = ${input.org_name}, slug = ${input.slug},
-          updated_at = now(), updated_by = ${user.id}
-        where id = 1`;
+      await tx`update organization set bootstrap_closed_at = now(), updated_at = now(), updated_by = ${user.id} where id = 1`;
       return { userId: user.id };
     });
   } catch {
@@ -148,7 +177,7 @@ export async function bootstrapOrg(input: {
   }
   // 감사는 커밋 뒤에. audit_log.actor_id 가 users 를 가리키는 FK 라 트랜잭션 안에서 쓰면 다른 연결이 그 사람을 못 본다.
   if ('userId' in result) {
-    await audit({ actorId: result.userId, action: 'org.bootstrap', fields: ['name', 'slug', `user=${result.userId}`] });
+    await audit({ actorId: result.userId, action: 'org.bootstrap', fields: ['first_admin', `user=${result.userId}`] });
   }
   return result;
 }

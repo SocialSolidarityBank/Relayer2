@@ -59,7 +59,10 @@ export async function scratchDb(): Promise<Scratch> {
 }
 
 /** 새 DB 를 바라보는 API 서버 한 프로세스. 가입 문은 실제 서버로 두드린다(app.request 는 공유 sql 에 묶여 있다). */
-export async function startServer(databaseUrl: string): Promise<{ base: string; stop(): void }> {
+export async function startServer(
+  databaseUrl: string,
+  extraEnv: Record<string, string> = {},
+): Promise<{ base: string; stop(): void }> {
   const probe = createServer();
   probe.listen(0, '127.0.0.1');
   await once(probe, 'listening');
@@ -78,6 +81,8 @@ export async function startServer(databaseUrl: string): Promise<{ base: string; 
       SESSION_SECRET: process.env.SESSION_SECRET ?? 'scratch-only',
       PII_ENC_KEY: process.env.PII_ENC_KEY ?? Buffer.alloc(32).toString('base64'),
       OPENAI_API_KEY: '',
+      RELAYER_SLUG: '',
+      ...extraEnv,
     },
     stdio: ['ignore', 'ignore', 'inherit'],
   });

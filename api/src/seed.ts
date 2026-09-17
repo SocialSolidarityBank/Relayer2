@@ -25,9 +25,11 @@ for (const u of TEST_USERS) {
     values (${u.id}, ${await hashPassword(u.id)}, ${u.name}, ${u.role})`;
 }
 
-// 기관과 사업. 이름이 있으니 마법사는 지난 것으로 본다(onboarded_at). 가입 문은 seed 없는 새 DB 에서만 검증한다.
+// 기관과 사업. 이름이 있으니 마법사는 지난 것으로, 관리자가 있으니 첫 가입 문은 닫힌 것으로 본다.
+// 주소 이름은 환경 변수 RELAYER_SLUG 다. 가입 문은 seed 없는 새 DB 에서만 검증한다.
 await sql`
-  update organization set name = '시험 기관', slug = 'test', onboarded_at = coalesce(onboarded_at, now())
+  update organization set name = '시험 기관', onboarded_at = coalesce(onboarded_at, now()),
+    bootstrap_closed_at = coalesce(bootstrap_closed_at, now())
   where id = 1`;
 const PROGRAM = '함께온기금 울타리대출';
 const [program] = await sql<Array<{ id: number }>>`

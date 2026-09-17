@@ -95,8 +95,13 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-/** `onboarded` 가 거짓이면 관리자는 #/onboarding 에 머문다(서버 잠금은 없다 — 안내용 리다이렉트). */
-export type Me = { id: number; name: string; role: 'worker' | 'admin'; onboarded: boolean };
+/** 기관 워크스페이스 — 기관 이름이 적히면 생긴다. 주소 이름은 배포 설정(RELAYER_SLUG)이라 읽기 전용이다. */
+export type Workspace = { name: string; slug: string | null };
+/**
+ * `workspace` 가 없거나 `onboarded` 가 거짓이면 관리자는 마법사(#/onboarding)에, 실무자는 기관 준비 중(#/setup-pending)에
+ * 머문다. 서버 잠금은 없다 — 안내용 리다이렉트다.
+ */
+export type Me = { id: number; name: string; role: 'worker' | 'admin'; onboarded: boolean; workspace: Workspace | null };
 
 export const getMe = () => json<Me>('/me');
 export const login = (email: string, password: string) =>
@@ -643,7 +648,11 @@ export const signUpWithInvite = (
   body: { email: string; password: string; name: string },
 ) => json<{ ok: true }>(`/auth/invite/${token}`, { method: 'POST', body: JSON.stringify(body) });
 
-/** 기관을 여는 첫 가입. 활성 관리자가 없을 때만 열린다 — 그 뒤는 초대 링크뿐이다. */
-export const signupOpen = () => json<{ open: boolean }>('/auth/signup');
-export const signup = (body: { org_name: string; slug: string; email: string; password: string; name: string }) =>
+/**
+ * 첫 가입 문. 새 배포에서 한 번만 열리고 첫 관리자가 생기면 영구히 닫힌다 — 그 뒤는 초대 링크뿐이다.
+ * 닫힌 문 앞의 사람에게 어느 기관인지 말해 주려고 워크스페이스 이름도 함께 온다.
+ */
+export const signupOpen = () => json<{ open: boolean; workspace: Workspace | null }>('/auth/signup');
+/** 계정만 만든다. 기관 워크스페이스는 로그인 뒤 마법사 0단계다. */
+export const signup = (body: { email: string; password: string; name: string }) =>
   json<{ ok: true }>('/auth/signup', { method: 'POST', body: JSON.stringify(body) });

@@ -22,7 +22,7 @@ test.beforeAll(async () => {
   execFileSync('pnpm', ['--dir', 'web', 'build'], { cwd: root, stdio: 'ignore' });
   scratch = await scratchDb();
   await scratch.migrate();
-  ({ base, stop } = await startServer(scratch.url));
+  ({ base, stop } = await startServer(scratch.url, { RELAYER_SLUG: 'e2e-slug' }));
 });
 test.afterAll(async () => {
   stop?.();
@@ -32,27 +32,33 @@ test.afterAll(async () => {
 // 가입부터 사업별 필터까지 한 시험 안에서 잇는다 — 화면이 열 개 남짓이라 기본 60초로는 빠듯하다.
 test.setTimeout(180_000);
 
-test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까지 한 바퀴', async ({ page }) => {
-  // ── 가입 문 ─────────────────────────────────────────────────
+test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까지 한 바퀴', async ({ page, browser }) => {
+  // ── 랜딩 → 가입 ─────────────────────────────────────────────
   await page.goto(`${base}/`);
-  // 활성 관리자가 없으니 로그인 화면에 첫 가입 문이 보인다.
-  await page.getByRole('link', { name: '기관 만들고 시작하기' }).click();
+  await expect(page.getByRole('link', { name: '로그인하기' })).toBeVisible();
+  await page.getByRole('link', { name: '가입하기' }).click();
   await expect(page).toHaveURL(/#\/signup$/);
-  await page.locator('#su-org').fill(ORG);
-  await page.locator('#su-slug').fill(`e2e-${stamp}`);
+  // 새 DB: 첫 가입 문이 열려 있다. 계정만 만든다.
+  await expect(page.getByRole('heading', { name: '먼저 관리자 계정을 만들어요', level: 1 })).toBeVisible();
   await page.locator('#su-email').fill('e2e-admin');
   await page.locator('#su-pw').fill('e2e-admin');
   await page.locator('#su-name').fill('E2E 관리자');
-  await page.getByRole('button', { name: '기관 만들고 시작하기' }).click();
+  await page.getByRole('button', { name: '계정 만들기' }).click();
 
-  // ── 마법사 가두기 ──────────────────────────────────────────
+  // ── 마법사 0단계: 기관 워크스페이스 만들기 ────────────────────
   await expect(page).toHaveURL(/#\/onboarding$/);
   await expect(page.getByRole('heading', { name: '기관 준비', level: 1 })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '기관 워크스페이스', selected: true })).toBeVisible();
+  // 주소 이름은 배포 설정에서 온다 — 읽기 전용.
+  await expect(page.getByText('e2e-slug', { exact: true })).toBeVisible();
   // 마치기 전에 다른 화면으로 가면 마법사로 돌아온다.
   await page.goto(`${base}/#/participants`);
   await expect(page).toHaveURL(/#\/onboarding$/);
+  await page.locator('#ws-name').fill(ORG);
+  await page.getByRole('button', { name: '기관 워크스페이스 만들기' }).click();
 
-  // 1. 기관 정보 — 이름은 가입에서 이미 들어왔다. 나머지를 적고 저장해야 다음이 열린다.
+  // 1. 기관 정보 — 이름은 0단계에서 들어왔다. 나머지를 적고 저장해야 다음이 열린다.
+  await expect(page.getByRole('tab', { name: '기관 정보', selected: true })).toBeVisible();
   await expect(page.locator('#og-name')).toHaveValue(ORG);
   await expect(page.getByRole('button', { name: '다음' })).toBeDisabled();
   await page.locator('#og-reg').fill('123-45-67890');
@@ -72,9 +78,20 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
   await expect(page.getByText(PROGRAM, { exact: false }).first()).toBeVisible();
   await page.getByRole('button', { name: '다음' }).click();
 
-  // 3. 실무자 초대 — 건너뛴다.
+  // 3. 실무자 초대 — 링크를 하나 만들어 실무자가 먼저 들어오게 한다. 마법사가 끝나기 전이라 그 사람은 '기관 준비 중' 을 본다.
   await expect(page.getByRole('tab', { name: '실무자 초대', selected: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: '초대 링크 만들기' })).toBeVisible();
+  await page.getByRole('button', { name: '링크 만들기' }).click();
+  const inviteLink = (await page.locator('code').first().textContent()) ?? '';
+  expect(inviteLink).toMatch(/#\/invite\//);
+  const worker = await browser.newPage();
+  await worker.goto(inviteLink.replace(/^https?:\/\/[^/]+/, base));
+  await worker.locator('#iv-email').fill('e2e-worker');
+  await worker.locator('#iv-pw').fill('e2e-worker');
+  await worker.locator('#iv-name').fill('E2E 실무자');
+  await worker.getByRole('button', { name: '들어가기' }).click();
+  await expect(worker).toHaveURL(/#\/setup-pending$/);
+  await expect(worker.getByRole('heading', { name: '기관을 준비하고 있어요', level: 1 })).toBeVisible();
   await page.getByRole('button', { name: '다음' }).click();
 
   // 4. API 연결 — 키만 넣으면 되는 것과 설치가 필요한 것이 갈려 보인다. 확인만 하고 마친다.
@@ -83,8 +100,37 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
   await expect(page.getByRole('heading', { name: '설치가 필요한 것' })).toBeVisible();
   await page.getByRole('button', { name: '마치기' }).click();
 
+  // ── 완료 화면 = 기관 요약 → 상담 일정 ──────────────────────────
+  await expect(page).toHaveURL(/#\/workspace\?done=1$/);
+  await expect(page.getByRole('heading', { name: '기관 설정을 마쳤어요', level: 1 })).toBeVisible();
+  await expect(page.getByText(ORG, { exact: true })).toBeVisible();
+  await page.getByRole('link', { name: '상담 일정으로 이동하기' }).click();
+  await expect(page).toHaveURL(/#\/schedule$/);
+
+  // 준비가 끝나면 실무자도 들어온다.
+  await worker.getByRole('button', { name: '다시 확인하기' }).click();
+  await expect(worker).toHaveURL(/#\/schedule$/);
+  await worker.close();
+
+  // 가입 문은 영구히 닫혔다. 로그아웃 상태의 가입하기는 계정을 만들지 않고 초대 안내만 낸다.
+  const gate = await page.request.get(`${base}/auth/signup`);
+  expect(await gate.json()).toEqual({ open: false, workspace: { name: ORG, slug: 'e2e-slug' } });
+  const stranger = await browser.newPage();
+  await stranger.goto(`${base}/#/signup`);
+  await expect(stranger.getByRole('heading', { name: '이 기관은 초대 링크로만 가입할 수 있어요', level: 1 })).toBeVisible();
+  await expect(stranger.locator('#su-email')).toHaveCount(0);
+  await expect(stranger.getByText(ORG, { exact: true })).toBeVisible();
+  // 세션 없는 깊은 주소는 랜딩을 거치지 않고 로그인으로 가고, 로그인 뒤 그 주소로 돌아간다.
+  await stranger.goto(`${base}/#/settings/org`);
+  await expect(stranger.locator('#email')).toBeVisible();
+  await stranger.locator('#email').fill('e2e-admin');
+  await stranger.locator('#password').fill('e2e-admin');
+  await stranger.getByRole('button', { name: '로그인', exact: true }).click();
+  await expect(stranger).toHaveURL(/#\/settings\/org$/);
+  await stranger.close();
+
   // ── 당사자 등록 ─────────────────────────────────────────────
-  await expect(page).toHaveURL(/#\/participants\/new$/);
+  await page.goto(`${base}/#/participants/new`);
   await page.locator('#name').fill(PARTICIPANT);
   await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
   // 사업이 하나뿐이라 이미 골라져 있다.
@@ -126,8 +172,4 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
   await expect(page.locator('#wk-program')).toHaveValue(programId);
   const workers = page.locator('section.wire-card', { hasText: '실무자 목록' });
   await expect(workers.getByRole('cell', { name: 'E2E 관리자', exact: true })).toBeVisible();
-
-  // ── 가입 문은 닫혔다 ────────────────────────────────────────
-  const gate = await page.request.get(`${base}/auth/signup`);
-  expect(await gate.json()).toEqual({ open: false });
 });
