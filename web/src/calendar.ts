@@ -32,7 +32,7 @@ export function koreanDay(iso?: string | Date): string {
   return dayFormatter.format(iso === undefined ? new Date() : new Date(iso));
 }
 
-/** ISO 시각을 한국 날짜·24시각·'오전/오후 h:mm' 라벨로 바꾼다. */
+/** ISO 시각을 한국 날짜·24시각·'AM/PM hh:mm' 라벨로 바꾼다(2026-09-17 Q — `AM 07:14` 꼴). */
 export function calendarTime(iso: string): CalendarTime {
   const local = new Date(Date.parse(iso) + KST_OFFSET_MS);
   const hour = local.getUTCHours();
@@ -40,7 +40,7 @@ export function calendarTime(iso: string): CalendarTime {
   return {
     day: local.toISOString().slice(0, 10),
     hour,
-    label: `${hour < 12 ? '오전' : '오후'} ${hour % 12 || 12}:${minute}`,
+    label: `${hour < 12 ? 'AM' : 'PM'} ${String(hour % 12 || 12).padStart(2, '0')}:${minute}`,
   };
 }
 

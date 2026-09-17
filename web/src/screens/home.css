@@ -47,11 +47,10 @@
 .sc-time-grid thead th:first-child { left: 0; z-index: 3; }
 .sc-time-grid thead button { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--space-1); width: 100%; min-height: 44px; padding: var(--space-2); border: 0; background: transparent; color: var(--ink); font: inherit; font-size: var(--text-sm); cursor: pointer; }
 .sc-time-grid tbody th { position: sticky; left: 0; z-index: 1; vertical-align: middle; padding: var(--space-2); background: var(--panel); white-space: nowrap; }
-.sc-time-grid tbody td { height: 64px; vertical-align: top; padding: var(--space-1); }
+.sc-time-grid tbody td { height: 64px; vertical-align: middle; padding: var(--space-1); }
 /* 시간표는 칸 전체가 호버·클릭 대상이다. 줄 자체에는 호버 면을 두지 않는다. */
 .sc-time-grid tbody td[data-has-events] { cursor: pointer; }
 .sc-time-grid tbody td[data-has-events]:hover { background: var(--gradient-hover); }
-.sc-time-grid .sc-event { font-size: var(--text-sm); min-height: 28px; }
 .sc-time-grid .sc-event:hover { background: transparent; }
 .sc-time-grid thead [data-today="true"] { background: var(--gradient-action); color: var(--on-action); }
 .sc-time-grid thead [data-today="true"] button { color: var(--on-action); }
