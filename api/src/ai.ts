@@ -163,6 +163,8 @@ async function callOpenAi(prompt: string): Promise<Shape> {
       // 추론을 길게 돌릴 일이 아니다. 적힌 말을 정리할 뿐이다.
       // gpt-5.4 이상은 'minimal' 을 받지 않는다. 'none' 이 같은 자리다.
       reasoning: { effort: MODEL.startsWith('gpt-5.') ? 'none' : 'minimal' },
+      // 응답 재사용용 보관을 끈다 — 동의 문안이 그렇게 약속한다(2026-09-17 Q). 남용 감시 30일은 별건이다.
+      store: false,
       input: [
         { role: 'system', content: SYSTEM },
         { role: 'user', content: prompt },

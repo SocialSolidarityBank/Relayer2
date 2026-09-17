@@ -69,7 +69,7 @@ export async function saveDocument(input: {
 
   await assertConsent(input.caseId, 'document_attachment');
 
-  const days = RETENTION_DAYS[CONSENT_COPY.document_attachment.retentionDuration ?? 'institution_retention_1y'];
+  const days = RETENTION_DAYS[CONSENT_COPY.document_attachment.retentionDuration ?? 'institution_retention_30d'];
   const sha256 = createHash('sha256').update(input.bytes).digest('hex');
   // 사례별로 나눠 둔다. 사례를 통째로 지울 때 폴더 하나만 지우면 된다.
   // 원본 파일명은 쓰지 않는다 — `김민희_진단서.pdf` 는 그 자체로 정보가 샌다.
