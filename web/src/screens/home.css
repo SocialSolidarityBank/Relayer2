@@ -30,11 +30,12 @@
 .sc-day[aria-pressed="true"]:not([aria-current="date"]) { background: var(--gradient-action); color: var(--on-action); border-color: var(--line-on-action); font-weight: 600; }
 .sc-day small { font-size: 11px; }
 .sc-mobile-count { display: none; }
-.sc-month-events { display: grid; gap: var(--space-1); }
-.sc-event { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; width: 100%; min-width: 0; padding: var(--space-1) var(--space-2); border: 1px solid var(--line); border-left: 3px solid var(--blue-deep); border-radius: var(--radius-control); background: var(--panel); color: var(--ink); text-align: left; font: inherit; cursor: pointer; }
-.sc-event:hover { background: var(--muted); }
-.sc-event-time { font-size: var(--text-detail); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sc-event-name { font-size: var(--text-sm); font-weight: 600; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 일정은 상자 없이 `시각 이름` 한 줄이다(2026-09-17 Q). 좌측 굵은 색 선도 두지 않는다. */
+.sc-month-events { display: grid; gap: 2px; }
+.sc-event { display: flex; align-items: center; gap: var(--space-1-5); width: 100%; min-width: 0; min-height: 22px; padding: 0 var(--space-1); border: 0; border-radius: var(--radius-control); background: transparent; color: var(--ink); text-align: left; font: inherit; font-size: var(--text-detail); line-height: 1.3; cursor: pointer; }
+.sc-event:hover { background: var(--gradient-hover); }
+.sc-event-time { flex-shrink: 0; color: var(--sub); white-space: nowrap; }
+.sc-event-name { min-width: 0; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sc-more { align-self: flex-start; min-height: 28px; padding: 0 var(--space-1); border: 0; border-radius: var(--radius-control); background: transparent; color: var(--sub); text-align: left; font: inherit; font-size: var(--text-detail); cursor: pointer; }
 .sc-time-scroll { position: relative; max-height: min(65vh, 720px); overflow: auto; overscroll-behavior: contain; isolation: isolate; }
 .sc-time-grid[data-view="week"] { min-width: 900px; }
@@ -47,6 +48,11 @@
 .sc-time-grid thead button { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--space-1); width: 100%; min-height: 44px; padding: var(--space-2); border: 0; background: transparent; color: var(--ink); font: inherit; font-size: var(--text-sm); cursor: pointer; }
 .sc-time-grid tbody th { position: sticky; left: 0; z-index: 1; vertical-align: middle; padding: var(--space-2); background: var(--panel); white-space: nowrap; }
 .sc-time-grid tbody td { height: 64px; vertical-align: top; padding: var(--space-1); }
+/* 시간표는 칸 전체가 호버·클릭 대상이다. 줄 자체에는 호버 면을 두지 않는다. */
+.sc-time-grid tbody td[data-has-events] { cursor: pointer; }
+.sc-time-grid tbody td[data-has-events]:hover { background: var(--gradient-hover); }
+.sc-time-grid .sc-event { font-size: var(--text-sm); min-height: 28px; }
+.sc-time-grid .sc-event:hover { background: transparent; }
 .sc-time-grid thead [data-today="true"] { background: var(--gradient-action); color: var(--on-action); }
 .sc-time-grid thead [data-today="true"] button { color: var(--on-action); }
 .sc-time-heading { display: flex; align-items: center; }
@@ -60,14 +66,10 @@
 .sc-time-grid[data-view="day"] thead button { flex: 1; width: auto; min-height: 44px; justify-content: flex-start; flex-wrap: nowrap; padding: 0; color: var(--on-action); }
 .sc-time-grid[data-view="day"] tbody th { vertical-align: middle; padding-block: var(--space-1); }
 .sc-time-grid[data-view="day"] tbody td { height: 36px; padding-block: 2px; }
-.sc-time-grid[data-view="day"] .sc-event { display: flex; align-items: center; gap: var(--space-2); min-height: 28px; }
-.sc-time-grid[data-view="day"] .sc-event-time { flex-shrink: 0; }
-.sc-time-grid[data-view="day"] .sc-event-name { min-width: 0; }
-.sc-time-grid .sc-event + .sc-event { margin-top: var(--space-1); }
 .sc-details { min-width: 0; scroll-margin-block: calc(var(--header-height) + var(--space-4)); }
-.sc-detail-item { border-left: 3px solid transparent; padding-left: var(--space-3); }
-.sc-detail-item[data-selected="true"] { border-left-color: transparent; background: linear-gradient(var(--panel), var(--panel)) padding-box, var(--gradient-action) border-box; }
-.sc-detail-item + .sc-detail-item { margin-top: var(--space-4); }
+.sc-detail-item { padding: var(--space-2) var(--space-3); border: 1px solid transparent; border-radius: var(--radius-control); }
+.sc-detail-item[data-selected="true"] { background: linear-gradient(var(--panel), var(--panel)) padding-box, var(--gradient-action) border-box; }
+.sc-detail-item + .sc-detail-item { margin-top: var(--space-2); }
 .sc-detail-time { display: block; font-weight: 600; margin-bottom: var(--space-1); }
 .sc-page :is(button, a, [tabindex]):focus-visible { outline: 2px solid var(--blue-deep); outline-offset: 2px; }
 @media (max-width: 767px) {

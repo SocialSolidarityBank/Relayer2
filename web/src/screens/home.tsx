@@ -95,7 +95,7 @@ export function HomeScreen() {
     const name = row.name ?? row.pseudonym;
     const label = `${dayFormatter.format(new Date(`${time.day}T00:00:00Z`))} ${time.label} ${name} ${row.seq}회차 일정 상세`;
     return <button key={row.session_id} type="button" className="sc-event" data-session-id={row.session_id}
-      aria-label={label} title={`${label} · ${row.program_name}`} onClick={() => showDay(time.day, row.session_id)}>
+      aria-label={label} title={`${label} · ${row.program_name}`} onClick={e => { e.stopPropagation(); showDay(time.day, row.session_id); }}>
       <span className="sc-event-time">{time.label}</span><strong className="sc-event-name">{name}</strong>
     </button>;
   };
@@ -156,9 +156,13 @@ export function HomeScreen() {
                   </th>)}</tr></thead>
                   <tbody>{HOURS.map(hour => <tr key={hour} data-hour={hour}>
                     <th scope="row">{hour < 12 ? '오전' : '오후'} {hour % 12 || 12}시</th>
-                    {period.days.map(day => <td key={day}>
-                      {(byHour.get(`${day}/${hour}`) ?? EMPTY_EVENTS).map(eventButton)}
-                    </td>)}
+                    {period.days.map(day => {
+                      const events = byHour.get(`${day}/${hour}`) ?? EMPTY_EVENTS;
+                      return <td key={day} data-has-events={events.length > 0 || undefined}
+                        onClick={events.length ? () => showDay(day, events[0].row.session_id) : undefined}>
+                        {events.map(eventButton)}
+                      </td>;
+                    })}
                   </tr>)}</tbody>
                 </table>
               </div>
