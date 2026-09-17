@@ -57,6 +57,10 @@ const recordFromList = async (page: Page, name: string, planned: boolean) => {
     .getByRole('button', { name: planned ? '상담 기록하기' : '일정 저장', exact: true })
     .click();
   await expect(page).toHaveURL(/\/record$/);
+  // 기록 화면의 첫 렌더는 `불러오는 중` 이고, 본문은 브리핑·사례가 다 온 뒤에 선다(입력칸을
+  // 그때 초기화한다). 본문을 기다리지 않고 칸을 채우면 초기화가 덮어쓴다 — 일정 예약 화면에도
+  // 같은 이름의 칸(`#memo`·`종결 상담`)이 있어 넘어오는 순간에는 어느 화면인지도 가려진다.
+  await expect(page.locator('.record-main')).toBeVisible();
 };
 
 test('등록부터 회차 기록·이어받기까지 한 바퀴', async ({ page }) => {

@@ -133,8 +133,8 @@ export function ScheduleNewScreen({ caseId, thenRecord = false }: { caseId: numb
         place: method === 'in_person' && place.trim() ? place.trim() : undefined,
         plan_memo: memo.trim() || undefined,
         is_closing: isClosing,
-        // 소요시간은 §4 계약(`duration_min`)이다. 서버가 아직 안 받으면 스키마가 걸러 내고
-        // 저장은 그대로 된다 — 소요시간 하나 때문에 일정이 막히지 않는다.
+        // 소요 분은 §4 계약(`sessions.duration_min`, L5)이다. 종료 시각을 안 적으면 보내지 않고,
+        // 그 한 칸 때문에 일정 저장이 막히지 않는다.
         duration_min: durationOf(scheduledAt, endTime),
       });
       // 기록하러 온 길이면 기록 화면으로 잇고(D1), 그 밖에는 일정 목록으로 돌아간다
