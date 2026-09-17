@@ -42,7 +42,7 @@ export function CloseScreen({ caseId }: { caseId: number }) {
     ['당사자 ID', detail.pseudonym],
     [
       '참여 사업',
-      `${detail.case.program_name}${lastSeq ? ` · 마지막 ${lastSeq}회차` : ' · 기록 없음'}`,
+      `${detail.case.program_name}${lastSeq ? `, 마지막 ${lastSeq}회차` : ', 기록 없음'}`,
     ],
     ['연락처', detail.participant.phone ?? ''],
     ['이메일', detail.participant.email ?? ''],

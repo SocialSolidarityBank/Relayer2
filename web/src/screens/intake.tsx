@@ -309,7 +309,7 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
         pseudonym={view.pseudonym}
         details={[
           ['당사자 ID', view.pseudonym],
-          ['참여 사업', `${view.case.program_name} · 1회차 인테이크`],
+          ['참여 사업', `${view.case.program_name}, 1회차 인테이크`],
           ['연락처', detail?.participant.phone ?? ''],
           ['이메일', detail?.participant.email ?? ''],
         ]}

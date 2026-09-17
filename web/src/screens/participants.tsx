@@ -147,7 +147,7 @@ export function ParticipantsScreen({ pickFor = null }: { pickFor?: PickFor }) {
               id="q"
               type="search"
               aria-label="찾기"
-              placeholder="이름 · 가명 · 사업 이름 · 실무자"
+              placeholder="이름, 가명, 사업 이름, 실무자"
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
@@ -208,7 +208,7 @@ export function ParticipantsScreen({ pickFor = null }: { pickFor?: PickFor }) {
               row.can_access && row.last_session_seq
                 ? `${row.program_name} ${row.last_session_seq}회차`
                 : row.program_name,
-            ].filter(Boolean).join(' · ');
+            ].filter(Boolean).join(' | ');
             // 둘째 줄은 어떻게 닿고 언제 만나나. 아코디언이 없으니 여기서 바로 드러난다.
             const reach = [
               contact?.phone ?? null,
@@ -216,7 +216,7 @@ export function ParticipantsScreen({ pickFor = null }: { pickFor?: PickFor }) {
               row.can_access && row.next_scheduled_at
                 ? `다음 상담 ${scheduleDate.format(new Date(row.next_scheduled_at))}`
                 : null,
-            ].filter(Boolean).join(' · ');
+            ].filter(Boolean).join(' | ');
             const card = (
               <article className="surface-card participant-card" data-variant="list">
                 <header className="participant-card-header">

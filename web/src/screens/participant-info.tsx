@@ -87,7 +87,7 @@ function RiskBanner({ caseId }: { caseId: number }) {
             <li key={r.card_id}>
               <Item
                 title={r.text}
-                desc={`${r.source_session_seq}회차${r.last_result === 'unchecked' ? ' · 지난 회차 미확인' : ''}`}
+                desc={`${r.source_session_seq}회차${r.last_result === 'unchecked' ? ', 지난 회차 미확인' : ''}`}
               />
             </li>
           ))}
@@ -148,13 +148,13 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
           return (
             <div className="wire-repeat-card" key={s.id}>
               <Item
-                title={`${s.seq}회차 · ${dateLabel(s.held_at)}${s.kind === 'intake' ? ' · 인테이크' : ''}`}
+                title={`${s.seq}회차 | ${dateLabel(s.held_at)}${s.kind === 'intake' ? ' | 인테이크' : ''}`}
                 desc={
                   <>
-                    {s.ai_summary ? `AI 정리 승인함 · ${s.line}` : s.line}
-                    {s.written === false && <> · <Badge tone="lavender">수기 미작성</Badge></>}
-                    {s.voice.recordings > 0 && ` · 녹음 ${s.voice.recordings}`}
-                    {transcriptLabel && ` · ${transcriptLabel}`}
+                    {s.ai_summary ? `AI 정리 승인함 | ${s.line}` : s.line}
+                    {s.written === false && <> <Badge tone="lavender">수기 미작성</Badge></>}
+                    {s.voice.recordings > 0 && ` | 녹음 ${s.voice.recordings}`}
+                    {transcriptLabel && ` | ${transcriptLabel}`}
                   </>
                 }
                 action={
@@ -186,7 +186,7 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
                 <Fold title="AI 요약" desc={s.ai_summary.summary}>
                   <p className="wire-item-desc">{s.ai_summary.summary}</p>
                   {s.ai_summary.changes.length > 0 && (
-                    <p className="wire-item-desc">달라진 것: {s.ai_summary.changes.join(' · ')}</p>
+                    <p className="wire-item-desc">달라진 것: {s.ai_summary.changes.join(', ')}</p>
                   )}
                 </Fold>
                 <Fold
@@ -211,7 +211,7 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
           <Item
             title={dateLabel(detail.closure.closed_at)}
             desc={`${detail.closure.close_reason}${
-              detail.closure.unfinished_note ? ` · ${detail.closure.unfinished_note}` : ''
+              detail.closure.unfinished_note ? `, ${detail.closure.unfinished_note}` : ''
             }`}
           />
         </Card>
@@ -241,7 +241,7 @@ function Goals({ detail }: { detail: CaseDetail }) {
             <Item
               key={`${r.created_at}-${i}`}
               title={r.text ?? '(비움)'}
-              desc={`${dateLabel(r.created_at)}${i === 0 ? ' · 처음 정함' : ' · 고침'}`}
+              desc={`${dateLabel(r.created_at)}${i === 0 ? ', 처음 정함' : ', 고침'}`}
             />
           ))
         )}
@@ -251,7 +251,7 @@ function Goals({ detail }: { detail: CaseDetail }) {
           <Empty>이어받은 목표가 아직 없어요.</Empty>
         ) : (
           withGoal.map((s) => (
-            <Item key={s.id} title={s.today_goal_text ?? ''} desc={`${s.seq}회차 · ${dateLabel(s.held_at)}`} />
+            <Item key={s.id} title={s.today_goal_text ?? ''} desc={`${s.seq}회차 | ${dateLabel(s.held_at)}`} />
           ))
         )}
       </Card>
@@ -294,7 +294,7 @@ function Consents({ caseId }: { caseId: number }) {
   };
 
   return (
-    <Card title="동의">
+    <Card title="개인 정보 및 민감 정보 처리 동의">
       {rows === null ? (
         <Empty>불러오는 중이에요.</Empty>
       ) : (
@@ -303,7 +303,7 @@ function Consents({ caseId }: { caseId: number }) {
           // 접힌 머리 한 행: 항목 이름 · 설명 · 날짜 · 동의 여부. 이중 접힘(항목 + `자세히 보기`)은
           // 하나로 좁혔다 — 펼치면 동의문 전문이 바로 선다(2026-09-17 Q).
           const head = [row.copy, row.decided_at ? dateLabel(row.decided_at) : '날짜 없음', STATUS[row.status] ?? row.status]
-            .join(' · ');
+            .join(' | ');
           return (
             <Fold
               key={row.domain}
@@ -320,22 +320,23 @@ function Consents({ caseId }: { caseId: number }) {
                     ['얼마나 두나', copy.retention_text],
                     ...(copy.recipient ? ([['어디로 가나', copy.recipient]] as Array<[string, ReactNode]>) : []),
                     ['거부할 수 있나', copy.refusal_text],
-                    ['문안 판', `${copy.version} · 지문 ${copy.hash}`],
+                    ['문안 판', `${copy.version}, 지문 ${copy.hash}`],
                   ]}
                 />
               ) : (
                 <Empty>문안을 불러오는 중이에요.</Empty>
               )}
-              <FormActions>
+              {/* 체크는 **왼쪽**이고 아래 설명문은 두지 않는다(2026-09-17 Q).
+                  끄면 철회로 기록된다는 것은 상태 값(`동의함`/`동의 없음`)이 이미 말한다. */}
+              <div className="consent-toggle">
                 <Choice
                   type="checkbox"
                   label="이 항목에 동의함"
-                  hint="체크를 끄면 철회로 기록해요. 동의 시각은 그때마다 남아요."
                   checked={row.status === 'granted'}
                   disabled={busy}
                   onChange={() => void toggle(row)}
                 />
-              </FormActions>
+              </div>
             </Fold>
           );
         })
@@ -464,7 +465,7 @@ function Documents({ caseId }: { caseId: number }) {
   const size = (n: number) => (n < 1024 * 1024 ? `${Math.ceil(n / 1024)}KB` : `${(n / 1024 / 1024).toFixed(1)}MB`);
 
   return (
-    <Card title="서면 파일 업로드" hint="보존기간 1년, 20MB 제한">
+    <Card title="파일 업로드" hint="보존기간 1년, 20MB 제한">
       {rows === null ? (
         <Empty>불러오는 중이에요.</Empty>
       ) : rows.length === 0 ? null : (
@@ -472,8 +473,8 @@ function Documents({ caseId }: { caseId: number }) {
           <div className="wire-repeat-card" key={d.id}>
             <Item
               title={d.label}
-              desc={`${size(d.bytes)} · ${dateLabel(d.created_at)} 받음 · ${dateLabel(d.delete_after)}에 지워요${
-                d.deleted_at ? ' · 지워짐' : ''
+              desc={`${size(d.bytes)}, ${dateLabel(d.created_at)} 받음, ${dateLabel(d.delete_after)}에 지워요${
+                d.deleted_at ? ', 지워짐' : ''
               }`}
               action={
                 d.deleted_at ? undefined : (
@@ -487,24 +488,25 @@ function Documents({ caseId }: { caseId: number }) {
         ))
       )}
 
-      {/* 한 행이다(2026-09-17 Q): 문서 선택 · 문서 이름 · 업로드. 안내문은 카드 hint 한 줄로
-          줄였고 `파일`이라는 낱말은 화면에서 걷었다(제목만 Q 지시대로 `서면 파일 업로드`). */}
+      {/* 한 행이다(2026-09-17 Q): [파일 선택 | 문서 이름] 입력칸 + 업로드.
+          **파일 선택 버튼은 입력칸 안에 든다**(전역 통일, 2026-09-17 Q) — 버튼이 칸 밖에
+          따로 서면 어디까지가 한 입력인지 읽히지 않는다. 안내는 카드 hint 한 줄뿐이다. */}
       <div className="doc-upload-row">
-        <label className="wire-button" data-variant="secondary">
-          <span className="wire-button-text">{file ? '다시 선택' : '문서 선택'}</span>
-          <input
-            id="doc-file"
-            type="file"
-            className="doc-upload-input"
-            accept=".pdf,.jpg,.jpeg,.png,.heic,.docx,.hwp"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          />
-        </label>
-        <div className="wire-input-box doc-upload-name">
+        <div className="wire-input-box doc-upload-box">
+          <label className="wire-button doc-upload-pick" data-variant="secondary">
+            <span className="wire-button-text">파일 선택</span>
+            <input
+              id="doc-file"
+              type="file"
+              className="doc-upload-input"
+              accept=".pdf,.jpg,.jpeg,.png,.heic,.docx,.hwp"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            />
+          </label>
           <input
             id="doc-label"
             aria-label="문서 이름"
-            placeholder={file ? '문서 이름 (예: 채무 내역서)' : '문서를 고른 뒤 이름을 적어요'}
+            placeholder={file ? '문서 이름 (예: 채무 내역서)' : '파일을 고른 뒤 이름을 적어요'}
             value={label}
             onChange={(e) => setLabel(e.target.value)}
           />
@@ -513,7 +515,7 @@ function Documents({ caseId }: { caseId: number }) {
           {busy ? '올리는 중…' : '업로드'}
         </Button>
       </div>
-      {file && <p className="panel-meta">{file.name} · {size(file.size)}</p>}
+      {file && <p className="panel-meta">{file.name}, {size(file.size)}</p>}
       {error && <ErrorText>{error}</ErrorText>}
     </Card>
   );
@@ -537,12 +539,12 @@ function Fulls({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
       {done.map((s) => (
         <div className="wire-repeat-card" key={s.id}>
           <Item
-            title={`${s.seq}회차 · ${dateLabel(s.held_at)}${s.kind === 'intake' ? ' · 인테이크' : ''}`}
+            title={`${s.seq}회차 | ${dateLabel(s.held_at)}${s.kind === 'intake' ? ' | 인테이크' : ''}`}
             desc={
               <>
                 {s.written ? '수기 있음' : '수기 미작성'}
-                {s.voice.recordings > 0 && ` · 녹음 ${s.voice.recordings}`}
-                {s.voice.recordings > 0 && ` · ${TRANSCRIPT_LABEL[s.voice.transcript]}`}
+                {s.voice.recordings > 0 && ` | 녹음 ${s.voice.recordings}`}
+                {s.voice.recordings > 0 && ` | ${TRANSCRIPT_LABEL[s.voice.transcript]}`}
               </>
             }
             action={
@@ -592,7 +594,7 @@ function SessionStatus({ detail }: { detail: CaseDetail }) {
     `수기 ${done.filter((s) => s.written).length}`,
     `전사 승인 ${done.filter((s) => s.voice.transcript === 'approved').length}`,
     next?.scheduled_at ? `다음 ${next.seq}회차 ${dateLabel(next.scheduled_at)}` : '다음 일정 없음',
-  ].join(' · ');
+  ].join(' | ');
 
   return (
     <Fold title="회차 정보" desc={<span title={head}>{head}</span>}>
@@ -666,31 +668,30 @@ function Info({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
 
       <Access caseId={caseId} />
 
-      <Card title="상담 종결">
-        {detail.closure ? (
-          <Empty>{`${dateLabel(detail.closure.closed_at)}에 종결했어요. · ${detail.closure.close_reason}`}</Empty>
-        ) : (
-          <>
-            <p className="panel-meta">
-              미완료 과제 {detail.open_cards.filter((c) => c.kind === 'promise').length}건이 남아 있어요.
-              종결도 상담이라 기록을 먼저 써요 — 무엇이 남았는지 확인 창이 먼저 뜹니다.
-            </p>
-            <FormActions>
-              <Button onClick={() => setAsking(true)}>상담 종결</Button>
-            </FormActions>
-            <Confirm
-              open={asking}
-              title="이 사례를 종결할까요?"
-              lines={closeWarnings(detail)}
-              confirmLabel="종결 기록 쓰기"
-              onCancel={() => setAsking(false)}
-              onConfirm={() => {
-                setAsking(false);
-                window.location.hash = `#/cases/${caseId}/record?closing=1`;
-              }}
-            />
-          </>
-        )}
+      {/* 한 행이다(2026-09-17 Q): 제목, 짧은 메시지, 버튼. 자세한 경고는 확인 창이 말한다. */}
+      <Card>
+        <Item
+          title="상담 종결"
+          desc={
+            detail.closure
+              ? `${dateLabel(detail.closure.closed_at)} 종결, ${detail.closure.close_reason}`
+              : `미완료 ${detail.open_cards.filter((c) => c.kind === 'promise').length}건, 상담 종결시 기록 작성 필요`
+          }
+          action={
+            detail.closure ? undefined : <Button onClick={() => setAsking(true)}>상담 종결</Button>
+          }
+        />
+        <Confirm
+          open={asking}
+          title="이 사례를 종결할까요?"
+          lines={closeWarnings(detail)}
+          confirmLabel="종결 기록 쓰기"
+          onCancel={() => setAsking(false)}
+          onConfirm={() => {
+            setAsking(false);
+            window.location.hash = `#/cases/${caseId}/record?closing=1`;
+          }}
+        />
       </Card>
     </>
   );
@@ -713,7 +714,7 @@ export function ParticipantInfoScreen({ caseId }: { caseId: number }) {
     ['당사자 ID', detail.pseudonym],
     [
       '참여 사업',
-      `${detail.case.program_name}${done.length > 0 ? ` · ${Math.max(...done.map((s) => s.seq))}회차까지 기록` : ' · 기록 없음'}`,
+      `${detail.case.program_name}${done.length > 0 ? `, ${Math.max(...done.map((s) => s.seq))}회차까지 기록` : ', 기록 없음'}`,
     ],
     ['연락처', detail.participant.phone ?? ''],
     ['이메일', detail.participant.email ?? ''],

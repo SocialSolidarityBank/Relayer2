@@ -284,7 +284,7 @@ export function RecordScreen({
         pseudonym={briefing.participant_card.pseudonym}
         details={[
           ['당사자 ID', briefing.participant_card.pseudonym],
-          ['참여 사업', `${briefing.participant_card.program_name} · ${seq}회차${editing ? ' 고쳐 쓰기' : ''}`],
+          ['참여 사업', `${briefing.participant_card.program_name}, ${seq}회차${editing ? ' 고쳐 쓰기' : ''}`],
           ['연락처', detail?.participant.phone ?? ''],
           ['이메일', detail?.participant.email ?? ''],
         ]}        actions={
@@ -321,7 +321,7 @@ export function RecordScreen({
                 <div className="wire-repeat-card" key={t.card_id}>
                   <Item
                     title={t.text}
-                    desc={`${t.source_session_seq}회차${t.last_result === 'unchecked' ? ' · 지난 회차 미확인' : ''}`}
+                    desc={`${t.source_session_seq}회차${t.last_result === 'unchecked' ? ', 지난 회차 미확인' : ''}`}
                   />
                   {/* 결과는 셋이다(2026-09-15 Q). 그만두는 것은 상태가 아니라 과제를 접는 일이라 따로 둔다. */}
                   <ChoiceGroup legend="결과">
@@ -446,7 +446,7 @@ export function RecordScreen({
             */}
             {duplicateTasks.length > 0 && (
               <p className="panel-meta">
-                왼쪽 확인할 과제에 이미 있어요: {duplicateTasks.join(' · ')}. 결과만 매기면 다음에도 올라와요.
+                왼쪽 확인할 과제에 이미 있어요: {duplicateTasks.join(', ')}. 결과만 매기면 다음에도 올라와요.
               </p>
             )}
           </Card>

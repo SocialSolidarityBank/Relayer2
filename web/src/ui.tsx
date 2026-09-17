@@ -126,7 +126,7 @@ export function ConsentDetail({
           ['얼마나 두나', copy.retention_text],
           ...(copy.recipient ? ([['어디로 가나', copy.recipient]] as Array<[string, ReactNode]>) : []),
           ['거부할 수 있나', copy.refusal_text],
-          ['문안 판', `${copy.version} · 지문 ${copy.hash}`],
+          ['문안 판', `${copy.version}, 지문 ${copy.hash}`],
         ]}
       />
     </Fold>
@@ -525,7 +525,7 @@ export function LineList({
       {lines.map((line, i) => (
         <div className="wire-repeat-card" key={`${line.text}-${i}`}>
           <Item
-            title={`${withArea ? `${LIFE_AREAS.find((a) => a.key === line.area)?.label} · ` : ''}${line.text}`}
+            title={`${withArea ? `${LIFE_AREAS.find((a) => a.key === line.area)?.label} | ` : ''}${line.text}`}
             action={<Button onClick={() => onChange(lines.filter((_, j) => j !== i))}>지우기</Button>}
           />
         </div>

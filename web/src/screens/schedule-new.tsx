@@ -66,7 +66,7 @@ export function ScheduleNewScreen({ caseId }: { caseId: number }) {
       pseudonym={view?.pseudonym ?? '확인 중'}
       details={[
         ['당사자 ID', view?.pseudonym ?? '확인 중'],
-        ['참여 사업', view ? `${view.case.program_name}${nextSeq ? ` · ${nextSeq}회차 잡기` : ''}` : '확인 중'],
+        ['참여 사업', view ? `${view.case.program_name}${nextSeq ? `, ${nextSeq}회차 잡기` : ''}` : '확인 중'],
         ['연락처', detail?.participant.phone ?? ''],
         ['이메일', detail?.participant.email ?? ''],
       ]}

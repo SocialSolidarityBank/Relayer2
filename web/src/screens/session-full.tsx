@@ -96,7 +96,7 @@ export function SessionFullScreen({ caseId, sessionId }: { caseId: number; sessi
           ['당사자 ID', detail?.pseudonym ?? '확인 중'],
           [
             '참여 사업',
-            `${detail?.case.program_name ?? '확인 중'} · ${rec.seq}회차 ${dateLabel(rec.held_at)}`,
+            `${detail?.case.program_name ?? '확인 중'}, ${rec.seq}회차 ${dateLabel(rec.held_at)}`,
           ],
           ['연락처', detail?.participant.phone ?? ''],
           ['이메일', detail?.participant.email ?? ''],
@@ -136,8 +136,8 @@ export function SessionFullScreen({ caseId, sessionId }: { caseId: number; sessi
             recordings.map((r) => (
               <div className="wire-repeat-card" key={r.id}>
                 <Item
-                  title={`${r.created_at.slice(0, 10)} 녹음 · ${fmtBytes(r.bytes)}${
-                    r.duration_ms ? ` · ${fmtMs(r.duration_ms)}` : ''
+                  title={`${r.created_at.slice(0, 10)} 녹음, ${fmtBytes(r.bytes)}${
+                    r.duration_ms ? `, ${fmtMs(r.duration_ms)}` : ''
                   }`}
                   desc={
                     r.deleted_at
@@ -168,7 +168,7 @@ export function SessionFullScreen({ caseId, sessionId }: { caseId: number; sessi
               {/* 구획 이름은 소제목(14/600 --sub)이다 — 값·상태를 쓰는 `.panel-meta`(14/400)로
                   머리를 대신하면 아래 내용과 위계가 같아진다(2026-09-17 Q 제목 위계 점검). */}
               <h3 className="wire-subhead">
-                전사문{transcript.status === 'draft' && <> · <Badge>확인 전</Badge></>}
+                전사문{transcript.status === 'draft' && <> <Badge>확인 전</Badge></>}
               </h3>
               {transcript.segments && transcript.segments.length > 0 ? (
                 transcript.segments.map((s, i) => (

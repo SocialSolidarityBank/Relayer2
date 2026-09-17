@@ -33,7 +33,7 @@ test('이름 중심 목록에서 정보를 바로 보고 상세와 기록·일�
   await expect(card.getByText(name, { exact: true })).toBeVisible();
   // 카드는 두 줄이다(2026-09-17 Q): `가명 · 사업명 N회차` / `연락처 · 이메일 · 다음 상담`.
   // 담당 실무자는 카드에서 걷었다 — 위 걸개가 가른다.
-  await expect(card.locator('.participant-card-id')).toHaveText(new RegExp(`^[a-z]+-\\d+ · ${program} 1회차$`));
+  await expect(card.locator('.participant-card-id')).toHaveText(new RegExp(`^[a-z]+-\\d+ \\| ${program} 1회차$`));
   await expect(card.locator('.participant-card-reach')).toHaveText(/다음 상담 \d+월 \d+일/);
   await expect(card.getByText('예정 없음', { exact: true })).toHaveCount(0);
 

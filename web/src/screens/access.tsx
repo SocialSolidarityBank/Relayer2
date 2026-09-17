@@ -78,7 +78,7 @@ export function AccessScreen({ token }: { token: string }) {
                 title={when(s.scheduled_at)}
                 desc={[s.program_name, s.method ? METHOD_LABEL[s.method] : null, s.place]
                   .filter(Boolean)
-                  .join(' · ')}
+                  .join(', ')}
               />
             ))
           )}

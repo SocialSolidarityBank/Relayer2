@@ -21,7 +21,7 @@ const EMPTY_EVENTS: CalendarEvent[] = [];
 const UPCOMING_LIMIT = 5;
 /** 접힌 줄의 12px 한 줄. 잘리면 전체는 `title` 로 남는다(이식 규칙: 말줄임 + title). */
 const metaLine = (parts: Array<string | null>) => {
-  const text = parts.filter(Boolean).join(' · ');
+  const text = parts.filter(Boolean).join(' | ');
   return <span title={text}>{text}</span>;
 };
 
@@ -140,7 +140,7 @@ export function HomeScreen({ focusCaseId = null }: { focusCaseId?: number | null
     const name = row.name ?? row.pseudonym;
     const label = `${dayFormatter.format(new Date(`${time.day}T00:00:00Z`))} ${time.label} ${name} ${row.seq}회차 일정 상세`;
     return <button key={row.session_id} type="button" className="sc-event" data-session-id={row.session_id}
-      aria-label={label} title={`${label} · ${row.program_name}`} onClick={e => { e.stopPropagation(); showDay(time.day, row.session_id); }}>
+      aria-label={label} title={`${label}, ${row.program_name}`} onClick={e => { e.stopPropagation(); showDay(time.day, row.session_id); }}>
       <span className="sc-event-time">{time.label}</span><strong className="sc-event-name">{name}</strong>
     </button>;
   };
@@ -166,7 +166,7 @@ export function HomeScreen({ focusCaseId = null }: { focusCaseId?: number | null
     upcoming === null
       ? undefined
       : upcomingEvents.length > upcomingShown
-        ? `가까운 ${upcomingShown}건 · 모두 ${upcomingEvents.length}건`
+        ? `가까운 ${upcomingShown}건, 모두 ${upcomingEvents.length}건`
         : `${upcomingEvents.length}건`;
 
   return <>
@@ -253,7 +253,7 @@ export function HomeScreen({ focusCaseId = null }: { focusCaseId?: number | null
             펼치면 회차·일시·사업명·장소가 라벨/값으로 붙는다. */}
         <section ref={detail} tabIndex={-1} aria-labelledby="sc-detail-label" className="sc-details">
           <span id="sc-detail-label" hidden>
-            {dayPicked ? `선택한 날짜의 상담 일정 · ${selectedDateLabel}` : '다가오는 상담 일정'}
+            {dayPicked ? `선택한 날짜의 상담 일정, ${selectedDateLabel}` : '다가오는 상담 일정'}
           </span>
           <Card
             title={dayPicked ? selectedDateLabel : '다가오는 일정'}

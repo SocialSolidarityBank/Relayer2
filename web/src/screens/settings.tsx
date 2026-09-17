@@ -486,8 +486,8 @@ function AssignPane({ me }: { me: { id: number } }) {
           toApprove.map((r) => (
             <div className="wire-repeat-card" key={r.id}>
               <Item
-                title={`${r.pseudonym} · ${r.program_name}`}
-                desc={`${r.requester} · ${date(r.created_at)}${r.reason ? ` · ${r.reason}` : ''}`}
+                title={`${r.pseudonym} | ${r.program_name}`}
+                desc={`${r.requester}, ${date(r.created_at)}${r.reason ? `, ${r.reason}` : ''}`}
                 action={
                   <>
                     <Button
@@ -512,8 +512,8 @@ function AssignPane({ me }: { me: { id: number } }) {
           mine.map((r) => (
             <div className="wire-repeat-card" key={r.id}>
               <Item
-                title={`${r.pseudonym} · ${r.program_name}`}
-                desc={`${date(r.created_at)} 올림${r.reason ? ` · ${r.reason}` : ''}`}
+                title={`${r.pseudonym} | ${r.program_name}`}
+                desc={`${date(r.created_at)} 올림${r.reason ? `, ${r.reason}` : ''}`}
                 action={
                   r.decided_at ? (
                     <Badge tone={r.decision === 'approved' ? 'mint' : undefined}>
@@ -551,8 +551,8 @@ function AssignPane({ me }: { me: { id: number } }) {
           dir.map((c) => (
             <div className="wire-repeat-card" key={c.id}>
               <Item
-                title={`${c.pseudonym} · ${c.program_name}`}
-                desc={`${c.status === 'open' ? '진행 중' : '종결'} · ${
+                title={`${c.pseudonym} | ${c.program_name}`}
+                desc={`${c.status === 'open' ? '진행 중' : '종결'}, ${
                   c.assignees.length > 0 ? `담당 ${c.assignees.map((a) => a.name).join(', ')}` : '담당 없음'
                 }`}
                 action={
@@ -568,7 +568,7 @@ function AssignPane({ me }: { me: { id: number } }) {
                       <Choice
                         key={w.id}
                         type="checkbox"
-                        label={`${w.name} · ${w.email}`}
+                        label={`${w.name}, ${w.email}`}
                         hint={w.role === 'admin' ? '관리자' : undefined}
                         checked={picked.includes(w.id)}
                         onChange={() => toggle(w.id)}
@@ -663,8 +663,8 @@ function InvitePane() {
             return (
               <div className="wire-repeat-card" key={v.id}>
                 <Item
-                  title={`${v.role === 'admin' ? '관리자' : '실무자'}${v.note ? ` · ${v.note}` : ''}`}
-                  desc={`${date(v.created_at)} 만듦 · ${date(v.expires_at)}까지 · ${state}`}
+                  title={`${v.role === 'admin' ? '관리자' : '실무자'}${v.note ? `, ${v.note}` : ''}`}
+                  desc={`${date(v.created_at)} 만듦, ${date(v.expires_at)}까지, ${state}`}
                   action={
                     state === '기다리는 중' ? (
                       <Button onClick={() => void revokeInvite(v.id).then(setRows)}>취소하기</Button>
@@ -732,7 +732,7 @@ function WorkersPane() {
                           <Empty>맡고 있는 당사자가 없어요.</Empty>
                         ) : (
                           cases
-                            .map((c) => `${c.pseudonym} · ${c.program_name} · ${c.status === 'open' ? '진행 중' : '종결'}`)
+                            .map((c) => `${c.pseudonym} | ${c.program_name} | ${c.status === 'open' ? '진행 중' : '종결'}`)
                             .join(' / ')
                         )}
                       </td>
@@ -973,7 +973,7 @@ function ConnectionsPane() {
             {title} {ok ? <Badge tone="mint">붙어 있어요</Badge> : <Badge>안 붙었어요</Badge>}
           </>
         }
-        desc={`${desc} · 기관 서버의 ${env} 로 넣어요`}
+        desc={`${desc}, 기관 서버의 ${env} 로 넣어요`}
       />
     </div>
   );
@@ -982,9 +982,9 @@ function ConnectionsPane() {
     <Card
       title="API 연결 관리"
     >
-      {row('AI 연결', c.ai.connected, `${c.ai.provider} · ${c.ai.model}`, c.ai.env)}
-      {row('STT 연결', c.stt.connected, `${c.stt.provider}${c.stt.region ? ` · ${c.stt.region}` : ''}`, c.stt.env)}
-      {row('데이터베이스 연결', c.db.connected, `방금 확인함 · ${new Date(c.db.checked_at).toLocaleString('ko-KR')}`, c.db.env)}
+      {row('AI 연결', c.ai.connected, `${c.ai.provider}, ${c.ai.model}`, c.ai.env)}
+      {row('STT 연결', c.stt.connected, `${c.stt.provider}${c.stt.region ? `, ${c.stt.region}` : ''}`, c.stt.env)}
+      {row('데이터베이스 연결', c.db.connected, `방금 확인함, ${new Date(c.db.checked_at).toLocaleString('ko-KR')}`, c.db.env)}
     </Card>
   );
 }
@@ -1008,8 +1008,8 @@ function RequestPane({ me }: { me: { id: number } }) {
         rows.map((r) => (
           <div className="wire-repeat-card" key={r.id}>
             <Item
-              title={`${r.pseudonym} · ${r.program_name}`}
-              desc={`${date(r.created_at)} 올림${r.reason ? ` · ${r.reason}` : ''}`}
+              title={`${r.pseudonym} | ${r.program_name}`}
+              desc={`${date(r.created_at)} 올림${r.reason ? `, ${r.reason}` : ''}`}
               action={
                 r.decided_at ? (
                   <Badge tone={r.decision === 'approved' ? 'mint' : undefined}>

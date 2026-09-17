@@ -394,7 +394,7 @@ export function RecordingPanel({
   return (
     <Card
       title="상담 녹음"
-      hint={`${status.formats.join(', ') || '오디오'} · ${fmtBytes(status.max_bytes)} 까지 · iPhone·iPad 는 화면이 잠기거나 다른 앱으로 가면 녹음이 끊길 수 있어요.`}
+      hint={`${status.formats.join(', ') || '오디오'}, ${fmtBytes(status.max_bytes)} 까지, iPhone·iPad 는 화면이 잠기거나 다른 앱으로 가면 녹음이 끊길 수 있어요.`}
     >
       {error && <ErrorText>{error}</ErrorText>}
 
@@ -440,13 +440,13 @@ export function RecordingPanel({
           recordings.map((r) => (
             <div className="wire-repeat-card" key={r.id}>
               <Item
-                title={`${fmtDate(r.created_at)} 녹음 · ${fmtBytes(r.bytes)}${
-                  r.duration_ms ? ` · ${fmtMs(r.duration_ms)}` : ''
+                title={`${fmtDate(r.created_at)} 녹음, ${fmtBytes(r.bytes)}${
+                  r.duration_ms ? `, ${fmtMs(r.duration_ms)}` : ''
                 }`}
                 desc={
                   r.deleted_at
                     ? '보유기간이 지나 지웠어요.'
-                    : `${fmtDate(r.delete_after)}까지 보관 · ${stateLabel(r, transcript)}${
+                    : `${fmtDate(r.delete_after)}까지 보관, ${stateLabel(r, transcript)}${
                         r.transcribe_note ? ` — ${r.transcribe_note}` : ''
                       }`
                 }
