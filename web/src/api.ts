@@ -658,6 +658,8 @@ export type ConsentCopy = {
   hash: string;
   /** 이것이 없으면 사례를 열 수 없다. */
   required: boolean;
+  /** 관리자에게만 true(D6). 설정 › 동의서 관리의 `수정` 이 이것을 본다. */
+  editable: boolean;
 };
 export const getConsentCopy = () => json<ConsentCopy[]>('/consent-copy');
 
@@ -678,63 +680,39 @@ export const signupOpen = () => json<{ open: boolean; workspace: Workspace | nul
 export const signup = (body: { email: string; password: string; name: string }) =>
   json<{ ok: true }>('/auth/signup', { method: 'POST', body: JSON.stringify(body) });
 
-// ── L4 설정 (UI 개편 2026-09-18, ui-plan §4 L5 계약) ─────────────────────────
-// 화면은 L5 계약 모양으로 만들고, 서버가 착지하기 전에는 **기존 API 로 채울 수 있는 만큼** 채운다.
-// L5 가 착지하면 함수 몸통만 그 경로로 바꾼다 — 화면은 손대지 않는다.
+// ── L4 설정 (UI 개편 2026-09-18, ui-plan §4 L5 계약, #54 착지) ─────────────────
 
-/** J1. `GET /users/:id/cases → [{case_id, name, program, seq, next_at}]`. 지금은 `/settings/workers/:id/cases` 를 옮겨 담는다. */
-export type WorkerCaseRow = { case_id: number; name: string; program: string; seq: number | null; next_at: string | null };
-export const workerCaseRows = (id: number): Promise<WorkerCaseRow[]> =>
-  workerCases(id).then((rows) =>
-    rows.map((c) => ({ case_id: c.id, name: c.pseudonym, program: c.program_name, seq: null, next_at: null })),
-  );
+/** J1. 한 실무자가 맡은 당사자 — 회차 = 기록된 회차 수, 다음 상담 = 첫 예정 회차. 남의 것을 보면 서버가 감사에 남긴다. */
+export type WorkerCaseRow = { case_id: number; name: string | null; program: string; seq: number; next_at: string | null };
+export const workerCaseRows = (id: number) => json<WorkerCaseRow[]>(`/users/${id}/cases`);
 
-/** J3. `GET /assign/cases?q&program&page → { items, total }`. 지금은 배정 목록 + 당사자 목록을 합쳐 화면에서 거르고 쪽을 나눈다. */
+/** J3. 열린 사례만, 10건씩. `q` 는 가명·사업 이름에 건다(이름·연락처는 금고라 서버가 못 거른다). */
 export type AssignCase = {
   case_id: number;
-  name: string;
+  name: string | null;
+  /** 당사자 아이디 = 가명. */
   login: string;
   program: string;
-  program_id: number | null;
-  seq: number | null;
+  seq: number;
   phone: string | null;
   email: string | null;
-  status: string;
   assignees: Assignee[];
 };
 export const ASSIGN_PAGE_SIZE = 10;
-export const listAssignCases = async (params: { q?: string; program?: number | null; page?: number } = {}) => {
-  const [cases, people] = await Promise.all([listAssignmentCases(), listParticipants()]);
-  const byCase = new Map(people.map((p) => [p.case_id, p]));
-  const needle = (params.q ?? '').trim().toLowerCase();
-  const all: AssignCase[] = cases.map((c) => {
-    const p = byCase.get(c.id);
-    return {
-      case_id: c.id,
-      name: p?.name ?? c.pseudonym,
-      login: c.pseudonym,
-      program: c.program_name,
-      program_id: p?.program_id ?? null,
-      seq: p?.last_session_seq ?? null,
-      phone: null,
-      email: null,
-      status: c.status,
-      assignees: c.assignees,
-    };
-  });
-  const items = all.filter((c) => {
-    if (params.program && c.program_id !== params.program) return false;
-    if (!needle) return true;
-    return [c.name, c.login, c.program, ...c.assignees.map((a) => a.name)].some((v) => v.toLowerCase().includes(needle));
-  });
-  const page = Math.max(1, params.page ?? 1);
-  return { items: items.slice((page - 1) * ASSIGN_PAGE_SIZE, page * ASSIGN_PAGE_SIZE), total: items.length };
+export const listAssignCases = (params: { q?: string; program?: number | null; page?: number } = {}) => {
+  const qs = new URLSearchParams();
+  if (params.q?.trim()) qs.set('q', params.q.trim());
+  if (params.program) qs.set('program', String(params.program));
+  if (params.page && params.page > 1) qs.set('page', String(params.page));
+  const s = qs.toString();
+  return json<{ items: AssignCase[]; total: number; page: number; page_size: number }>(`/assign/cases${s ? `?${s}` : ''}`);
 };
 
-/** J3·D7. `PUT /cases/:id/assignments { user_ids }` — 전체 치환. 지금은 `/settings/assign`. */
-export const setAssignments = (caseId: number, user_ids: number[]) => assignCase(caseId, user_ids);
+/** J3·D7. 전체 치환 — 빠진 사람은 거둬지고 빈 배열은 모두 거둔다. 감사 `assignment.set`. */
+export const setAssignments = (caseId: number, user_ids: number[]) =>
+  json<{ ok: true; assignees: Assignee[] }>(`/cases/${caseId}/assignments`, { method: 'PUT', body: JSON.stringify({ user_ids }) });
 
-/** L3·D6. `PUT /consent-copy/:domain` — 저장하면 새 판이 되고 모든 동의가 `확인 필요` 로 떨어진다. */
+/** L3·D6. 저장하면 새 판 `consent-standard-form-v<N+1>` 이 되고 모든 지난 동의가 `확인 필요` 로 떨어진다. */
 export type ConsentCopyInput = {
   copy: string;
   items: string[];

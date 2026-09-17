@@ -638,26 +638,21 @@ function AssignPane({ me }: { me: { id: number } }) {
           <div className="assign-case-list">
             {dir.items.map((c) => (
               <div className="assign-case-row" key={c.case_id}>
-                <span className="assign-case-name">{c.name}</span>
+                <span className="assign-case-name">{c.name ?? c.login}</span>
                 <Meta
                   parts={[
-                    c.login !== c.name ? c.login : null,
+                    c.name ? c.login : null,
                     c.seq ? `${c.program} ${c.seq}회차` : c.program,
                     c.phone,
                     c.email,
                   ]}
                 />
                 <span className="assign-case-workers">
-                  <Meta
-                    parts={[
-                      c.status === 'open' ? '진행 중' : '종결',
-                      c.assignees.length > 0 ? `담당 ${c.assignees.map((a) => a.name).join(', ')}` : '담당 없음',
-                    ]}
-                  />
+                  {c.assignees.length > 0 ? `담당 ${c.assignees.map((a) => a.name).join(', ')}` : '담당 없음'}
                 </span>
                 <Button
                   disabled={saving}
-                  aria-label={`${c.name} 실무자 배정`}
+                  aria-label={`${c.name ?? c.login} 실무자 배정`}
                   onClick={() => {
                     setSaveError('');
                     setEditing(c);
@@ -756,12 +751,12 @@ function AssignDrawer({
       }}
     >
       <div className="side-drawer-head">
-        <h2 id="assign-drawer-title">{row.name} 담당 실무자</h2>
+        <h2 id="assign-drawer-title">{row.name ?? row.login} 담당 실무자</h2>
         <Button onClick={() => dialog.current?.close()}>닫기</Button>
       </div>
       <div className="side-drawer-body">
         <p className="panel-meta">
-          <Meta parts={[row.login !== row.name ? row.login : null, row.program, row.status === 'open' ? '진행 중' : '종결']} />
+          <Meta parts={[row.name ? row.login : null, row.program, '진행 중']} />
         </p>
         {picked.length === 0 ? (
           <Empty>담당 없음</Empty>
@@ -1044,9 +1039,9 @@ function AssigneeDialog({ worker, onClose }: { worker: Worker; onClose: () => vo
             <tbody>
               {rows.map((c) => (
                 <tr key={c.case_id}>
-                  <td>{c.name}</td>
+                  <td>{c.name ?? ''}</td>
                   <td>{c.program}</td>
-                  <td>{c.seq === null ? '' : `${c.seq}회차`}</td>
+                  <td>{c.seq ? `${c.seq}회차` : '기록 없음'}</td>
                   <td>{c.next_at ? when(c.next_at) : ''}</td>
                 </tr>
               ))}
@@ -1395,11 +1390,13 @@ function ConsentPane() {
               desc={<Meta parts={[r.body, `판 ${r.version}`, `지문 ${r.hash}`]} />}
             >
               <ConsentDetail copy={r} />
-              <FormActions>
-                <Button aria-label={`${r.label} 문안 수정`} onClick={() => setEditing(r)}>
-                  수정
-                </Button>
-              </FormActions>
+              {r.editable && (
+                <FormActions>
+                  <Button aria-label={`${r.label} 문안 수정`} onClick={() => setEditing(r)}>
+                    수정
+                  </Button>
+                </FormActions>
+              )}
             </Fold>
           ))
         )}

@@ -553,6 +553,8 @@ body { margin: 0; }
 .assign-case-row + .assign-case-row { border-top: 1px solid var(--line); }
 .assign-case-name { flex: none; font-weight: 600; color: var(--ink); }
 .assign-case-row > .wire-meta-row, .assign-case-workers { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm); color: var(--sub); }
+/* 아이디·사업·연락처·이메일 네 조각이 담당 이름보다 길다 — 2:1 로 나눈다. */
+.assign-case-row > .wire-meta-row { flex-grow: 2; }
 .assign-case-row > .wire-button { flex: none; }
 /* 쪽 넘기기는 가운데다 — 당사자 목록과 같은 모양. */
 .assign-pager { display: flex; align-items: center; justify-content: center; gap: var(--space-4); }
