@@ -386,6 +386,15 @@ function Access({ caseId }: { caseId: number }) {
     <Card
       title="당사자 열람"
       hint="당사자는 로그인하지 않아요. 링크와 여섯 자리 숫자를 전해 주면 자기 정보와 일정만 봐요."
+      // 만들기 버튼은 제목과 같은 행 오른쪽 끝이다(2026-09-17 Q). 잠그기는 살아 있을 때만
+      // 본문 아래에 남는다 — 위험 행동을 제목 줄에 함께 세우지 않는다.
+      action={
+        state && (
+          <Button variant="primary" disabled={busy} onClick={() => void issue()}>
+            {state.active ? '새로 만들기' : '열람 링크 만들기'}
+          </Button>
+        )
+      }
     >
       {state === null ? (
         <Empty>불러오는 중이에요.</Empty>
@@ -400,7 +409,7 @@ function Access({ caseId }: { caseId: number }) {
                     state.last_opened_at ? `마지막 열람 ${dateLabel(state.last_opened_at)}` : '아직 연 적 없음',
                   ]
                     .filter(Boolean)
-                    .join(' · ')
+                    .join(', ')
                 : '새로 만들면 이전 링크는 잠겨요.'
             }
           />
@@ -415,16 +424,13 @@ function Access({ caseId }: { caseId: number }) {
               />
             </div>
           )}
-          <FormActions>
-            {state.active && (
+          {state.active && (
+            <FormActions>
               <Button disabled={busy} onClick={() => void revoke()}>
                 잠그기
               </Button>
-            )}
-            <Button variant="primary" disabled={busy} onClick={() => void issue()}>
-              {state.active ? '새로 만들기' : '열람 링크 만들기'}
-            </Button>
-          </FormActions>
+            </FormActions>
+          )}
         </>
       )}
     </Card>
@@ -465,7 +471,7 @@ function Documents({ caseId }: { caseId: number }) {
   const size = (n: number) => (n < 1024 * 1024 ? `${Math.ceil(n / 1024)}KB` : `${(n / 1024 / 1024).toFixed(1)}MB`);
 
   return (
-    <Card title="파일 업로드" hint="보존기간 1년, 20MB 제한">
+    <Card title="파일 업로드">
       {rows === null ? (
         <Empty>불러오는 중이에요.</Empty>
       ) : rows.length === 0 ? null : (
@@ -515,7 +521,11 @@ function Documents({ caseId }: { caseId: number }) {
           {busy ? '올리는 중…' : '업로드'}
         </Button>
       </div>
-      {file && <p className="panel-meta">{file.name}, {size(file.size)}</p>}
+      {/* 안내는 파일 선택 줄 **아래**다(2026-09-17 Q). 가로선을 하나 두고 카드 아래 여백과
+          같은 24를 위아래로 준다 — 제목 줄의 구분선과 같은 리듬이다. */}
+      <div className="doc-upload-note">
+        <p className="panel-meta">{file ? `${file.name}, ${size(file.size)}` : '보존기간 1년, 20MB 제한'}</p>
+      </div>
       {error && <ErrorText>{error}</ErrorText>}
     </Card>
   );
