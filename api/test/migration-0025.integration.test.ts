@@ -6,7 +6,7 @@ import { scratchDb, type Scratch } from './scratch-db.ts';
 
 let scratch: Scratch;
 
-describe.skipIf(!enabled)('migration 0025', () => {
+describe.skipIf(!enabled)('migration 0025 + 0026', () => {
   beforeAll(async () => {
     scratch = await scratchDb();
     await scratch.migrate('0025');
@@ -26,11 +26,10 @@ describe.skipIf(!enabled)('migration 0025', () => {
       insert into support_cases (participant_id, program_name) values (${p.id}, '자유 입력 사업') returning id`;
     const [{ id: blank }] = await db<Array<{ id: number }>>`
       insert into support_cases (participant_id, program_name) values (${p.id}, '') returning id`;
-    // 기존 배포 = 기관 이름과 관리자가 있다. 마법사와 첫 가입 문을 둘 다 건너뛰어야 한다.
-    await db`update organization set name = '기존 기관' where id = 1`;
+    // 기존 배포 = 관리자가 있다. **기관 이름은 비어 있어도**(#36 이전 시드) 마법사와 첫 가입 문을 둘 다 건너뛰어야 한다(0026).
     await db`insert into users (email, name, role) values ('old-admin', '기존 관리자', 'admin')`;
 
-    expect(await scratch.migrate()).toEqual(['0025_onboarding_programs.sql']);
+    expect(await scratch.migrate()).toEqual(['0025_onboarding_programs.sql', '0026_onboarding_existing_admins.sql']);
 
     const caseCols = await db<Array<{ column_name: string; is_nullable: string }>>`
       select column_name, is_nullable from information_schema.columns
@@ -50,7 +49,7 @@ describe.skipIf(!enabled)('migration 0025', () => {
       { id: blank, name: '(미지정)', retired_at: expect.anything() },
     ]);
 
-    // 기존 배포: 이름이 있으니 마법사를 지난 것으로, 관리자가 있으니 첫 가입 문은 닫힌 것으로 본다.
+    // 기존 배포: 관리자가 있으니 마법사를 지난 것으로(0026), 첫 가입 문은 닫힌 것으로 본다(0025).
     const [org] = await db<Array<{ onboarded_at: Date | null; bootstrap_closed_at: Date | null }>>`
       select onboarded_at, bootstrap_closed_at from organization where id = 1`;
     expect(org.onboarded_at).not.toBeNull();

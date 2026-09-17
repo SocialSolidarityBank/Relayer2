@@ -124,11 +124,13 @@ export function Routes() {
 
   /**
    * 가두기(2026-09-17 Q·ASTRA). 서버 잠금은 없고 안내용 리다이렉트다.
-   * - 관리자: 워크스페이스가 없거나 마법사를 안 마쳤으면 #/onboarding.
+   * 준비 판정은 `onboarded` 하나다(2026-09-18 QA — 워크스페이스 이름까지 요구하면 #36 이전에 시드된 기존 DB(이름 비어 있음)에서
+   * 실무자가 `기관 준비 중`에, 관리자가 마법사에 갇혔다). 이름이 없는 채 마친 기관은 기관 정보에서 채운다.
+   * - 관리자: 마법사를 안 마쳤으면 #/onboarding(워크스페이스가 없으면 1단계부터).
    * - 실무자: 마법사가 끝나기 전엔 #/setup-pending(기관 준비 중).
    * - 마쳤는데 마법사·준비 중 주소면 홈으로. 로그인·가입·랜딩 주소도 홈으로.
    */
-  const ready = me.workspace !== null && me.onboarded;
+  const ready = me.onboarded;
   if (!ready && me.role === 'admin' && path !== '#/onboarding') {
     window.location.hash = '#/onboarding';
     return null;
