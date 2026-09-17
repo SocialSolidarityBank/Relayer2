@@ -1028,7 +1028,7 @@ v1 → v2 로 판이 올라, **이미 받은 동의는 전부 `확인 필요`로
 테넌시는 그대로 기관 하나다(PLAN A3). `organizations` 표·`org_id` 를 만들지 않는다. `organization` 단일 행에
 `onboarded_at`·`enc_openai_key`·`bootstrap_closed_at` 컬럼만 더한다(`0024`). **주소 이름(slug)은 DB 가 아니라 배포 설정
 (`RELAYER_SLUG`)이다** — 배포자가 정하고 화면은 읽기만 한다. 기관별 서브도메인(기관.relayer.kr)은 DNS·리버스 프록시 절차
-(`docs/deploy.md`)이고 **앱은 Host 를 읽지 않는다.** 설계 근거는 ASTRA 검토(2026-09-17, `local://astra-onboarding-design.md`)다.
+(`docs/deploy.md`)이고 **앱은 Host 를 읽지 않는다.** 설계 근거는 ASTRA 검토(2026-09-17, `docs/astra-onboarding-design-2026-09-17.md`)다.
 
 ### 24-1. 랜딩·로그인·가입하기
 
