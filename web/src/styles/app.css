@@ -44,6 +44,13 @@ body { margin: 0; }
 @media (max-width: 767px) {
   .info-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+/* 기관 워크스페이스 설정 단계(2026-09-17 Q): 번호 + 이름을 한 줄에 세우고 사이에 화살표를 둔다.
+   칸 모양은 이식 CSS 의 `.schedule-wizard-steps .wire-step(-current|-done)` 세 상태를 그대로 쓰고,
+   여기서는 **줄 세우기**만 정한다 — 그 문법에 컨테이너 규칙이 이식되지 않았다. 좁으면 줄바꿈한다. */
+.schedule-wizard-steps { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.schedule-wizard-steps .wire-step { cursor: pointer; }
+.schedule-wizard-steps .wire-step:disabled { cursor: default; }
+.schedule-wizard-arrow { color: var(--sub); font-size: var(--text-sm); }
 .info-original { margin: var(--space-2) 0 0; padding: var(--space-3); border-radius: var(--radius-md); background: var(--panel-alt, var(--panel)); color: var(--ink); white-space: pre-wrap; }
 /* 회차별 요약 안 승인된 AI 정리(2026-09-16 검수). 원문 위, 제목 아래 본문 단이다.
    grid 항목은 min-width:auto 라 안의 nowrap 글자가 폭을 밀어낸다 — 항목마다 0 을 박는다. */

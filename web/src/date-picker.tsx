@@ -12,7 +12,7 @@ const todayFormatter = new Intl.DateTimeFormat('sv-SE', {
  * `inline`이면 폼 필드 대신 글자만 있는 트리거 버튼 하나를 그린다(상담 일정 툴바의 꺽쇠 사이 날짜).
  * `label`은 트리거에 보일 글자로, 없으면 `value`의 긴 한국어 날짜다.
  */
-export function DatePicker({ id, value, onChange, required = true, hint = '날짜만 적용해요. 내용은 화면의 저장 버튼을 눌러야 저장돼요.', inline = false, label: labelText }: {
+export function DatePicker({ id, value, onChange, required = true, hint = '날짜만 적용해요. 내용은 화면의 저장 버튼을 눌러야 저장돼요.', inline = false, label: labelText, fieldLabel = '날짜', title = '상담 날짜 선택' }: {
   id: string;
   value: string;
   onChange: (value: string) => void;
@@ -20,6 +20,10 @@ export function DatePicker({ id, value, onChange, required = true, hint = '날�
   hint?: string;
   inline?: boolean;
   label?: string;
+  /** 폼 필드 라벨. 상담 일정 밖(사업 기간 등)에서 쓸 때 준다. */
+  fieldLabel?: string;
+  /** 대화상자 제목과 트리거의 접근 이름. */
+  title?: string;
 }) {
   const today = todayFormatter.format(new Date());
   const [pending, setPending] = useState(value);
@@ -39,12 +43,12 @@ export function DatePicker({ id, value, onChange, required = true, hint = '날�
     dialog.current?.showModal();
   };
   const triggerProps = {
-    id, type: 'button' as const, ref: trigger, 'aria-label': `상담 날짜 선택: ${label}`,
+    id, type: 'button' as const, ref: trigger, 'aria-label': `${title}: ${label}`,
     'aria-haspopup': 'dialog' as const, 'aria-expanded': open, 'aria-controls': `${id}-dialog`, onClick: openDialog,
   };
 
   return <>
-    {inline ? <button {...triggerProps} className="schedule-period-label schedule-date-inline">{label}</button> : <Field label="날짜" htmlFor={id} required={required}>
+    {inline ? <button {...triggerProps} className="schedule-period-label schedule-date-inline">{label}</button> : <Field label={fieldLabel} htmlFor={id} required={required} hint={hint || undefined}>
       <button {...triggerProps} className="schedule-date-open">
         {label}
         <Chevron />
@@ -52,7 +56,7 @@ export function DatePicker({ id, value, onChange, required = true, hint = '날�
     </Field>}
     <dialog id={`${id}-dialog`} ref={dialog} className="schedule-date-dialog" aria-labelledby={`${id}-title`}
       onClose={() => { setOpen(false); trigger.current?.focus(); }}>
-      <h2 id={`${id}-title`}>상담 날짜 선택</h2>
+      <h2 id={`${id}-title`}>{title}</h2>
       <div className="schedule-month-head">
         <strong aria-live="polite">{year}년 {m + 1}월</strong>
         <div className="schedule-month-actions">
@@ -81,7 +85,7 @@ export function DatePicker({ id, value, onChange, required = true, hint = '날�
         <Button onClick={() => dialog.current?.close()}>취소</Button>
         <Button variant="primary" disabled={!pending} onClick={() => { onChange(pending); dialog.current?.close(); }}>선택 완료</Button>
       </div>
-      <p className="panel-meta">{hint}</p>
+      {hint && <p className="panel-meta">{hint}</p>}
     </dialog>
   </>;
 }

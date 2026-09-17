@@ -41,6 +41,7 @@ import {
   type Connections,
   type ConsentCopy,
   type Invite,
+  type Org,
   type OrgView,
   type Profile,
   type Program,
@@ -69,6 +70,7 @@ import {
   PageHeader,
 } from '../ui.tsx';
 import { setTheme, themeChoice, type ThemeChoice } from '../theme.ts';
+import { DatePicker } from '../date-picker.tsx';
 import { AUDIT_DAYS, AUDIT_KIND_TABS, AuditScreen } from './audit.tsx';
 
 const date = (s: string) => new Date(s).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
@@ -124,7 +126,7 @@ export const SETTINGS_GROUPS = [
     // 서로 상관이 없어, 한 페이지에 쌓으면 무엇을 보러 왔는지 잃는다.
     nested: true,
     items: [
-      { key: 'connections', label: 'API 연결 관리', desc: 'AI·전사·데이터베이스가 붙어 있는지.', admin: true },
+      { key: 'connections', label: 'AI/STT/DB 연결', desc: 'AI·전사·데이터베이스가 붙어 있는지.', admin: true },
       { key: 'audit', label: '열람 기록 관리', desc: '누가 언제 무엇을 열었는지 찾아봐요.', admin: true },
       { key: 'consent', label: '동의서 관리', desc: '지금 쓰는 동의 문안.', admin: true },
       { key: 'download', label: '자료 다운로드', desc: '기간·실무자·종류를 정해 CSV 로 받아요.', admin: true },
@@ -630,22 +632,28 @@ export function InvitePane() {
   return (
     <>
       <Card
-        title="초대 링크 만들기"
-      >
-        <Field label="역할" htmlFor="iv-role" control="select">
-          <select id="iv-role" value={role} onChange={(e) => setRole(e.target.value as 'worker' | 'admin')}>
-            <option value="worker">실무자</option>
-            <option value="admin">관리자</option>
-          </select>
-        </Field>
-        <Field label="메모" htmlFor="iv-note">
-          <input id="iv-note" value={note} onChange={(e) => setNote(e.target.value)} />
-        </Field>
-        <FormActions>
+        title="실무자 초대"
+        actions={
           <Button variant="primary" onClick={() => void make()}>
             링크 만들기
           </Button>
-        </FormActions>
+        }
+      >
+        <div className="wire-container" data-grid="true">
+          <div className="wire-col-6">
+            <Field label="역할" htmlFor="iv-role" control="select">
+              <select id="iv-role" value={role} onChange={(e) => setRole(e.target.value as 'worker' | 'admin')}>
+                <option value="worker">실무자</option>
+                <option value="admin">관리자</option>
+              </select>
+            </Field>
+          </div>
+          <div className="wire-col-6">
+            <Field label="메모" htmlFor="iv-note" control="textarea">
+              <textarea id="iv-note" rows={1} value={note} onChange={(e) => setNote(e.target.value)} />
+            </Field>
+          </div>
+        </div>
         {link && (
           <div className="wire-repeat-card">
             <p className="panel-meta">
@@ -811,8 +819,44 @@ function WorkersPane({ me }: { me: { id: number } }) {
   );
 }
 
-/** 기관 정보. 마법사의 첫 단계도 이 폼을 그대로 쓴다(`onSaved`). */
-export function OrgPane({ onSaved }: { onSaved?: (org: OrgView) => void } = {}) {
+/** 기관 정보 네 칸 — 2행 2열. 필수는 이름 하나다(2026-09-17 Q). 설정과 마법사가 같은 칸을 쓴다. */
+export function OrgForm({ value, onChange }: { value: Org; onChange: (next: Org) => void }) {
+  return (
+    <div className="wire-container" data-grid="true">
+      <div className="wire-col-6">
+        <Field label="기관 이름" htmlFor="og-name" required>
+          <input id="og-name" value={value.name} onChange={(e) => onChange({ ...value, name: e.target.value })} />
+        </Field>
+      </div>
+      <div className="wire-col-6">
+        <Field label="사업자·고유번호" htmlFor="og-reg">
+          <input id="og-reg" value={value.reg_no ?? ''} onChange={(e) => onChange({ ...value, reg_no: e.target.value })} />
+        </Field>
+      </div>
+      <div className="wire-col-6">
+        <Field label="주소" htmlFor="og-addr">
+          <input id="og-addr" value={value.address ?? ''} onChange={(e) => onChange({ ...value, address: e.target.value })} />
+        </Field>
+      </div>
+      <div className="wire-col-6">
+        <Field label="대표 전화" htmlFor="og-tel">
+          <input id="og-tel" value={value.phone ?? ''} onChange={(e) => onChange({ ...value, phone: e.target.value })} />
+        </Field>
+      </div>
+    </div>
+  );
+}
+
+/** 빈 칸은 null 로 보낸다. */
+export const orgPayload = (o: Org): Org => ({
+  name: o.name.trim(),
+  reg_no: o.reg_no?.trim() || null,
+  address: o.address?.trim() || null,
+  phone: o.phone?.trim() || null,
+});
+
+/** 설정 › 기관 정보. 주소 이름은 제목 옆 배지다 — 아이디처럼 읽는다. */
+export function OrgPane() {
   const [org, setOrg] = useState<OrgView | null>(null);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -824,103 +868,150 @@ export function OrgPane({ onSaved }: { onSaved?: (org: OrgView) => void } = {}) 
   const save = async () => {
     setErr(null);
     try {
-      const next = await saveOrg({
-        name: org.name.trim(),
-        reg_no: org.reg_no?.trim() || null,
-        address: org.address?.trim() || null,
-        phone: org.phone?.trim() || null,
-      });
-      setOrg(next);
+      setOrg(await saveOrg(orgPayload(org)));
       setSaved(true);
-      onSaved?.(next);
     } catch (e) {
       setErr(e instanceof Error ? e.message : '저장하지 못했어요.');
     }
   };
 
   return (
-    <Card title="기관 정보" hint={org.slug ? `기관 주소 이름: ${org.slug}` : undefined}>
-      <Field label="기관 이름" htmlFor="og-name" required>
-        <input id="og-name" value={org.name} onChange={(e) => setOrg({ ...org, name: e.target.value })} />
-      </Field>
-      <Field label="사업자·고유번호" htmlFor="og-reg">
-        <input id="og-reg" value={org.reg_no ?? ''} onChange={(e) => setOrg({ ...org, reg_no: e.target.value })} />
-      </Field>
-      <Field label="주소" htmlFor="og-addr">
-        <input id="og-addr" value={org.address ?? ''} onChange={(e) => setOrg({ ...org, address: e.target.value })} />
-      </Field>
-      <Field label="대표 전화" htmlFor="og-tel">
-        <input id="og-tel" value={org.phone ?? ''} onChange={(e) => setOrg({ ...org, phone: e.target.value })} />
-      </Field>
-      <FormActions>
-        {err && <ErrorText>{err}</ErrorText>}
-        {saved && !err && <span className="panel-meta">저장했어요.</span>}
+    <Card
+      title="기관 정보"
+      badge={org.slug ?? undefined}
+      actions={
         <Button variant="primary" disabled={!org.name.trim()} onClick={() => void save()}>
           저장하기
         </Button>
-      </FormActions>
+      }
+    >
+      {err && <ErrorText>{err}</ErrorText>}
+      {saved && !err && <p className="panel-meta">저장했어요.</p>}
+      <OrgForm value={org} onChange={(next) => setOrg({ ...org, ...next })} />
     </Card>
   );
 }
 
-const EMPTY_PROGRAM: ProgramInput = { name: '', starts_on: null, ends_on: null, description: null };
-const period = (p: Program) =>
-  p.starts_on || p.ends_on ? `${p.starts_on ?? '…'} ~ ${p.ends_on ?? '…'}` : '기간 없음';
+const period = (p: Program) => (p.starts_on || p.ends_on ? `${p.starts_on ?? '…'} ~ ${p.ends_on ?? '…'}` : '기간 없음');
 
-/** 사업 이름·기간·설명 폼. 새로 만들 때와 고칠 때 같은 칸이다. */
-function ProgramForm({
-  value,
-  onChange,
-  idPrefix,
+/** 펼친 사업 한 장 — 파생 정보(담당 실무자·당사자 수)와 고치기 칸, 목록 링크, 종료/다시 열기. */
+function ProgramDetail({
+  program: p,
+  onChanged,
+  onRetire,
 }: {
-  value: ProgramInput;
-  onChange: (next: ProgramInput) => void;
-  idPrefix: string;
+  program: Program;
+  onChanged: () => Promise<void>;
+  onRetire: (p: Program, confirm: boolean) => Promise<void>;
 }) {
+  const [workers, setWorkers] = useState<Worker[] | null>(null);
+  const [draft, setDraft] = useState<ProgramInput>({
+    name: p.name,
+    starts_on: p.starts_on,
+    ends_on: p.ends_on,
+    description: p.description,
+  });
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    void listWorkers(p.id).then(setWorkers);
+  }, [p.id]);
+
+  const save = async () => {
+    setErr(null);
+    try {
+      await updateProgram(p.id, { ...draft, name: draft.name.trim() });
+      await onChanged();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : '저장하지 못했어요.');
+    }
+  };
+
   return (
     <>
-      <Field label="사업 이름" htmlFor={`${idPrefix}-name`} required>
-        <input id={`${idPrefix}-name`} value={value.name} onChange={(e) => onChange({ ...value, name: e.target.value })} />
-      </Field>
-      <Field label="시작" htmlFor={`${idPrefix}-start`}>
-        <input
-          id={`${idPrefix}-start`}
-          type="date"
-          value={value.starts_on ?? ''}
-          onChange={(e) => onChange({ ...value, starts_on: e.target.value || null })}
-        />
-      </Field>
-      <Field label="끝" htmlFor={`${idPrefix}-end`} hint="정보용이에요. 지나도 잠기지 않아요 — 잠그려면 종료해요.">
-        <input
-          id={`${idPrefix}-end`}
-          type="date"
-          value={value.ends_on ?? ''}
-          onChange={(e) => onChange({ ...value, ends_on: e.target.value || null })}
-        />
-      </Field>
-      <Field label="한 줄 설명" htmlFor={`${idPrefix}-desc`}>
-        <input
-          id={`${idPrefix}-desc`}
-          value={value.description ?? ''}
-          onChange={(e) => onChange({ ...value, description: e.target.value || null })}
-        />
-      </Field>
+      <DataRows
+        rows={[
+          ['참여 당사자', `${p.cases}명, 진행 중 ${p.open_cases}명`],
+          [
+            '담당 실무자',
+            workers === null ? '불러오는 중' : workers.length === 0 ? '없음' : workers.map((w) => w.name).join(', '),
+          ],
+        ]}
+      />
+      {!p.retired_at && (
+        <div className="wire-container" data-grid="true">
+          <div className="wire-col-6">
+            <Field label="사업 이름" htmlFor={`pg-${p.id}-name`} required>
+              <input id={`pg-${p.id}-name`} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+            </Field>
+          </div>
+          <div className="wire-col-6">
+            <Field label="한 줄 설명" htmlFor={`pg-${p.id}-desc`}>
+              <input
+                id={`pg-${p.id}-desc`}
+                value={draft.description ?? ''}
+                onChange={(e) => setDraft({ ...draft, description: e.target.value || null })}
+              />
+            </Field>
+          </div>
+          <div className="wire-col-6">
+            <DatePicker
+              id={`pg-${p.id}-start`}
+              fieldLabel="시작"
+              title="시작일 선택"
+              required={false}
+              hint=""
+              value={draft.starts_on ?? ''}
+              onChange={(v) => setDraft({ ...draft, starts_on: v || null })}
+            />
+          </div>
+          <div className="wire-col-6">
+            <DatePicker
+              id={`pg-${p.id}-end`}
+              fieldLabel="끝"
+              title="종료일 선택"
+              required={false}
+              hint=""
+              value={draft.ends_on ?? ''}
+              onChange={(v) => setDraft({ ...draft, ends_on: v || null })}
+            />
+          </div>
+        </div>
+      )}
+      {err && <ErrorText>{err}</ErrorText>}
+      <FormActions>
+        <a className="wire-button" href={`#/participants?program=${p.id}`}>
+          <span className="wire-button-text">당사자 목록</span>
+        </a>
+        <a className="wire-button" href={`#/settings/staff?program=${p.id}`}>
+          <span className="wire-button-text">실무자 목록</span>
+        </a>
+        {p.retired_at ? (
+          <Button aria-label={`${p.name} 다시 열기`} onClick={() => void reopenProgram(p.id).then(onChanged)}>
+            다시 열기
+          </Button>
+        ) : (
+          <>
+            <Button aria-label={`${p.name} 종료`} onClick={() => void onRetire(p, false)}>
+              종료
+            </Button>
+            <Button variant="primary" disabled={!draft.name.trim()} onClick={() => void save()}>
+              저장하기
+            </Button>
+          </>
+        )}
+      </FormActions>
     </>
   );
 }
 
 /**
- * 사업 목록(2026-09-17 Q). 기관 정보와 갈라 두었다 — 고치는 빈도도 주인도 다르다.
+ * 사업 목록(2026-09-17 Q). 최신이 위, 한 사업이 아코디언 한 장. 추가는 목록 맨 위 한 줄에서 바로 한다.
  * 사업은 id 를 가진 실체다: 이름을 바꿔도 사례가 따라오고, 종료는 잠금이지 삭제가 아니며, 다시 열 수 있다.
- * 사업을 고르면 기간·설명·담당 실무자(그 사업의 진행 중 사례 배정에서 파생)·당사자 수가 보이고
- * 당사자 목록·실무자 목록으로 걸개가 걸린 채 건너간다. 마법사의 둘째 단계도 이 화면이다(`onChanged`).
+ * 마법사의 사업 단계도 이 화면이다(`onChanged`).
  */
 export function ProgramsPane({ onChanged }: { onChanged?: (programs: Program[]) => void } = {}) {
   const [programs, setPrograms] = useState<Program[] | null>(null);
-  const [draft, setDraft] = useState<ProgramInput>(EMPTY_PROGRAM);
-  const [picked, setPicked] = useState<number | null>(null);
-  const [editing, setEditing] = useState<ProgramInput | null>(null);
-  const [workers, setWorkers] = useState<Worker[] | null>(null);
+  const [name, setName] = useState('');
   const [warning, setWarning] = useState<{ program: Program; counts: RetireWarning } | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -928,25 +1019,21 @@ export function ProgramsPane({ onChanged }: { onChanged?: (programs: Program[]) 
     const rows = await listPrograms(true);
     setPrograms(rows);
     onChanged?.(rows);
-    return rows;
   };
   useEffect(() => {
     void reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  useEffect(() => {
-    setWorkers(null);
-    setEditing(null);
-    if (picked) void listWorkers(picked).then(setWorkers);
-  }, [picked]);
 
-  const run = async (work: () => Promise<unknown>) => {
+  const add = async () => {
+    if (!name.trim()) return;
     setErr(null);
     try {
-      await work();
+      await addProgram({ name: name.trim(), starts_on: null, ends_on: null, description: null });
+      setName('');
       await reload();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : '되지 않았어요.');
+      setErr(e instanceof Error ? e.message : '추가하지 못했어요.');
     }
   };
 
@@ -967,119 +1054,41 @@ export function ProgramsPane({ onChanged }: { onChanged?: (programs: Program[]) 
 
   return (
     <>
-      <Card title="사업 목록" hint="당사자를 등록할 때 고르는 사업이에요. 종료한 사업은 선택지에서 빠지고 새 기록이 잠겨요.">
+      <Card
+        title="사업 목록"
+        actions={
+          <Button variant="primary" disabled={!name.trim()} onClick={() => void add()}>
+            사업 추가
+          </Button>
+        }
+      >
+        <Field label="새 사업 이름" htmlFor="pg-new-name">
+          <input
+            id="pg-new-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void add();
+            }}
+          />
+        </Field>
         {err && <ErrorText>{err}</ErrorText>}
         {programs === null ? (
           <Empty>불러오는 중이에요.</Empty>
         ) : programs.length === 0 ? (
-          <Empty>아직 사업이 없어요. 아래에서 첫 사업을 만들어 주세요.</Empty>
+          <Empty>사업 없음</Empty>
         ) : (
           programs.map((p) => (
-            <div className="wire-repeat-card" key={p.id}>
-              <Item
-                title={
-                  <>
-                    {p.name} {p.retired_at && <Badge>종료</Badge>}
-                  </>
-                }
-                desc={`${period(p)}, 당사자 ${p.cases}명(진행 중 ${p.open_cases}명)${p.description ? `, ${p.description}` : ''}`}
-                action={
-                  <div className="wire-form-actions">
-                    <Button aria-label={`${p.name} 자세히`} onClick={() => setPicked(picked === p.id ? null : p.id)}>
-                      {picked === p.id ? '접기' : '자세히'}
-                    </Button>
-                    {p.retired_at ? (
-                      <Button aria-label={`${p.name} 다시 열기`} onClick={() => void run(() => reopenProgram(p.id))}>
-                        다시 열기
-                      </Button>
-                    ) : (
-                      <Button aria-label={`${p.name} 종료`} onClick={() => void retire(p, false)}>
-                        종료
-                      </Button>
-                    )}
-                  </div>
-                }
-              />
-              {picked === p.id && (
-                <div className="wire-repeat-card">
-                  <DataRows
-                    rows={[
-                      ['기간', period(p)],
-                      ['설명', p.description ?? '없음'],
-                      ['참여 당사자', `${p.cases}명, 진행 중 ${p.open_cases}명`],
-                      [
-                        '담당 실무자',
-                        workers === null
-                          ? '불러오는 중이에요.'
-                          : workers.length === 0
-                            ? '진행 중 사례를 맡은 실무자가 없어요.'
-                            : workers.map((w) => w.name).join(', '),
-                      ],
-                    ]}
-                  />
-                  <FormActions>
-                    <a className="wire-button" href={`#/participants?program=${p.id}`}>
-                      <span className="wire-button-text">당사자 목록</span>
-                    </a>
-                    <a className="wire-button" href={`#/settings/staff?program=${p.id}`}>
-                      <span className="wire-button-text">실무자 목록</span>
-                    </a>
-                    {!p.retired_at && (
-                      <Button
-                        onClick={() =>
-                          setEditing(
-                            editing
-                              ? null
-                              : { name: p.name, starts_on: p.starts_on, ends_on: p.ends_on, description: p.description },
-                          )
-                        }
-                      >
-                        {editing ? '고치기 접기' : '고치기'}
-                      </Button>
-                    )}
-                  </FormActions>
-                  {editing && !p.retired_at && (
-                    <>
-                      <ProgramForm value={editing} onChange={setEditing} idPrefix={`pg-${p.id}`} />
-                      <FormActions>
-                        <Button
-                          variant="primary"
-                          disabled={!editing.name.trim()}
-                          onClick={() =>
-                            void run(async () => {
-                              await updateProgram(p.id, { ...editing, name: editing.name.trim() });
-                              setEditing(null);
-                            })
-                          }
-                        >
-                          저장하기
-                        </Button>
-                      </FormActions>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
+            <Fold
+              key={p.id}
+              group="programs"
+              title={p.retired_at ? `${p.name} (종료)` : p.name}
+              desc={`${period(p)} | 당사자 ${p.cases}명${p.description ? ` | ${p.description}` : ''}`}
+            >
+              <ProgramDetail program={p} onChanged={reload} onRetire={retire} />
+            </Fold>
           ))
         )}
-      </Card>
-
-      <Card title="새 사업" hint="같은 이름은 다시 만들 수 없어요. 종료한 사업이면 위에서 다시 열어 주세요.">
-        <ProgramForm value={draft} onChange={setDraft} idPrefix="pg-new" />
-        <FormActions>
-          <Button
-            variant="primary"
-            disabled={!draft.name.trim()}
-            onClick={() =>
-              void run(async () => {
-                await addProgram({ ...draft, name: draft.name.trim() });
-                setDraft(EMPTY_PROGRAM);
-              })
-            }
-          >
-            사업 추가하기
-          </Button>
-        </FormActions>
       </Card>
 
       {warning && (
@@ -1225,7 +1234,8 @@ function DownloadPane() {
 }
 
 /**
- * API 연결 관리(2026-09-17 Q). **키만 넣으면 되는 것**(OpenAI → gpt-5.5)과 **설치가 필요한 것**(STT, DB)을 갈라 보여 준다.
+ * AI/STT/DB 연결(2026-09-17 Q). **키만 넣으면 되는 것**(OpenAI → gpt-5.5)과 **설치가 필요한 것**(STT, DB)을 갈라 보여 준다.
+ * 첫 줄에 셋이 무엇인지 한 줄로 말한다 — 마법사와 설정이 같은 화면이다.
  * OpenAI 키는 여기서 넣는다 — 서버가 검증한 뒤 암호문으로 저장하고, 값은 다시 보여 주지 않는다.
  * 마법사의 API 연결 단계도 이 화면이다.
  */
@@ -1262,7 +1272,8 @@ export function ConnectionsPane() {
 
   return (
     <>
-      <Card title="키만 넣으면 되는 것" hint="상담 기록 정리(AI). 키는 검증한 뒤 암호문으로 저장되고 다시 보이지 않아요.">
+      <p className="panel-meta">AI = 상담 기록 정리, STT = 녹음을 글로, DB = 기록 저장. 셋이 붙어 있는지 여기서 확인.</p>
+      <Card title="키만 넣으면 되는 것">
         <div className="wire-repeat-card">
           <Item
             title={<>AI 연결 {status(c.ai.connected)}</>}
@@ -1271,7 +1282,7 @@ export function ConnectionsPane() {
         </div>
         {c.ai.provider === 'openai' && (
           <>
-            <Field label="OpenAI API 키" htmlFor="ai-key" hint="sk- 로 시작하는 키. 붙여 넣으면 OpenAI 에 확인한 뒤 저장해요.">
+            <Field label="OpenAI API 키" htmlFor="ai-key">
               <input
                 id="ai-key"
                 type="password"
@@ -1296,7 +1307,7 @@ export function ConnectionsPane() {
         )}
       </Card>
 
-      <Card title="설치가 필요한 것" hint="기관 서버의 환경 변수로 넣어요. 화면에서는 붙어 있는지만 봐요(docs/deploy.md).">
+      <Card title="설치가 필요한 것">
         <div className="wire-repeat-card">
           <Item
             title={<>STT 연결 {status(c.stt.connected)}</>}

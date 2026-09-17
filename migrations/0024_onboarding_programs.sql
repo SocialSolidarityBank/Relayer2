@@ -1,7 +1,11 @@
 -- 온보딩·사업 실체(2026-09-17 Q). 기관은 여전히 한 행이다(PLAN A3) — organizations 표를 만들지 않는다.
 
--- 기관: 마법사 완료 시각·OpenAI 키 암호문·첫 가입 영구 마감.
--- 주소 이름(slug)은 배포 식별 정보라 DB 가 아니라 환경 변수(RELAYER_SLUG)다 — 앱은 Host 를 읽지 않는다(docs/deploy.md).
+-- 기관: 주소 이름·마법사 완료 시각·OpenAI 키 암호문·첫 가입 영구 마감.
+-- 주소 이름(slug)은 관리자가 적는 표시·기록용 값이다. DNS 연결은 배포 절차(docs/deploy.md)이고 앱은 Host 를 읽지 않는다.
+alter table organization add column if not exists slug text;
+alter table organization drop constraint if exists organization_slug_format;
+alter table organization add constraint organization_slug_format
+  check (slug is null or slug ~ '^[a-z0-9-]+$');
 alter table organization add column if not exists onboarded_at timestamptz;
 alter table organization add column if not exists enc_openai_key text;
 -- 첫 가입 문은 한 번 닫히면 영구히 닫힌다. 관리자 수가 사고로 0 이 돼도 다시 열리지 않는다(복구는 DB 절차).

@@ -86,37 +86,38 @@ export async function deactivate(userId: number): Promise<{ ok: true } | { error
 // ── 기관 정보 ──────────────────────────────────────────────────────────────
 
 /**
- * 주소 이름(slug)은 배포자가 환경 변수로 정한다(2026-09-17 Q·ASTRA). DB 하나만 보는 앱은 전체 배포에서의
- * 중복도, DNS 가 실제로 붙었는지도 알 수 없다 — 그래서 화면은 읽기 전용으로 보여 주기만 한다.
+ * 주소 이름(slug). 관리자가 워크스페이스 만들기에서 적는다(2026-09-17 Q). 아직 안 적었으면 배포 설정(RELAYER_SLUG)이
+ * 기본값이다. DB 하나만 보는 앱은 전체 배포에서의 중복도, DNS 가 붙었는지도 알 수 없다 — 값은 표시·기록용이고 연결은 배포 절차다.
  */
-export const deploymentSlug = (): string | null => process.env.RELAYER_SLUG?.trim() || null;
+const deploymentSlug = (): string | null => process.env.RELAYER_SLUG?.trim() || null;
 
 export type Org = { name: string; reg_no: string | null; address: string | null; phone: string | null };
 export type OrgView = Org & { slug: string | null; onboarded: boolean };
 
 export async function getOrg(): Promise<OrgView> {
-  const [row] = await sql<Array<Org & { onboarded_at: string | null }>>`
-    select name, reg_no, address, phone, onboarded_at from organization where id = 1`;
+  const [row] = await sql<Array<Org & { slug: string | null; onboarded_at: string | null }>>`
+    select name, reg_no, address, phone, slug, onboarded_at from organization where id = 1`;
   if (!row) return { name: '', reg_no: null, address: null, phone: null, slug: deploymentSlug(), onboarded: false };
-  const { onboarded_at, ...org } = row;
-  return { ...org, slug: deploymentSlug(), onboarded: onboarded_at !== null };
+  const { onboarded_at, slug, ...org } = row;
+  return { ...org, slug: slug ?? deploymentSlug(), onboarded: onboarded_at !== null };
 }
 
 /**
  * 기관 정보 저장. **기관 워크스페이스 만들기(마법사 0단계)도 이 길이다** — 이름이 비어 있던 행에 이름이 적히는 순간
  * 워크스페이스가 생긴다. 새 표·새 API 를 두지 않는다(단일 행 id=1).
  */
-export async function updateOrg(actorId: number, patch: Org): Promise<OrgView> {
+export async function updateOrg(actorId: number, patch: Org & { slug?: string | null }): Promise<OrgView> {
   const [before] = await sql<Array<{ name: string }>>`select name from organization where id = 1`;
   await sql`
     update organization
     set name = ${patch.name}, reg_no = ${patch.reg_no}, address = ${patch.address},
-        phone = ${patch.phone}, updated_at = now(), updated_by = ${actorId}
+        phone = ${patch.phone}, slug = ${patch.slug === undefined ? sql`slug` : patch.slug},
+        updated_at = now(), updated_by = ${actorId}
     where id = 1`;
   await audit({
     actorId,
     action: before?.name === '' ? 'org.bootstrap' : 'org.update',
-    fields: ['name', 'reg_no', 'address', 'phone'],
+    fields: ['name', 'reg_no', 'address', 'phone', ...(patch.slug === undefined ? [] : ['slug'])],
   });
   return getOrg();
 }
@@ -125,8 +126,8 @@ export type Workspace = { name: string; slug: string | null };
 
 /** 기관 워크스페이스 — 기관 이름이 적힌 순간 생긴다. 이름이 비어 있으면 아직 없다(null). 이름·주소 이름은 비밀이 아니다. */
 export async function workspaceInfo(): Promise<Workspace | null> {
-  const [row] = await sql<Array<{ name: string }>>`select name from organization where id = 1`;
-  return row && row.name !== '' ? { name: row.name, slug: deploymentSlug() } : null;
+  const [row] = await sql<Array<{ name: string; slug: string | null }>>`select name, slug from organization where id = 1`;
+  return row && row.name !== '' ? { name: row.name, slug: row.slug ?? deploymentSlug() } : null;
 }
 
 /**
@@ -244,7 +245,7 @@ export async function listPrograms(all = false): Promise<Program[]> {
            (select count(*) from support_cases c where c.program_id = p.id and c.status = 'open')::int as open_cases
     from programs p
     where ${all ? sql`true` : sql`p.retired_at is null`}
-    order by p.retired_at nulls first, p.name`;
+    order by p.retired_at nulls first, p.id desc`;
 }
 
 const isUnique = (e: unknown): boolean => (e as { code?: string })?.code === '23505';

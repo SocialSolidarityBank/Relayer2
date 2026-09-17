@@ -565,7 +565,8 @@ export const saveProfile = (body: { name: string; phone: string | null; contact_
 export const deactivateMe = () => json<{ ok: true }>('/settings/deactivate', { method: 'POST' });
 
 export const getOrg = () => json<OrgView>('/settings/org');
-export const saveOrg = (body: Org) => json<OrgView>('/settings/org', { method: 'PUT', body: JSON.stringify(body) });
+export const saveOrg = (body: Org & { slug?: string | null }) =>
+  json<OrgView>('/settings/org', { method: 'PUT', body: JSON.stringify(body) });
 
 export const listPrograms = (all = false) => json<Program[]>(`/settings/programs${all ? '?all=1' : ''}`);
 export const addProgram = (body: ProgramInput) =>

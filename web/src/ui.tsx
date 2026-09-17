@@ -246,14 +246,22 @@ export function ParticipantHero({
   );
 }
 
-/** surface-card wire-card + 제목·구분선·본문. 카드 div 를 손으로 만들지 않는다(DESIGN.md §5). */
+/**
+ * surface-card wire-card + 제목·구분선·본문. 카드 div 를 손으로 만들지 않는다(DESIGN.md §5).
+ * `badge` 는 제목 옆에 붙는 식별자(주소 이름 따위), `actions` 는 제목 줄 오른쪽 끝에 서는 버튼이다 —
+ * 이식 CSS 의 `.wire-card-head` 문법(첫 아이 뒤는 auto 마진, 배지는 제외)을 그대로 쓴다(2026-09-17 Q).
+ */
 export function Card({
   title,
+  badge,
+  actions,
   hint,
   children,
   className,
 }: {
   title?: string;
+  badge?: ReactNode;
+  actions?: ReactNode;
   hint?: ReactNode;
   children: ReactNode;
   className?: string;
@@ -262,7 +270,17 @@ export function Card({
     <section className={className ? `surface-card wire-card ${className}` : 'surface-card wire-card'}>
       {title && (
         <>
-          <h2 className="wire-card-title">{title}</h2>
+          {badge || actions ? (
+            <div className="wire-card-title">
+              <div className="wire-card-head">
+                <h2>{title}</h2>
+                {badge && <span className="wire-badge"><span className="wire-badge-label">{badge}</span></span>}
+                {actions}
+              </div>
+            </div>
+          ) : (
+            <h2 className="wire-card-title">{title}</h2>
+          )}
           <div className="wire-card-divider" />
         </>
       )}
@@ -364,7 +382,12 @@ export function Field({
     <div className="wire-form-field">
       <label className="wire-form-label" htmlFor={htmlFor}>
         {label}
-        {required && <span className="wire-badge wire-required-marker"><span className="wire-badge-label">필수</span></span>}
+        {/* 필수 표시는 `*` 하나다(2026-09-17 Q — 구 `필수` 배지 대체). 읽는 이에게는 `필수`로 읽힌다. */}
+        {required && (
+          <span className="wire-required-marker" role="img" aria-label="필수">
+            *
+          </span>
+        )}
       </label>
       <div className="wire-input-box" data-control={control}>
         {children}
