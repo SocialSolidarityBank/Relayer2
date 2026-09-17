@@ -272,7 +272,7 @@ test('상담 종결은 회차를 만들지 않고 미완료 과제를 그대로 
   await warning.getByRole('button', { name: '종결 기록 쓰기' }).click();
   await page.waitForURL(/\/record\?closing=1$/);
   // 종결도 상담이라 기록이 먼저다 — 체크는 이미 켜져 있고 레일 맨 위에 선다.
-  await expect(page.getByRole('checkbox', { name: '마지막 상담' })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: '종결 상담' })).toBeChecked();
   await pickDateTime(page, 'held-at', '2026-09-21T14:00');
   await page.locator('#memo').fill('마지막으로 정리하고 마무리함');
   await page.getByRole('button', { name: '저장' }).click();
@@ -333,7 +333,7 @@ test('종결 상담으로 저장하면 종결 화면으로 이어진다', async 
 
   // 기록 화면이 그 표시를 이어받는다
   await pickFromMenu(page, 'record', name);
-  await expect(page.getByRole('checkbox', { name: '마지막 상담' })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: '종결 상담' })).toBeChecked();
   await page.locator('#memo').fill('마지막으로 정리하고 마무리함');
   await page.getByRole('button', { name: '저장하고 종결로' }).click();
 

@@ -229,6 +229,8 @@ export type RecordInput = {
   memo: string;
   method?: ConsultationMethod;
   place?: string | null;
+  /** 소요 시간(분). L5 계약 `sessions.duration_min`(2026-09-18 D4) — 서버가 받기 전에는 무시된다. */
+  duration_min?: number | null;
   next_goal_text?: string | null;
   overall_goal?: string | null;
   cards?: Array<{ kind: string; text: string; section: string; area?: string; owner?: CardOwner }>;
@@ -491,6 +493,7 @@ export type SessionRecord = {
   held_at: string | null;
   method: string | null;
   place: string | null;
+  duration_min?: number | null;
   memo: string | null;
   next_goal_text: string | null;
   overall_goal: string | null;
