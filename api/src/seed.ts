@@ -11,10 +11,12 @@ await sql`truncate participants, support_cases restart identity cascade`;
 
 // 베타 시험 계정. 아이디와 비밀번호가 같다. 합성 데이터 전용이며 실데이터에는 쓰지 않는다.
 // test3 은 당사자다 — 만들어 두지만 로그인하지 않는다(GLOSSARY §3, 열람은 P2 의 링크+코드).
+// test4 는 둘째 관리자다(2026-09-17 Q) — 역할 변경·마지막 관리자 보호를 시험할 상대가 필요하다.
 const TEST_USERS = [
   { id: 'test1', name: '시험 관리자', role: 'admin' },
   { id: 'test2', name: '시험 실무자', role: 'worker' },
   { id: 'test3', name: '시험 당사자', role: 'participant' },
+  { id: 'test4', name: '시험 관리자 2', role: 'admin' },
 ] as const;
 
 await sql`delete from users where email in ${sql(TEST_USERS.map((u) => u.id))}`;
@@ -22,6 +24,18 @@ for (const u of TEST_USERS) {
   await sql`insert into users (email, password_hash, name, role)
     values (${u.id}, ${await hashPassword(u.id)}, ${u.name}, ${u.role})`;
 }
+
+// 기관과 사업. 이름이 있으니 마법사는 지난 것으로, 관리자가 있으니 첫 가입 문은 닫힌 것으로 본다.
+// 주소 이름은 환경 변수 RELAYER_SLUG 다. 가입 문은 seed 없는 새 DB 에서만 검증한다.
+await sql`
+  update organization set name = '시험 기관', onboarded_at = coalesce(onboarded_at, now()),
+    bootstrap_closed_at = coalesce(bootstrap_closed_at, now())
+  where id = 1`;
+const PROGRAM = '함께온기금 울타리대출';
+const [program] = await sql<Array<{ id: number }>>`
+  insert into programs (name, starts_on, description) values (${PROGRAM}, ${day(-60).slice(0, 10)}, '합성 사업')
+  on conflict (name) do update set retired_at = null
+  returning id`;
 
 const [initialWorker] = await sql<Array<{ id: number }>>`select id from users where email = 'test2'`;
 
@@ -35,7 +49,7 @@ const created = await createCase({
   name: '김민희',
   phone: '010-0000-0000',
   email: 'minhee@example.com',
-  program_name: '함께온기금 울타리대출',
+  program_id: program.id,
   sessions_planned: 6,
 });
 

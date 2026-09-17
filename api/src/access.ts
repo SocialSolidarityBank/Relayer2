@@ -22,6 +22,24 @@ export async function assertCaseOpen(caseId: number): Promise<void> {
   if (row.status === 'closed') throw new CaseClosed('종결된 상담, 새 기록·일정·녹음 불가');
 }
 
+/** 사례가 속한 사업이 종료됐다. 정리(종결·회수·배정)만 되고 새 기록은 막힌다. 라우트는 409 로 답한다. */
+export class ProgramRetired extends Error {}
+
+/**
+ * 종료 잠금(2026-09-17 Q). 종료된 사업의 사례에는 새 일정·인테이크·기록·문서·동의·열람 링크·
+ * 배정 요청을 받지 않는다. 예외는 사례 종결, 열람 링크 회수, 관리자 배정 변경,
+ * 이미 잡힌 예정 회차의 기록 — 그 자리들은 이 문을 부르지 않는다.
+ */
+export async function assertProgramActive(caseId: number): Promise<void> {
+  const [row] = await sql<Array<{ retired_at: string | null }>>`
+    select p.retired_at from support_cases c join programs p on p.id = c.program_id
+    where c.id = ${caseId}`;
+  if (!row) throw new NotFound('사례를 찾지 못했어요.');
+  if (row.retired_at) {
+    throw new ProgramRetired('종료된 사업이에요. 사례 종결·열람 링크 회수·담당 배정만 할 수 있어요.');
+  }
+}
+
 
 /** 사례가 없으면 NotFound, 맡지 않았으면 AccessDenied. */
 export async function assertCaseAccess(caseId: number, userId: number): Promise<void> {

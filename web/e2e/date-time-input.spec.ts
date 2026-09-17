@@ -3,19 +3,20 @@
 // 브라우저 시간대를 한국 밖으로 둔다 — 한국 시간 저장이 브라우저 지역시각에 기대면 여기서 깨진다.
 import { expect, test, type Page } from '@playwright/test';
 import { expectDateTime, pickDateTime } from './date-time.ts';
+import { createProgram } from './programs.ts';
 
 const api = process.env.PLAYWRIGHT_API_PREFIX ?? '/api';
 test.use({ timezoneId: 'America/Los_Angeles' });
 
 /** 로그인하고 인테이크·기록 저장에 필요한 동의까지 갖춘 합성 사례를 하나 만든다. */
 const newCase = async (page: Page) => {
-  await page.goto('/');
+  await page.goto('/#/login');
   await page.locator('#email').fill('test2');
   await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인', exact: true }).click();
   await expect(page.locator('.app-nav-me')).toBeVisible();
   const created = await page.request.post(`${api}/cases`, { data: {
-    name: `일시 합성 ${Date.now()}`, program_name: '일시 입력 검증',
+    name: `일시 합성 ${Date.now()}`, program_id: await createProgram('일시 입력 검증'),
     consents: [
       { domain: 'personal_data_collection_use', decision: 'grant' },
       { domain: 'sensitive_information_processing', decision: 'grant' },

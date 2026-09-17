@@ -21,7 +21,7 @@ const NAME = `E2E 녹음${stamp}`;
 
 test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진다', async ({ page }) => {
   // ── 로그인 ──────────────────────────────────────────────────
-  await page.goto('/');
+  await page.goto('/#/login');
   await page.locator('#email').fill('test2');
   await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인' }).click();
@@ -35,7 +35,7 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
   await page.getByRole('checkbox', { name: /상담 녹음/ }).check();
   await page.getByRole('checkbox', { name: /외부 STT 처리/ }).check();
   await page.getByRole('checkbox', { name: /음성 원본 보유기간/ }).check();
-  await page.locator('#program').selectOption({ index: 1 });
+  await page.locator('#program').selectOption({ label: '함께온기금 울타리대출' });
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
   await expect(page).toHaveURL(/\/intake$/);
   const caseId = page.url().match(/#\/cases\/(\d+)\/intake/)?.[1];

@@ -41,7 +41,7 @@ export function ParticipantNewScreen() {
     void Promise.all([listPrograms(), getConsentCopy()])
       .then(([rows, list]) => {
         setPrograms(rows);
-        if (rows.length === 1) setProgram(rows[0].name);
+        if (rows.length === 1) setProgram(String(rows[0].id));
         setCopies(list);
       })
       .catch(() => setLoadFailed(true));
@@ -70,7 +70,7 @@ export function ParticipantNewScreen() {
         name: name.trim(),
         phone: phone.trim() || undefined,
         email: email.trim() || undefined,
-        program_name: program.trim(),
+        program_id: Number(program),
         sessions_planned: planned ? Number(planned) : undefined,
         // 고르지 않은 영역은 거부로 남긴다. 빈 칸을 동의로 읽지 않는다.
         consents: copies.map((c) => ({
@@ -131,7 +131,7 @@ export function ParticipantNewScreen() {
             <select id="program" value={program} onChange={(e) => setProgram(e.target.value)}>
               <option value="">선택</option>
               {(programs ?? []).map((p) => (
-                <option key={p.id} value={p.name}>
+                <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
               ))}

@@ -35,15 +35,62 @@ docker run -p 8787:8787 --env-file .env relayer:0.1.0
 | `PII_ENC_KEY` | 금고·자유 글 암복호가 실패한다. base64 32바이트 |
 | `SESSION_SECRET` | 로그인이 실패한다 |
 | `PORT` | 8787 |
+| `RELAYER_SLUG` | 화면의 `주소` 행이 숨는다(읽기 전용 값, 화면에서 못 바꾼다). 기관별 서브도메인의 라벨(아래) |
+| `RELAYER_PUBLIC_URL` | 있으면 `주소` 에 slug 대신 이 접속 주소를 보인다(예: `https://yeondae.relayer.kr`) |
 
 **`PII_ENC_KEY` 는 백업과 다른 곳에 둔다.** 잃으면 자유 글과 금고를 영영 못 읽는다(`SPEC.md` §13).
 
 ## 올리기 전에
 
-1. `node api/src/seed.ts` 로 시험 계정(`test1`·`test2`·`test3`)과 합성 사례를 만든다.
+1. `node api/src/seed.ts` 로 시험 계정(`test1`·`test4` 관리자, `test2` 실무자, `test3` 당사자)과 기관·사업·합성 사례를 만든다.
+   시드는 기관 이름을 적으므로 마법사(`#/onboarding`)를 건너뛴다.
 2. **합성 데이터만 올린다.** 실데이터는 P1 게이트가 갖춰졌어도 별도 결정(D2 국내 리전)이 남아 있다.
 3. 공개 주소가 생기면 `docs/beta-scenario.md` §0-B 의 접속 안내를 그 주소로 바꾼다.
 4. 번호표(`docs/qa-steps.js`)와 계수기(`docs/measure.js`)는 그대로 쓴다 — 콘솔에 붙여 넣는 조각이라 배포와 무관하다.
+
+## 새 DB 의 첫 가입 (2026-09-17)
+
+시드를 넣지 않은 새 기관 배포는 **첫 가입(signup)** 으로 연다(`SPEC.md` §24-1). 초대 규율의 유일한 예외이고, 첫 관리자가 생기면 영구히 닫힌다.
+
+```
+RELAYER_SLUG=yeondae node api/src/migrate.ts && node api/src/index.ts   # 마이그레이션이 organization 행(id=1)을 만든다
+curl -s http://localhost:8787/auth/signup                               # → {"open":true,"workspace":null}
+```
+
+1. 브라우저로 `/` 를 열면 로그인 화면이다(= 랜딩). 아래 `가입하기` → `#/signup` 에서 **첫 관리자 계정만** 만든다(아이디·비밀번호·이름).
+2. 가입이 끝나면 로그인된 채 마법사 `#/onboarding`(기관 워크스페이스 설정하기)으로 간다 — **1 기관 워크스페이스 만들기(기관명; 주소는 `RELAYER_SLUG` 값 표시만)** →
+   2 기관 정보 → 3 사업 1개 이상 → 4 실무자 초대(건너뛰기 가능) → 5 외부 서비스 연결 → 완료. 마치기 전에는 관리자가 다른 화면으로 가도 마법사로 돌아오고,
+   초대로 먼저 들어온 실무자는 `기관을 준비하고 있어요` 를 본다. 완료는 기관 요약(`#/workspace?done=1`)을 보이고 `상담 일정으로 이동하기` 로 홈에 간다.
+3. 그 뒤 `GET /auth/signup` 은 `{"open":false,"workspace":{…}}` 이고 `POST /auth/signup` 은 403 이다. `#/signup` 은 기관 이름과 초대 안내만 낸다.
+   실무자·추가 관리자는 **설정 › 실무자 관리 › 초대** 링크로만 들어온다.
+4. **문은 다시 열리지 않는다.** 관리자가 사고로 0명이 되면 DB 에서 복구한다 — `update users set deactivated_at = null where …` 또는 새 관리자 행을
+   직접 넣는다. `organization.bootstrap_closed_at` 을 지워 문을 다시 여는 것은 마지막 수단이다(그 사이 주소를 아는 누구나 관리자가 될 수 있다).
+
+`.env` 에 `OPENAI_API_KEY` 를 두지 않아도 된다 — 관리자가 마법사(또는 설정 › 시스템 › 외부 서비스 연결)에서 키를 넣으면 검증 뒤 암호문으로 DB 에 저장되고 호출마다 DB → env 순으로 읽는다.
+STT(Azure)·DB 는 여전히 환경 변수다.
+
+## 기관별 서브도메인 (2026-09-17)
+
+기관마다 `기관.relayer.kr` 을 주되 **앱은 하나의 기관만 안다** — 배포 하나가 기관 하나다(PLAN A3, `organization` 단일 행).
+앱 코드는 `Host` 를 읽지 않으므로 서브도메인은 전부 DNS·프록시 층의 일이다. **주소(slug)는 배포자가 `RELAYER_SLUG` 로 정하고 화면은 읽기 전용이다** —
+DB 하나만 보는 앱은 전체 배포에서의 중복도, DNS 가 실제로 붙었는지도 알 수 없어 화면은 읽기 전용으로 보여 주기만 한다(ASTRA 검토 E).
+
+```
+RELAYER_SLUG=<slug>              ┐  그 기관 앱의 .env
+DNS  <slug>.relayer.kr  CNAME → Cloudflare Tunnel (또는 A → 그 기관의 서버)
+Tunnel/프록시 ingress        <slug>.relayer.kr → http://localhost:<그 기관 앱의 PORT>
+앱 프로세스                  기관마다 하나 — 자기 DATABASE_URL·PII_ENC_KEY·SESSION_SECRET·PORT·RELAYER_SLUG
+```
+
+절차:
+
+1. 기관마다 DB 하나(Supabase 프로젝트 또는 스키마)·`.env` 하나·앱 프로세스 하나를 둔다. 포트를 달리 주고 `RELAYER_SLUG` 를 적는다.
+   **주소를 바꾸는 길은 이것뿐이다** — `.env` 의 `RELAYER_SLUG`(·`RELAYER_PUBLIC_URL`)를 고치고 앱을 다시 시작한다. 화면에는 입력칸이 없다(2026-09-18 Q).
+2. Cloudflare DNS 에 `<slug>` CNAME 을 터널 주소로 더한다(또는 A 레코드). 와일드카드 `*.relayer.kr` 을 터널에 물려 두면 DNS 는 한 번이다.
+3. 터널 `config.yml` 의 `ingress` 에 `hostname: <slug>.relayer.kr → service: http://localhost:<PORT>` 한 줄을 더하고 터널만 재시작한다(`launchctl kickstart -k … or.bss.relayer-tunnel`).
+4. 그 주소로 `/auth/signup` 이 `{"open":true,…}` 인지 확인하고 위 **새 DB 의 첫 가입** 절차를 밟는다.
+
+한 프로세스가 여러 기관을 받는 멀티테넌트(`org_id`)와 앱 안의 서브도메인 라우팅, 공용 주소에서의 기관 자동 생성(프로비저닝)은 범위 밖이다. 필요해지면 그때 결정한다.
 
 ## D2 배포처 (2026-09-15 확정)
 

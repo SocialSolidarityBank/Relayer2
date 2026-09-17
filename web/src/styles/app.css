@@ -51,6 +51,35 @@ body { margin: 0; }
   margin-bottom: 0;
   margin-inline-start: auto;
 }
+/* 기관 워크스페이스 설정 단계(2026-09-17 Q): 번호 + 이름을 한 줄에 세우고 사이에 화살표를 둔다.
+   칸 모양은 이식 CSS 의 `.schedule-wizard-steps .wire-step(-current|-done)` 세 상태를 그대로 쓰고,
+   여기서는 **줄 세우기**만 정한다 — 그 문법에 컨테이너 규칙이 이식되지 않았다. 좁으면 줄바꿈한다. */
+.schedule-wizard-steps { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.schedule-wizard-steps .wire-step { cursor: pointer; }
+.schedule-wizard-steps .wire-step:disabled { cursor: default; }
+.schedule-wizard-arrow { color: var(--sub); font-size: var(--text-sm); }
+/* 사업 목록의 인라인 추가 줄: 입력 칸 + 오른쫁 버튼. 버튼은 입력 칸 바닥선에 맞춘다(라벨 높이만큼 내려온다). */
+.inline-action-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-3); align-items: end; }
+/* 라벨이 있는 입력 칸 옆 버튼은 입력 칸(44)의 세로 중심에 선다 — 버튼(36)과의 높이 차 절반만큼 바닥에서 띈다. */
+.inline-action-row > .wire-form-actions { margin-bottom: calc((var(--control-height) - var(--pill-height)) / 2); }
+/* 사업 파생 정보: 라벨은 민트 글자, 줄 사이 선 없음(2026-09-17 Q). */
+.program-facts .wire-data-row + .wire-data-row { border-top: 0; }
+.program-facts .wire-data-row > dt { color: var(--mint-deep); }
+/* 초대 링크 카드: 입력 칸과 같은 높이·테두리, 글자는 가운데. 역할 선택창과는 한 칸 띈다. */
+.invite-link-slot { margin-top: var(--space-4); }
+/* 링크 카드가 두 줄로 늘어나도 복사하기는 카드의 세로 중심에 선다. */
+.invite-link-row { align-items: center; }
+.invite-link-card { display: grid; place-items: center; min-height: var(--control-height); padding: var(--space-2) var(--space-3); border: 1px solid var(--line-control); border-radius: var(--radius-control); background: var(--panel); }
+.invite-link-card > code { font-size: var(--text-sm); color: var(--ink); overflow-wrap: anywhere; text-align: center; }
+/* 연결 아코디언 접힌 줄: 이름 — 배지 — 설명. 여백 넉넉하게, 설명은 굵지 않게, 세로선 없음. */
+.connection-summary { display: inline-flex; align-items: center; gap: var(--space-3); margin-left: var(--space-3); font-weight: 400; }
+.connection-guide { display: grid; gap: var(--space-3); margin: 0 0 var(--space-5); padding-left: var(--space-5); font-size: var(--text-sm); color: var(--ink); }
+.connection-guide > li { display: grid; gap: var(--space-1); }
+.connection-guide code { font-size: var(--text-sm); }
+/* 연결 아코디언 사이 여백(2026-09-17 Q "너무 다닥붙어 있다"). */
+.connection-list { display: grid; gap: var(--space-4); }
+/* 초대: 역할 아래 링크(·QR) 자리. */
+.invite-link-slot { display: grid; gap: var(--space-2); min-height: 120px; }
 .info-original { margin: var(--space-2) 0 0; padding: var(--space-3); border-radius: var(--radius-md); background: var(--panel-alt, var(--panel)); color: var(--ink); white-space: pre-wrap; }
 /* 회차별 요약 안 승인된 AI 정리(2026-09-16 검수). 원문 위, 제목 아래 본문 단이다.
    grid 항목은 min-width:auto 라 안의 nowrap 글자가 폭을 밀어낸다 — 항목마다 0 을 박는다. */
