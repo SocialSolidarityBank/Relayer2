@@ -62,13 +62,13 @@ export function ReviewScreen({ caseId, sessionId }: { caseId: number; sessionId:
     try {
       load(await fn());
     } catch (e) {
-      setError(e instanceof Error ? e.message : '하지 못했어요.');
+      setError(e instanceof Error ? e.message : '처리 실패');
     } finally {
       setBusy(false);
     }
   };
 
-  if (draft === null) return <p className="empty">불러오는 중이에요.</p>;
+  if (draft === null) return <p className="empty">불러오는 중</p>;
 
   const masked = draft !== 'none' ? Object.entries(draft.mask_hits) : [];
   const seq = detail?.sessions.find((x) => x.id === sessionId)?.seq ?? null;
@@ -93,8 +93,8 @@ export function ReviewScreen({ caseId, sessionId }: { caseId: number; sessionId:
 
       <div className="wire-container">
         {draft === 'none' ? (
-          <Card title="AI 정리" hint="저장된 상담 자료만 씁니다. 보내기 전에 이름·연락처를 마스킹해요.">
-            <Empty>아직 정리한 것이 없어요.</Empty>
+          <Card title="AI 정리" tone="ai">
+            <Empty>정리한 것 없음</Empty>
             <FormActions>
               {error && <ErrorText>{error}</ErrorText>}
               <Button variant="primary" disabled={busy} onClick={() => void run(() => makeDraft(sessionId))}>
@@ -114,9 +114,6 @@ export function ReviewScreen({ caseId, sessionId }: { caseId: number; sessionId:
                   : '지난 회차와 어긋나는 사실 없음'
               }
             >
-              <p className="panel-meta">
-                지난 회차 자료와 견줘 달라진 사실만 골라 양쪽 원문을 그대로 보여 줘요. 어느 쪽이 맞는지는 판정하지 않아요.
-              </p>
               <FactChanges items={draft.fact_changes} />
             </Fold>
 
@@ -128,14 +125,11 @@ export function ReviewScreen({ caseId, sessionId }: { caseId: number; sessionId:
                   : masked.map(([kind, n]) => `${MASK_LABEL[kind] ?? kind} ${n}건`).join(', ')
               }
             >
-              <p className="panel-meta">
-                외부로 보내기 전에 무엇을 마스킹했는지예요. 마스킹한 값 자체는 어디에도 남기지 않아요.
-              </p>
               <p className="panel-meta">모델 {draft.model}</p>
             </Fold>
 
-            <Card title="요약" hint="사람이 고칠 수 있어요. 고쳐도 승인 전에는 초안이에요.">
-              <Field label="요약" htmlFor="summary" control="textarea">
+            <Card title="요약" tone="ai">
+              <Field label="요약" htmlFor="summary" control="textarea" hideLabel>
                 <textarea
                   id="summary"
                   rows={4}
@@ -146,7 +140,7 @@ export function ReviewScreen({ caseId, sessionId }: { caseId: number; sessionId:
               </Field>
             </Card>
 
-            <Card title="달라진 것" hint="지난 회차와 견줘 바뀐 것만이에요.">
+            <Card title="달라진 것" tone="ai">
               <LineList
                 id="draft-change"
                 label="달라진 것"
@@ -158,7 +152,7 @@ export function ReviewScreen({ caseId, sessionId }: { caseId: number; sessionId:
               />
             </Card>
 
-            <Card title="수행할 과제" hint="승인하면 다음 상담의 확인할 과제로 올라가요.">
+            <Card title="수행할 과제" tone="ai" hint="승인 시 다음 상담의 확인할 과제로 이동">
               <LineList
                 id="draft-task"
                 label="수행할 과제"
@@ -208,8 +202,7 @@ export function ReviewScreen({ caseId, sessionId }: { caseId: number; sessionId:
             </FormActions>
 
             <p className="panel-meta">
-              승인해도 원문은 바뀌지 않아요. <a href={`#/cases/${caseId}/info`}>당사자 정보</a>에서 회차별 요약과
-              함께 봐요.
+              승인해도 원문은 바뀌지 않음, <a href={`#/cases/${caseId}/info`}>당사자 정보</a>의 회차별 요약에서 확인
             </p>
           </>
         )}

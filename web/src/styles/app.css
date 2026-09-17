@@ -100,6 +100,32 @@ body { margin: 0; }
   .wire-item > .wire-item-action { justify-content: flex-start; }
 }
 
+/* ── 화면의 말 · 배열 (2026-09-18 Q, DESIGN.md §6) ──────────────────────────── */
+/* 라벨은 기본 **민트 deep**이다(HERO 의 `.wire-field-label`, 폼 묶음 `legend` 와 같은 색).
+   이식 CSS 는 폼 라벨·표 라벨을 `--sub` 로 두지만, 릴레이어는 라벨 자리를 한 색으로 읽히게
+   한다. 주목·경고가 필요한 라벨만 **코랄**(`--discrepancy` — `--risk` 는 확인된 리스크 전용,
+   D9), AI 산출 라벨은 **라벤더**다. 색은 `data-tone` 하나로 갈고 새 클래스를 만들지 않는다. */
+.wire-form-label,
+.wire-data-row > dt { color: var(--mint-deep); }
+.wire-form-label[data-tone="warn"],
+.wire-card-title[data-tone="warn"],
+.wire-card-title[data-tone="warn"] > .wire-card-head > h2 { color: var(--discrepancy); }
+.wire-form-label[data-tone="ai"],
+.wire-card-title[data-tone="ai"],
+.wire-card-title[data-tone="ai"] > .wire-card-head > h2 { color: var(--lavender-deep); }
+
+/* 정보 조각 사이는 부호가 아니라 **간격**이다(`Meta`). 이식 CSS 의 세로선(`border-left`)과
+   12 패딩을 걷는다. `Meta` 가 조각 사이에 공백 한 칸(≈4px)을 두므로 여기서 12 를 더해 약 16 이
+   된다. 인라인이어야 부모의 말줄임이 조각 전체에 먹는다. */
+.wire-meta-row { display: inline; gap: 0; }
+.wire-meta-row > span + span { border-left: 0; padding-left: 0; margin-inline-start: var(--space-3); }
+/* 항목 제목·설명·카드 도움말은 **한 줄**이다. 남는 폭이 없으면 말줄임(…)하고 전체는
+   `title` 로 남긴다(호출부 몫). 본문 단(`.info-original`, 입력값)은 이 규칙 밖이다. */
+.wire-item-title,
+.wire-item-desc,
+.wire-card-body > .panel-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wire-item > .wire-row-text { min-width: 0; }
+
 /* 당사자 카드(HERO)의 세로 스택을 되살린다(2026-09-17). 이식 CSS 는 `.participant-hero-card`
    에 `align-items:stretch` 를 주지만(`wire.css:275`), 같은 특이도의 `.page-header{align-items:center}`
    가 **뒤 파일**(`shell.css:301`)에 있어 그쪽이 이긴다 — CCC 는 두 규칙이 한 시트에 있어

@@ -155,7 +155,7 @@ test('등록부터 회차 기록·이어받기까지 한 바퀴', async ({ page 
   await expect(goalDialog).toBeVisible();
   await expect(goalDialog).toContainText(OVERALL_GOAL);
   await expect(goalDialog).toContainText('승인');
-  await expect(goalDialog).toContainText('이어받은 목표가 아직 없어요');
+  await expect(goalDialog).toContainText('이어받은 목표 없음');
   await goalDialog.getByRole('button', { name: '닫기' }).click();
   await expect(goalDialog).toBeHidden();
 
@@ -266,11 +266,11 @@ test('상담 종결은 회차를 만들지 않고 미완료 과제를 그대로 
   await page.locator('.wire-container').getByRole('button', { name: '상담 종결' }).click();
   // 종결 앞에는 경고가 선다(2026-09-17 Q): 남은 과제·예정 회차·앞으로의 일정을 세어 보여 준다.
   const warning = page.locator('.confirm-dialog');
-  await expect(warning).toContainText('확인하지 못한 과제가 1건');
+  await expect(warning).toContainText('미확인 과제 1건');
   await warning.getByRole('button', { name: '종결 기록 쓰기' }).click();
   await page.waitForURL(/\/record\?closing=1$/);
   // 종결도 상담이라 기록이 먼저다 — 체크는 이미 켜져 있고 레일 맨 위에 선다.
-  await expect(page.getByRole('checkbox', { name: '이번이 마지막 상담이에요' })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: '마지막 상담' })).toBeChecked();
   await pickDateTime(page, 'held-at', '2026-09-21T14:00');
   await page.locator('#memo').fill('마지막으로 정리하고 마무리함');
   await page.getByRole('button', { name: '저장' }).click();
@@ -331,7 +331,7 @@ test('종결 상담으로 저장하면 종결 화면으로 이어진다', async 
 
   // 기록 화면이 그 표시를 이어받는다
   await pickFromMenu(page, 'record', name);
-  await expect(page.getByRole('checkbox', { name: '이번이 마지막 상담이에요' })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: '마지막 상담' })).toBeChecked();
   await page.locator('#memo').fill('마지막으로 정리하고 마무리함');
   await page.getByRole('button', { name: '저장하고 종결로' }).click();
 
@@ -350,7 +350,7 @@ test('당사자 계정은 로그인되지 않고 이유를 말한다', async ({ 
   await page.locator('#password').fill('test3');
   await page.getByRole('button', { name: '로그인' }).click();
 
-  await expect(page.getByText('당사자는 로그인하지 않아요', { exact: false })).toBeVisible();
+  await expect(page.getByText('당사자 로그인 불가', { exact: false })).toBeVisible();
   await expect(page.locator('.app-nav-me')).toHaveCount(0);
 });
 
@@ -492,7 +492,7 @@ test('민감정보 동의가 없으면 기록을 저장하지 못하고, 받으�
   // 인테이크 저장이 막힌다
   await expect(page).toHaveURL(/\/intake$/);
   await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
-  await expect(page.getByText('민감정보 처리 동의가 없어요', { exact: false })).toBeVisible();
+  await expect(page.getByText('민감정보 처리 동의 없음', { exact: false })).toBeVisible();
 
   // 당사자 정보 › 정보 탭에서 동의를 받는다
   await openInfo(page);
@@ -536,7 +536,7 @@ test('PII 를 본 조회가 열람 기록에 남고, 관리자만 본다', async
   // 실무자 사이드바에는 `시스템` 묶음이 서지 않는다(2026-09-16 Q 3차 — 묶음마다 메뉴 하나).
   await expect(page.getByRole('link', { name: '시스템' })).toHaveCount(0);
   await page.goto('/#/settings/system');
-  await expect(page.getByText('관리자만 볼 수 있어요', { exact: false })).toBeVisible();
+  await expect(page.getByText('관리자 전용', { exact: false })).toBeVisible();
 
   // 관리자로 바꿔 본다
   await page.getByRole('button', { name: '로그아웃' }).click();
@@ -553,13 +553,13 @@ test('PII 를 본 조회가 열람 기록에 남고, 관리자만 본다', async
     .click();
 
   // 찾기 전에는 아무것도 펼치지 않는다.
-  await expect(page.getByText('하나를 고르면 기록이 나와요', { exact: false })).toBeVisible();
+  await expect(page.getByText('기간, 확인 필요, 검색 중 하나 선택', { exact: false })).toBeVisible();
   await page.locator('#audit-q').fill('당사자 정보 조회');
 
   const log = page.locator('section.wire-card', { hasText: '열람 기록' });
   await expect(log).toContainText('시험 실무자');
   await expect(log).toContainText('당사자 정보 조회');
-  await expect(log).toContainText('이름 · 연락처 · 이메일'); // 항목 이름만, 값은 없다
+  await expect(log).toContainText('이름, 연락처, 이메일'); // 항목 이름만, 값은 없다
   await expect(log).not.toContainText('010-');
 });
 
@@ -649,7 +649,7 @@ test('당사자는 링크와 코드로 자기 일정만 본다', async ({ page, 
   // 틀린 코드는 남은 횟수를 알려 준다
   await guestPage.locator('#code').fill('000000');
   await guestPage.getByRole('button', { name: '열기' }).click();
-  await expect(guestPage.getByText('코드가 맞지 않아요', { exact: false })).toBeVisible();
+  await expect(guestPage.getByText('코드 불일치', { exact: false })).toBeVisible();
 
   // 맞는 코드로 열면 기본 정보와 일정만 보인다
   await guestPage.locator('#code').fill(code);
@@ -701,7 +701,7 @@ test('외부 LLM 동의가 없으면 AI 정리를 하지 않는다', async ({ pa
 
   // 동의가 없으니 정리가 막힌다
   await page.getByRole('button', { name: 'AI로 정리하기' }).click();
-  await expect(page.getByText('외부 LLM·국외 처리 동의가 없어요', { exact: false })).toBeVisible();
+  await expect(page.getByText('외부 LLM·국외 처리 동의 없음', { exact: false })).toBeVisible();
 });
 
 // 잘못 쓴 요청은 **400** 이다. 500 으로 답하면 서버가 고장난 줄 안다.

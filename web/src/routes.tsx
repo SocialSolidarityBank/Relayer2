@@ -77,7 +77,7 @@ export function Routes() {
       </div>
     );
 
-  if (me === 'loading') return <p className="empty">불러오는 중이에요.</p>;
+  if (me === 'loading') return <p className="empty">불러오는 중</p>;
   if (!me)
     return (
       <div className="wire-shell">

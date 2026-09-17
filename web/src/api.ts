@@ -86,18 +86,18 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
     });
   } catch {
     // 네트워크가 끊겼거나 서버가 죽었다. 둘 다 사람이 할 일은 같다 — 잠시 뒤 다시.
-    announce('서버에 닿지 못했어요. 잠시 뒤 다시 해 주세요.');
-    throw new Error('서버에 닿지 못했어요.');
+    announce('서버 연결 실패, 잠시 뒤 다시 시도');
+    throw new Error('서버 연결 실패');
   }
   if (!res.ok) {
     const message = (await res.json().catch(() => ({}))).error;
     // 401 의 사연은 서버가 안다(만료인지, 당사자 계정인지). 화면이 문구를 지어내지 않는다.
-    if (res.status === 401) throw new Unauthorized(message ?? '로그인이 필요해요.');
+    if (res.status === 401) throw new Unauthorized(message ?? '로그인 필요');
     // **화면이 알아들을 수 있는 거절은 배너를 띄우지 않는다.** 동의가 없어 막힌 것(409)이나
     // 잘못 적은 것(400)은 그 자리에서 무엇을 해야 하는지 말해 주고, 배너가 같은 말을 또 하면
     // 한 사실이 두 번 보인다. 배너는 **까닭을 화면이 모르는 실패**만 맡는다.
     if (res.status >= 500 || res.status === 403 || res.status === 404) {
-      announce(message ?? `요청이 실패했어요 (${res.status}).`);
+      announce(message ?? `요청 실패 (${res.status})`);
     }
     throw new Error(message ?? `${res.status}`);
   }

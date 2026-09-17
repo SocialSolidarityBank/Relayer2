@@ -15,7 +15,7 @@ export function buildSessionLine(session: Session, cards: Card[]): string {
   const changed = LIFE_AREAS.filter((area: LifeArea) =>
     mine.some((c) => c.source_section === 'change' && c.area === area),
   );
-  if (changed.length > 0) parts.push(`달라진 것: ${changed.map((a) => LIFE_AREA_LABEL[a]).join('·')}`);
+  if (changed.length > 0) parts.push(`달라진 것: ${changed.map((a) => LIFE_AREA_LABEL[a]).join(', ')}`);
 
   if (mine.some((c) => c.source_section === 'judgment')) parts.push('의견 있음');
 

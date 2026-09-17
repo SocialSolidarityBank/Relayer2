@@ -86,7 +86,7 @@ export function ParticipantNewScreen() {
       const access = await issueAccess(created.case_id);
       setIssued({ caseId: created.case_id, token: access.token, code: access.code });
     } catch (e) {
-      setError(e instanceof Error ? e.message : '등록하지 못했어요.');
+      setError(e instanceof Error ? e.message : '등록 실패');
     } finally {
       setSaving(null);
     }
@@ -124,7 +124,7 @@ export function ParticipantNewScreen() {
             // 상태는 남기고 설명은 걷는다 — 사업이 하나도 없으면 여기서 막히기 때문이다.
             hint={
               programs !== null && programs.length === 0
-                ? '아직 사업이 없어요. 관리자가 설정 › 기관 정보 관리에서 먼저 만들어야 해요.'
+                ? '사업 없음, 설정 › 기관 정보 관리에서 등록 필요'
                 : undefined
             }
           >
@@ -174,9 +174,9 @@ export function ParticipantNewScreen() {
         {/* 문안 전체를 보여 주고 받는다. 접어 둔 것을 펴면 무엇을 받고 얼마나 두고
             거부하면 어떻게 되는지가 나온다 — 해시에 묶인 내용 그대로다. */}
         {loadFailed && (
-          <Card title="불러오지 못했어요">
+          <Card title="불러오기 실패">
             <FormActions>
-              <ErrorText>사업 목록과 동의 문안을 받지 못했어요.</ErrorText>
+              <ErrorText>사업 목록과 동의 문안 불러오기 실패</ErrorText>
               <Button onClick={() => setReloadAt(Date.now())}>다시 불러오기</Button>
             </FormActions>
           </Card>
@@ -234,7 +234,7 @@ export function ParticipantNewScreen() {
             <DataRows
               rows={[
                 ['동의문', c.body],
-                ['무엇을 받나', c.items.join(' · ')],
+                ['무엇을 받나', c.items.join(', ')],
                 ['왜 받나', c.purpose_text],
                 ['얼마나 두나', c.retention_text],
                 ...(c.recipient ? ([['어디로 가나', c.recipient]] as Array<[string, string]>) : []),

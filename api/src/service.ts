@@ -209,7 +209,7 @@ export async function saveIntake(
     } else {
       const [other] = await tx<{ id: number }[]>`
         select id from sessions where case_id = ${caseId} limit 1`;
-      if (other) throw new Error('이미 다른 회차가 있어요. 인테이크는 첫 회차예요.');
+      if (other) throw new Error('이미 다른 회차 있음, 인테이크는 첫 회차');
       const [created] = await tx<{ id: number }[]>`
         insert into sessions (case_id, seq, kind, status, held_at, method, place, memo, detail)
         values (${caseId}, 1, 'intake', 'done', ${input.held_at ?? new Date().toISOString()},
@@ -291,8 +291,8 @@ export async function startSession(
     if (input.session_id !== undefined) {
       const [target] = await tx<Session[]>`
         select * from sessions where id = ${input.session_id} and case_id = ${caseId} for update`;
-      if (!target) throw new NotFound('회차를 찾지 못했어요.');
-      if (target.status === 'done') throw new SessionAlreadyStarted('이미 시작한 회차예요.');
+      if (!target) throw new NotFound('회차 없음');
+      if (target.status === 'done') throw new SessionAlreadyStarted('이미 시작한 회차');
       await tx`update sessions set status = 'done', held_at = ${now},
         method = ${input.method ?? target.method}, is_closing = ${input.is_closing ?? target.is_closing}
         where id = ${target.id}`;
@@ -350,7 +350,7 @@ export async function recordSession(
     // 저장하면서 남의 사례 B 카드에 결과를 붙이는 우회가 열린다.
     const caseCardIds = new Set(cards.map((card) => card.id));
     if ((input.outcomes ?? []).some((outcome) => !caseCardIds.has(outcome.card_id))) {
-      throw new NotFound('카드를 찾지 못했어요.');
+      throw new NotFound('카드 없음');
     }
 
     // 이미 저장한 회차를 고쳐 쓰는 경우, 이 회차가 남긴 결과는 빼고 "이 회차 전에 열려 있던 카드"를
@@ -542,9 +542,9 @@ export async function updateOverallGoal(caseId: number, text: string | null): Pr
  */
 export async function updateNextGoal(sessionId: number, text: string | null): Promise<void> {
   const [s] = await sql<Session[]>`select * from sessions where id = ${sessionId}`;
-  if (!s) throw new NotFound('회차를 찾지 못했어요.');
-  if (s.status !== 'done') throw new GoalLocked('아직 기록하지 않은 회차예요.');
-  if (s.next_goal_consumed_by_session_id) throw new GoalLocked('다음 회차가 이미 이어받은 목표예요.');
+  if (!s) throw new NotFound('회차 없음');
+  if (s.status !== 'done') throw new GoalLocked('아직 기록하지 않은 회차');
+  if (s.next_goal_consumed_by_session_id) throw new GoalLocked('다음 회차가 이미 이어받은 목표');
   await sql`update sessions set next_goal_text = ${encryptText(text)} where id = ${sessionId}`;
 }
 
@@ -681,7 +681,7 @@ export async function recordConsent(
   input: { domain: ConsentDomain; decision: ConsentDecision; actorId?: number },
 ): Promise<ConsentView> {
   const [supportCase] = await sql<SupportCase[]>`select participant_id from support_cases where id = ${caseId}`;
-  if (!supportCase) throw new Error('사례를 찾지 못했어요.');
+  if (!supportCase) throw new Error('사례 없음');
   await sql`
     insert into consent_events
       (participant_id, case_id, domain, decision, purpose, copy_version, copy_hash, effective_at, recorded_by)
@@ -697,7 +697,7 @@ export async function assertConsent(caseId: number, domain: ConsentDomain): Prom
   const found = consents?.find((c) => c.domain === domain);
   if (found?.status === 'granted') return;
   throw new ConsentRequired(
-    `${CONSENT_COPY[domain].label} 동의가 없어요. 당사자 정보에서 동의를 받아야 저장할 수 있어요.`,
+    `${CONSENT_COPY[domain].label} 동의 없음, 당사자 정보에서 동의 후 저장`,
   );
 }
 

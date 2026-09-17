@@ -225,7 +225,7 @@ export function IntakeScreen({ caseId, readOnly = false }: { caseId: number; rea
       setMethod(intake.method ?? '');
       setPlace(intake.place ?? '');
     })().catch((failure: unknown) => {
-      if (live) setError(failure instanceof Error ? failure.message : '불러오지 못했어요.');
+      if (live) setError(failure instanceof Error ? failure.message : '불러오기 실패');
     });
     return () => {
       live = false;
@@ -233,14 +233,14 @@ export function IntakeScreen({ caseId, readOnly = false }: { caseId: number; rea
   }, [caseId]);
 
   if (!view) {
-    return error ? <ErrorText>{error}</ErrorText> : <p className="empty">불러오는 중이에요.</p>;
+    return error ? <ErrorText>{error}</ErrorText> : <p className="empty">불러오는 중</p>;
   }
   // 인테이크를 건너뛰고 다른 회차부터 기록한 사례는 여기서 새로 쓰지 못한다.
   if (!written && view.sessions.length > 0)
     return (
       <p className="empty">
-        이 사례에는 이미 다른 회차가 있어요. 인테이크는 첫 회차예요.{' '}
-        <a href={`#/cases/${caseId}/info`}>당사자 정보</a>로 가세요.
+        이미 다른 회차가 있어 인테이크 작성 불가,{' '}
+        <a href={`#/cases/${caseId}/info`}>당사자 정보</a>로 이동
       </p>
     );
 
@@ -272,7 +272,7 @@ export function IntakeScreen({ caseId, readOnly = false }: { caseId: number; rea
       heldAt.minute !== EMPTY_DATE_TIME.minute;
     const heldAtIso = dateTimeToIso(heldAt);
     if (heldAtTouched && !heldAtIso) {
-      setError('상담 일시를 모두 골라 주세요.');
+      setError('상담 일시 선택 필요');
       return;
     }
     setSaving(true);
@@ -299,7 +299,7 @@ export function IntakeScreen({ caseId, readOnly = false }: { caseId: number; rea
       // 처음 쓴 것이면 일정 잡기로, 고쳐 쓴 것이면 보던 자리(당사자 정보)로 돌아간다.
       window.location.hash = written ? `#/cases/${caseId}/info` : `#/cases/${caseId}/schedule`;
     } catch (e) {
-      setError(e instanceof Error ? e.message : '저장하지 못했어요.');
+      setError(e instanceof Error ? e.message : '저장 실패');
     } finally {
       setSaving(false);
     }

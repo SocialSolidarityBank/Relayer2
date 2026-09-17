@@ -37,6 +37,7 @@ import {
   Fold,
   FormActions,
   Item,
+  Meta,
   ParticipantHero,
 } from '../ui.tsx';
 import { Dialog } from '../dialog.tsx';
@@ -83,6 +84,7 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
     void getBriefing(caseId).then((b) => setRisk(b.risk_signals));
   }, [caseId]);
 
+
   const done = detail.sessions.filter((s) => s.status === 'done');
 
   // 아직 아무 기록이 없으면 **여기서 바로 시작할 수 있어야 한다.**
@@ -91,7 +93,7 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
     const hasIntake = detail.sessions.some((s) => s.kind === 'intake');
     return (
       <Card title="회차별 요약">
-        <Empty>아직 기록한 상담이 없어요.</Empty>
+        <Empty>기록한 상담 없음</Empty>
         <FormActions>
           {!hasIntake && (
             <Button
@@ -122,12 +124,10 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
             s.voice.recordings > 0 ? TRANSCRIPT_LABEL[s.voice.transcript] : undefined;
           const state = [
             s.line,
-            s.written === false ? '수기 미작성' : null,
-            s.voice.recordings > 0 ? `녹음 ${s.voice.recordings}` : null,
-            transcriptLabel ?? null,
-          ]
-            .filter(Boolean)
-            .join(' | ');
+            s.written === false && '수기 미작성',
+            s.voice.recordings > 0 && `녹음 ${s.voice.recordings}`,
+            transcriptLabel,
+          ];
           return (
             <Fold
               key={s.id}
@@ -204,10 +204,10 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
                     )}
                   </section>
                 )}
-                {state && (
+                {state.some(Boolean) && (
                   <section className="seq-section">
                     <h3 className="seq-section-title">기록 상태</h3>
-                    <p className="wire-item-desc">{state}</p>
+                    <p className="wire-item-desc"><Meta parts={state} /></p>
                   </section>
                 )}
               </div>
@@ -216,7 +216,7 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
         })}
       </Card>
       {detail.closure && (
-        <Card title="상담 종결" hint="회차가 아니에요. 번호를 받지 않아요.">
+        <Card title="상담 종결">
           <Item
             title={dateLabel(detail.closure.closed_at)}
             desc={`${detail.closure.close_reason}${
@@ -251,7 +251,7 @@ function Goals({ detail, reload }: { detail: CaseDetail; reload: () => Promise<v
       else if (pending) await updateNextGoal(pending.session_id, next.trim() || null);
       await reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : '저장하지 못했어요.');
+      setError(e instanceof Error ? e.message : '저장 실패');
     } finally {
       setSaving(null);
     }
@@ -259,7 +259,7 @@ function Goals({ detail, reload }: { detail: CaseDetail; reload: () => Promise<v
 
   return (
     <>
-      <Card title="전체 상담 목표" hint="고치면 이전 문구는 이력에 남아요. 비워 두어도 괜찮아요.">
+      <Card title="전체 상담 목표" hint="수정 시 이전 문구는 이력에 남음, 비워 두어도 됨">
         <Field label="전체 상담 목표" htmlFor="goal-overall" hideLabel>
           <input
             id="goal-overall"
@@ -275,7 +275,7 @@ function Goals({ detail, reload }: { detail: CaseDetail; reload: () => Promise<v
                 `승인`/`수정` 라벨은 원래 순서의 첫 줄(처음 적은 목표)에만 `승인`이 붙는다. */}
             <Card title="전체 상담 목표 이력">
               {history.length === 0 ? (
-                <Empty>아직 이력이 없어요.</Empty>
+                <Empty>이력 없음</Empty>
               ) : (
                 [...history].reverse().map((r, j) => (
                   <Item
@@ -288,7 +288,7 @@ function Goals({ detail, reload }: { detail: CaseDetail; reload: () => Promise<v
             </Card>
             <Card title="회차별 오늘 상담 목표">
               {withGoal.length === 0 ? (
-                <Empty>이어받은 목표가 아직 없어요.</Empty>
+                <Empty>이어받은 목표 없음</Empty>
               ) : (
                 [...withGoal].reverse().map((s) => (
                   <Item
@@ -319,8 +319,8 @@ function Goals({ detail, reload }: { detail: CaseDetail; reload: () => Promise<v
         title="다음 상담 목표"
         hint={
           pending
-            ? `${pending.session_seq}회차에서 정함, 다음 회차를 기록하면 그 회차의 오늘 상담 목표가 되고 잠겨요.`
-            : '마지막 회차를 기록할 때 적어요. 지금은 고칠 목표가 없어요.'
+            ? `${pending.session_seq}회차에서 정함, 다음 회차 기록 시 오늘 상담 목표로 잠김`
+            : '마지막 회차 기록 시 작성'
         }
       >
         {pending ? (
@@ -345,7 +345,7 @@ function Goals({ detail, reload }: { detail: CaseDetail; reload: () => Promise<v
             </FormActions>
           </>
         ) : (
-          <Empty>아직 없어요.</Empty>
+          <Empty>없음</Empty>
         )}
       </Card>
       {error && <ErrorText>{error}</ErrorText>}
@@ -390,26 +390,32 @@ function Consents({ caseId }: { caseId: number }) {
   return (
     <Card title="개인 정보 및 민감 정보 처리 동의">
       {rows === null ? (
-        <Empty>불러오는 중이에요.</Empty>
+        <Empty>불러오는 중</Empty>
       ) : (
         rows.map((row) => {
           const copy = copies[row.domain];
           // 접힌 머리 한 행: 항목 이름 · 설명 · 날짜 · 동의 여부. 이중 접힘(항목 + `자세히 보기`)은
           // 하나로 좁혔다 — 펼치면 동의문 전문이 바로 선다(2026-09-17 Q).
-          const head = [row.copy, row.decided_at ? dateLabel(row.decided_at) : '날짜 없음', STATUS[row.status] ?? row.status]
-            .join(' | ');
           return (
             <Fold
               key={row.domain}
               group="consents"
               title={row.label}
-              desc={<span title={head}>{head}</span>}
+              desc={
+                <Meta
+                  parts={[
+                    row.copy,
+                    row.decided_at ? dateLabel(row.decided_at) : '날짜 없음',
+                    STATUS[row.status] ?? row.status,
+                  ]}
+                />
+              }
             >
               {copy ? (
                 <DataRows
                   rows={[
                     ['동의문', copy.body],
-                    ['무엇을 받나', copy.items.join(' · ')],
+                    ['무엇을 받나', copy.items.join(', ')],
                     ['왜 받나', copy.purpose_text],
                     ['얼마나 두나', copy.retention_text],
                     ...(copy.recipient ? ([['어디로 가나', copy.recipient]] as Array<[string, ReactNode]>) : []),
@@ -418,7 +424,7 @@ function Consents({ caseId }: { caseId: number }) {
                   ]}
                 />
               ) : (
-                <Empty>문안을 불러오는 중이에요.</Empty>
+                <Empty>문안 불러오는 중</Empty>
               )}
               {/* 체크는 **왼쪽**이고 아래 설명문은 두지 않는다(2026-09-17 Q).
                   끄면 철회로 기록된다는 것은 상태 값(`동의함`/`동의 없음`)이 이미 말한다. */}
@@ -484,7 +490,6 @@ function Access({ caseId }: { caseId: number }) {
        * 그래서 이름과 안내를 동의 쪽 말로 바꿨다. 열람 동선 설명은 걷었다.
        */
       title="개인정보 및 민감정보 처리 동의 링크"
-      hint="개인 정보 및 민감 정보 처리 동의 받기 링크를 생성하세요"
       // 만들기 버튼은 제목과 같은 행 오른쪽 끝이다(2026-09-17 Q). `링크 끊기` 는 링크가
       // 살아 있을 때만 본문 아래에 남는다 — 위험 행동을 제목 줄에 함께 세우지 않는다.
       action={
@@ -496,12 +501,13 @@ function Access({ caseId }: { caseId: number }) {
       }
     >
       {state === null ? (
-        <Empty>불러오는 중이에요.</Empty>
+        <Empty>불러오는 중</Empty>
       ) : (
         <>
+          {!issued && !state.active && <Empty>만든 링크 없음</Empty>}
           {issued && link && (
             <div className="wire-repeat-card">
-              <p className="panel-meta">이 화면을 닫으면 코드는 다시 볼 수 없어요. 지금 전해 주세요.</p>
+              <p className="panel-meta">코드는 지금 한 번만 표시</p>
               <DataRows
                 rows={[
                   ['링크', link],
@@ -551,7 +557,7 @@ function Documents({ caseId }: { caseId: number }) {
       setLabel('');
       setFile(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : '올리지 못했어요.');
+      setError(e instanceof Error ? e.message : '업로드 실패');
     } finally {
       setBusy(false);
     }
@@ -562,14 +568,14 @@ function Documents({ caseId }: { caseId: number }) {
   return (
     <Card title="파일 업로드">
       {rows === null ? (
-        <Empty>불러오는 중이에요.</Empty>
+        <Empty>불러오는 중</Empty>
       ) : rows.length === 0 ? null : (
         rows.map((d) => (
           <div className="wire-repeat-card" key={d.id}>
             <Item
               title={d.label}
-              desc={`${size(d.bytes)}, ${dateLabel(d.created_at)} 받음, ${dateLabel(d.delete_after)}에 지워요${
-                d.deleted_at ? ', 지워짐' : ''
+              desc={`${size(d.bytes)}, ${dateLabel(d.created_at)} 받음, ${dateLabel(d.delete_after)} 삭제 예정${
+                d.deleted_at ? ', 삭제됨' : ''
               }`}
               action={
                 d.deleted_at ? undefined : (
@@ -601,7 +607,7 @@ function Documents({ caseId }: { caseId: number }) {
           <input
             id="doc-label"
             aria-label="문서 이름"
-            placeholder={file ? '문서 이름 (예: 채무 내역서)' : '파일을 고른 뒤 이름을 적어요'}
+            placeholder={file ? '문서 이름 (예: 채무 내역서)' : '파일 선택 후 이름 입력'}
             value={label}
             onChange={(e) => setLabel(e.target.value)}
           />
@@ -629,7 +635,7 @@ function Fulls({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
   if (done.length === 0) {
     return (
       <Card title="회차별 원본 보기">
-        <Empty>아직 기록한 상담이 없어요.</Empty>
+        <Empty>기록한 상담 없음</Empty>
       </Card>
     );
   }
@@ -651,13 +657,13 @@ function Fulls({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
               </>
             }
             desc={
-              [
-                s.written ? '수기 있음' : '수기 미작성',
-                s.voice.recordings > 0 ? `녹음 ${s.voice.recordings}` : null,
-                s.voice.recordings > 0 ? TRANSCRIPT_LABEL[s.voice.transcript] : null,
-              ]
-                .filter(Boolean)
-                .join(' | ')
+              <Meta
+                parts={[
+                  s.written ? '수기 있음' : '수기 미작성',
+                  s.voice.recordings > 0 && `녹음 ${s.voice.recordings}`,
+                  s.voice.recordings > 0 && TRANSCRIPT_LABEL[s.voice.transcript],
+                ]}
+              />
             }
             action={
               <Button
@@ -706,10 +712,10 @@ function SessionStatus({ detail }: { detail: CaseDetail }) {
     `수기 ${done.filter((s) => s.written).length}`,
     `전사 승인 ${done.filter((s) => s.voice.transcript === 'approved').length}`,
     next?.scheduled_at ? `다음 ${next.seq}회차 ${dateLabel(next.scheduled_at)}` : '다음 일정 없음',
-  ].join(' | ');
+  ];
 
   return (
-    <Fold title="회차 정보" desc={<span title={head}>{head}</span>}>
+    <Fold title="회차 정보" desc={<Meta parts={head} />}>
       {/* 좁은 화면에서는 표가 카드 안에서만 가로로 넘어간다 — 페이지 폭을 밀지 않는다
           (390 실측: 표 최소폭 385px 가 문서를 401px 로 늘렸다). */}
       <div className="seq-scroll" role="region" aria-label="회차별 상태" tabIndex={0}>
@@ -757,14 +763,10 @@ const closeWarnings = (detail: CaseDetail): string[] => {
     (s) => s.status === 'planned' && s.scheduled_at && Date.parse(s.scheduled_at) >= Date.now(),
   );
   const lines: string[] = [];
-  if (promises > 0) lines.push(`확인하지 못한 과제가 ${promises}건 남아 있어요.`);
-  if (planned && done < planned) lines.push(`예정 ${planned}회차 가운데 ${done}회차만 기록했어요.`);
+  if (promises > 0) lines.push(`미확인 과제 ${promises}건`);
+  if (planned && done < planned) lines.push(`예정 ${planned}회차 중 ${done}회차 기록`);
   if (future.length > 0)
-    lines.push(
-      `앞으로 잡힌 상담이 ${future.length}건 있어요(${future
-        .map((s) => `${s.seq}회차 ${dateLabel(s.scheduled_at as string)}`)
-        .join(', ')}). 종결하면 그 일정은 그대로 남으니 따로 지워야 해요.`,
-    );
+    lines.push(`예정 상담 ${future.length}건 유지, 종결 후 직접 삭제 필요`);
   return lines;
 };
 
@@ -795,7 +797,7 @@ function Info({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
         />
         <Confirm
           open={asking}
-          title="이 사례를 종결할까요?"
+          title="사례 종결 확인"
           lines={closeWarnings(detail)}
           confirmLabel="종결 기록 쓰기"
           onCancel={() => setAsking(false)}
@@ -820,7 +822,7 @@ export function ParticipantInfoScreen({ caseId, initialTab = '당사자 정보' 
     setTab(initialTab);
   }, [initialTab, caseId]);
 
-  if (!detail) return <p className="empty">불러오는 중이에요.</p>;
+  if (!detail) return <p className="empty">불러오는 중</p>;
 
   const done = detail.sessions.filter((s) => s.status === 'done');
   // 당사자 카드 정보 넷(2026-09-17 Q): ID · 사업과 회차 · 연락처 · 이메일. 없는 값은 빠진다.

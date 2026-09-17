@@ -56,7 +56,7 @@ export function SessionFullScreen({ caseId, sessionId }: { caseId: number; sessi
         setDetail(d);
       } catch (e) {
         if (!live) return;
-        setError(e instanceof Error ? e.message : '회차를 불러오지 못했어요.');
+        setError(e instanceof Error ? e.message : '회차 불러오기 실패');
       }
       // 음성은 따로 읽는다 — 기능이 꺼져 있거나 녹음이 없어도 수기는 보여야 한다.
       try {
@@ -67,7 +67,7 @@ export function SessionFullScreen({ caseId, sessionId }: { caseId: number; sessi
       } catch (e) {
         if (!live) return;
         if (!(e instanceof Forbidden))
-          setVoiceError(e instanceof Error ? e.message : '녹음을 불러오지 못했어요.');
+          setVoiceError(e instanceof Error ? e.message : '녹음 불러오기 실패');
       }
     })();
     return () => {
@@ -83,7 +83,7 @@ export function SessionFullScreen({ caseId, sessionId }: { caseId: number; sessi
   };
 
   if (error) return <ErrorText>{error}</ErrorText>;
-  if (!rec) return <p className="empty">불러오는 중이에요.</p>;
+  if (!rec) return <p className="empty">불러오는 중</p>;
 
   const written =
     (rec.memo?.trim() ?? '') !== '' || rec.cards.length > 0 || (rec.next_goal_text?.trim() ?? '') !== '';
@@ -151,7 +151,7 @@ export function SessionFullScreen({ caseId, sessionId }: { caseId: number; sessi
         <Fold title="음성 기록" open={!written}>
           {voiceError && <ErrorText>{voiceError}</ErrorText>}
           {recordings.length === 0 ? (
-            <Empty>올라온 녹음이 없어요.</Empty>
+            <Empty>올라온 녹음 없음</Empty>
           ) : (
             recordings.map((r) => (
               <div className="wire-repeat-card" key={r.id}>
@@ -161,9 +161,9 @@ export function SessionFullScreen({ caseId, sessionId }: { caseId: number; sessi
                   }`}
                   desc={
                     r.deleted_at
-                      ? '보유기간이 지나 지웠어요.'
+                      ? '보유기간 만료로 삭제됨'
                       : `${TRANSCRIBE_LABEL[r.transcribe_state]}${
-                          r.transcribe_note ? ` — ${r.transcribe_note}` : ''
+                          r.transcribe_note ? `, ${r.transcribe_note}` : ''
                         }`
                   }
                 />
