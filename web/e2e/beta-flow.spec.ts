@@ -630,8 +630,8 @@ test('당사자는 링크와 코드로 자기 일정만 본다', async ({ page, 
   await page.getByRole('tab', { name: '당사자 정보' }).click();
   const access = page
     .locator('section.wire-card')
-    .filter({ has: page.getByRole('heading', { name: '당사자 열람' }) });
-  await access.getByRole('button', { name: '열람 링크 만들기' }).click();
+    .filter({ has: page.getByRole('heading', { name: '개인정보 및 민감정보 처리 동의 링크' }) });
+  await access.getByRole('button', { name: '링크 만들기' }).click();
   await expect(access).toContainText('확인 코드');
 
   const link = (await access.locator('.wire-data-row', { hasText: '링크' }).locator('dd').innerText()).trim();
