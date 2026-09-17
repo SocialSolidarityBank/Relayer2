@@ -2,7 +2,7 @@
 // 버튼은 **승인 / 수정** 둘이다. 반려·재생성은 없다(요구 21).
 // 수정본도 **별도 승인 전에는 초안**이다. 승인 전에는 어떤 것도 기록이 아니다.
 import { useEffect, useState } from 'react';
-import { approveDraft, getDraft, makeDraft, type Draft } from '../api.ts';
+import { approveDraft, getCaseDetail, getDraft, makeDraft, type CaseDetail, type Draft } from '../api.ts';
 import {
   Badge,
   Button,
@@ -14,7 +14,7 @@ import {
   Fold,
   FormActions,
   LineList,
-  PageHeader,
+  ParticipantHero,
   withDraft,
   type Line,
 } from '../ui.tsx';
@@ -30,6 +30,8 @@ const MASK_LABEL: Record<string, string> = {
 
 export function ReviewScreen({ caseId, sessionId }: { caseId: number; sessionId: number }) {
   const [draft, setDraft] = useState<Draft | 'none' | null>(null);
+  // 당사자 카드용 사례 상세(2026-09-17 Q 시안). 이 화면은 초안만 받고 있었다.
+  const [detail, setDetail] = useState<CaseDetail | null>(null);
   const [summary, setSummary] = useState('');
   const [changes, setChanges] = useState<Line[]>([]);
   const [changeDraft, setChangeDraft] = useState<Line>({ text: '' });
@@ -51,6 +53,7 @@ export function ReviewScreen({ caseId, sessionId }: { caseId: number; sessionId:
 
   useEffect(() => {
     void getDraft(sessionId).then(load);
+    void getCaseDetail(caseId).then(setDetail).catch(() => {});
   }, [sessionId]);
 
   const run = async (fn: () => Promise<Draft>) => {
@@ -68,19 +71,23 @@ export function ReviewScreen({ caseId, sessionId }: { caseId: number; sessionId:
   if (draft === null) return <p className="empty">불러오는 중이에요.</p>;
 
   const masked = draft !== 'none' ? Object.entries(draft.mask_hits) : [];
+  const seq = detail?.sessions.find((x) => x.id === sessionId)?.seq ?? null;
 
   return (
     <>
-      <PageHeader
-        title="AI가 정리한 내용 검토하기"
-        meta={
-          draft === 'none' ? (
-            '아직 정리한 것이 없어요'
-          ) : draft.status === 'approved' ? (
-            <Badge tone="mint">승인함</Badge>
-          ) : (
-            <Badge>초안 · 승인 전에는 기록이 아니에요</Badge>
-          )
+      {/* 당사자 카드가 머리다(2026-09-17 Q 시안). AI 정리 상태는 배지가 아니라 값으로 내려간다
+          — 당사자 카드에는 배지를 두지 않는다(CCC 2026-09-08). */}
+      <ParticipantHero
+        name={detail?.participant.name ?? null}
+        pseudonym={detail?.pseudonym ?? '확인 중'}
+        details={[
+          ['당사자 ID', detail?.pseudonym ?? '확인 중'],
+          ['참여 사업', `${detail?.case.program_name ?? '확인 중'}${seq ? ` · ${seq}회차` : ''}`],
+          ['연락처', detail?.participant.phone ?? ''],
+          ['이메일', detail?.participant.email ?? ''],
+        ]}
+        actions={
+          <Button onClick={() => (window.location.hash = `#/cases/${caseId}/info`)}>당사자 정보</Button>
         }
       />
 

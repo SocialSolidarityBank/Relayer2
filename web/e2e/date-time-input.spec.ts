@@ -28,7 +28,7 @@ const newCase = async (page: Page) => {
 test('인테이크 일시는 한국 시간으로 저장되고 다시 열면 그대로 선다', async ({ page }) => {
   const caseId = await newCase(page);
   await page.goto(`/#/cases/${caseId}/intake`);
-  await expect(page.getByRole('heading', { name: '인테이크 작성하기' })).toBeVisible();
+  await expect(page).toHaveURL(/\/intake$/);
 
   // 오전 12시 30분 — 12시제 경계(자정)에서 오전/오후를 틀리면 여기서 잡힌다.
   await pickDateTime(page, 'held-at', '2026-10-05T00:30');
@@ -42,7 +42,7 @@ test('인테이크 일시는 한국 시간으로 저장되고 다시 열면 그�
   expect((await (await page.request.get(`${api}/cases/${caseId}/intake`)).json()).session_id).toBeNull();
 
   await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
-  await expect(page.getByRole('heading', { name: '상담 일정 등록' })).toBeVisible();
+  await expect(page).toHaveURL(/\/schedule$/);
   const saved = await (await page.request.get(`${api}/cases/${caseId}/intake`)).json();
   expect(new Date(saved.held_at).toISOString()).toBe('2026-10-04T15:30:00.000Z');
 
@@ -73,7 +73,7 @@ test('기록 고쳐 쓰기는 저장된 일시를 한국 시간으로 다시 세
   } })).ok()).toBe(true);
 
   await page.goto(`/#/cases/${caseId}/sessions/${sessionId}/edit`);
-  await expect(page.getByRole('heading', { name: '상담 기록 고쳐 쓰기' })).toBeVisible();
+  await expect(page).toHaveURL(/\/edit$/);
   // UTC 날짜(19일)가 아니라 한국 날짜(20일) 오전 12시 5분으로 서야 한다.
   await expectDateTime(page, 'held-at', '2026-10-20T00:05');
 
@@ -106,7 +106,7 @@ test('기록 고쳐 쓰기는 저장된 일시를 한국 시간으로 다시 세
 test('기록 화면에서 날짜를 골라도 회차가 생기지 않는다', async ({ page }) => {
   const caseId = await newCase(page);
   await page.goto(`/#/cases/${caseId}/record`);
-  await expect(page.getByRole('heading', { name: '상담 기록하기' })).toBeVisible();
+  await expect(page).toHaveURL(/\/record$/);
 
   // 날짜·시간을 채우는 것은 입력일 뿐 회차 시작이 아니다 — 저장·녹음·메모 입력이 회차를 연다.
   await pickDateTime(page, 'held-at', '2026-10-22T09:00');

@@ -5,8 +5,10 @@
 import { useEffect, useState } from 'react';
 import {
   getCase,
+  getCaseDetail,
   getIntake,
   saveIntake,
+  type CaseDetail,
   type CaseView,
   type ConsultationMethod,
   type IntakeInput,
@@ -30,7 +32,7 @@ import {
   Field as FormField,
   FormActions,
   LineList,
-  PageHeader,
+  ParticipantHero,
   withDraft,
   type Line,
 } from '../ui.tsx';
@@ -170,6 +172,8 @@ function Question({
 
 export function IntakeScreen({ caseId }: { caseId: number }) {
   const [view, setView] = useState<CaseView | null>(null);
+  // 당사자 카드의 이름은 사례 상세가 준다(2026-09-17 Q 시안). 이 화면은 이름을 안 받고 있었다.
+  const [detail, setDetail] = useState<CaseDetail | null>(null);
   const [answers, setAnswers] = useState<Answers>({});
   const [overallGoal, setOverallGoal] = useState('');
   const [questions, setQuestions] = useState<Line[]>([]);
@@ -203,9 +207,10 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
     setPlace('');
     setWritten(false);
     void (async () => {
-      const [v, intake] = await Promise.all([getCase(caseId), getIntake(caseId)]);
+      const [v, intake, d] = await Promise.all([getCase(caseId), getIntake(caseId), getCaseDetail(caseId)]);
       if (!live) return;
       setView(v);
+      setDetail(d);
       setOverallGoal(intake.overall_goal ?? v.case.overall_goal ?? '');
       setWritten(intake.session_id !== null);
       setAnswers(withLegacyMapping(intake.detail ?? {}, intake.memo));
@@ -297,9 +302,20 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
 
   return (
     <>
-      <PageHeader
-        title="인테이크 작성하기"
-        meta={`${view.pseudonym} · ${view.case.program_name} · 1회차`}
+      {/* 당사자 카드가 머리다(2026-09-17 Q — ①ⓐ 화면 이름은 적지 않는다, ②ⓐ 정보 격자 유지,
+          ③ⓐ 행동은 `당사자 정보` 하나). 이름은 사례 상세에서 받는다. */}
+      <ParticipantHero
+        name={detail?.participant.name ?? null}
+        pseudonym={view.pseudonym}
+        details={[
+          ['당사자 ID', view.pseudonym],
+          ['참여 사업', `${view.case.program_name} · 1회차 인테이크`],
+          ['연락처', detail?.participant.phone ?? ''],
+          ['이메일', detail?.participant.email ?? ''],
+        ]}
+        actions={
+          <Button onClick={() => (window.location.hash = `#/cases/${caseId}/info`)}>당사자 정보</Button>
+        }
       />
 
       <div className="wire-container">

@@ -96,6 +96,10 @@ body { margin: 0; }
    가 **뒤 파일**(`shell.css:301`)에 있어 그쪽이 이긴다 — CCC 는 두 규칙이 한 시트에 있어
    순서가 반대였다. 실측: 이름·정보 격자가 가운데로 모이고 내용 폭(416px)으로 줄었다. */
 .participant-hero-card { align-items: stretch; }
+/* 정보 격자는 **4열**이다(2026-09-17 Q — 카드 장폭 1031px 에 3열은 칸이 남는다). 이식 기본은
+   3열이고(`wire.css:283`) CCC 도 브리핑 화면만 4열로 넓혔다 — 릴레이어는 당사자 카드 전부가
+   4열이다. 760px 이하는 이식 컨테이너 쿼리가 80px 라벨 행으로 접는다(그 규칙은 그대로다). */
+.participant-hero-details { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 
 .wire-choice-hint { display: block; margin-top: var(--space-1); font-size: var(--text-sm); font-weight: 400; color: var(--sub); }
 

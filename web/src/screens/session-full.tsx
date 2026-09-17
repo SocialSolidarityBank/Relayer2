@@ -1,7 +1,7 @@
 // 상담 내용 원문 보기(2026-09-16 인계 · 이름은 2026-09-17 Q — 구 `수기·음성 전문`).
 // 회차별 요약의 `전문 보기`가 여기로 온다. 읽기 전용이다 — 편집·승인은 상담 기록하기가 담당한다.
 import { useEffect, useRef, useState } from 'react';
-import { getSessionRecord, type SessionRecord } from '../api.ts';
+import { getCaseDetail, getSessionRecord, type CaseDetail, type SessionRecord } from '../api.ts';
 import {
   Forbidden,
   getTranscript,
@@ -10,7 +10,7 @@ import {
   type Recording,
   type Transcript,
 } from '../speech-api.ts';
-import { Badge, Button, Empty, ErrorText, Fold, Item, PageHeader } from '../ui.tsx';
+import { Badge, Button, Empty, ErrorText, Fold, Item, ParticipantHero } from '../ui.tsx';
 import { METHOD_LABEL } from '../vocab.ts';
 import { fmtBytes, fmtMs } from './session-audio.tsx';
 
@@ -36,6 +36,8 @@ const TRANSCRIBE_LABEL: Record<Recording['transcribe_state'], string> = {
 
 export function SessionFullScreen({ caseId, sessionId }: { caseId: number; sessionId: number }) {
   const [rec, setRec] = useState<SessionRecord | null>(null);
+  // 이름은 이 화면이 받지 않는다 — 당사자 카드를 위해 사례 상세를 한 번 더 부른다(2026-09-17 Q 시안).
+  const [detail, setDetail] = useState<CaseDetail | null>(null);
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [voiceError, setVoiceError] = useState<string | null>(null);
@@ -47,9 +49,10 @@ export function SessionFullScreen({ caseId, sessionId }: { caseId: number; sessi
     let live = true;
     void (async () => {
       try {
-        const found = await getSessionRecord(sessionId);
+        const [found, d] = await Promise.all([getSessionRecord(sessionId), getCaseDetail(caseId)]);
         if (!live) return;
         setRec(found);
+        setDetail(d);
       } catch (e) {
         if (!live) return;
         setError(e instanceof Error ? e.message : '회차를 불러오지 못했어요.');
@@ -86,13 +89,20 @@ export function SessionFullScreen({ caseId, sessionId }: { caseId: number; sessi
 
   return (
     <>
-      <PageHeader
-        title="상담 내용 원문 보기"
-        meta={`${rec.seq}회차 · ${dateLabel(rec.held_at)} · ${METHOD_LABEL[rec.method ?? ''] ?? rec.method ?? '방법 없음'}`}
+      <ParticipantHero
+        name={detail?.participant.name ?? null}
+        pseudonym={detail?.pseudonym ?? '확인 중'}
+        details={[
+          ['당사자 ID', detail?.pseudonym ?? '확인 중'],
+          [
+            '참여 사업',
+            `${detail?.case.program_name ?? '확인 중'} · ${rec.seq}회차 ${dateLabel(rec.held_at)}`,
+          ],
+          ['연락처', detail?.participant.phone ?? ''],
+          ['이메일', detail?.participant.email ?? ''],
+        ]}
         actions={
-          <Button onClick={() => (window.location.hash = `#/cases/${caseId}/info`)}>
-            회차별 요약
-          </Button>
+          <Button onClick={() => (window.location.hash = `#/cases/${caseId}/info`)}>당사자 정보</Button>
         }
       />
       <div className="wire-container">

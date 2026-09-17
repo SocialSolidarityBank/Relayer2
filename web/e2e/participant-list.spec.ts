@@ -51,7 +51,8 @@ test('이름 중심 목록에서 정보를 바로 보고 상세와 기록·일�
     await page.goto(`/#/pick/${pick}`);
     await page.getByRole('link', { name: `${name}, ${program}, ${title}`, exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/cases/${caseId}/${destination}$`));
-    await expect(page.getByRole('heading', { name: title, level: 1, exact: true })).toBeVisible();
+    // 화면 이름은 더 이상 제목이 아니다 — 당사자 카드가 머리이고 제목은 사람 이름이다(2026-09-17 Q).
+    await expect(page.getByRole('heading', { name, level: 1, exact: true })).toBeVisible();
   }
 
   // Revoking membership changes the live list response. A card must not pretend

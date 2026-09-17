@@ -17,7 +17,7 @@ async function register(page: Page) {
   await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
   await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
-  await expect(page.getByRole('heading', { name: '인테이크 작성하기' })).toBeVisible();
+  await expect(page).toHaveURL(/\/intake$/);
   const match = page.url().match(/cases\/(\d+)/);
   expect(match).not.toBeNull();
   return Number(match![1]);
@@ -64,7 +64,7 @@ test('피드백 인테이크의 조건부 입력과 실제 상담정보가 생�
     await expect.poll(() => field.evaluate(el => el.tagName === 'TEXTAREA' && el.clientHeight >= el.scrollHeight - 2)).toBe(true);
   }
   await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
-  await expect(page.getByRole('heading', { name: '상담 일정 등록', exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/schedule$/);
   const saved = await (await page.request.get(`${api}/cases/${caseId}/intake`)).json();
   expect(saved.method).toBe('in_person');
   expect(saved.place).toBe('합성 상담실');
@@ -95,7 +95,7 @@ test('상담 기록은 다섯 구획이고 인테이크의 전체 목표를 덮�
   const caseId = await register(page);
   await page.locator('#overall-goal').fill('보존할 전체 상담 목표');
   await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
-  await expect(page.getByRole('heading', { name: '상담 일정 등록', exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/schedule$/);
   await page.goto(`/#/cases/${caseId}/record`);
   await expect(page.locator('.record-main > section.wire-card .wire-card-title')).toHaveText([
     '1. 오늘 상담 내용', '2. 수행할 과제', '3. 다음에 물어볼 것', '4. 실무자 의견', '5. 다음 상담 목표',

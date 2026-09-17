@@ -4,11 +4,13 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   getBriefing,
+  getCaseDetail,
   getCase,
   getSessionRecord,
   startSession,
   recordSession,
   type Briefing,
+  type CaseDetail,
   type CaseView,
   type NewSessionInput,
   type OutcomeInput,
@@ -26,7 +28,7 @@ import {
   FormActions,
   Item,
   LineList,
-  PageHeader,
+  ParticipantHero,
   withDraft,
   type Line,
 } from '../ui.tsx';
@@ -56,6 +58,8 @@ const taskResultLabel = (o: OutcomeInput | undefined): string | null => {
 
 export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number; sessionId?: number }) {
   const [briefing, setBriefing] = useState<Briefing | null>(null);
+  // 당사자 카드의 연락처·이메일은 사례 상세가 준다(2026-09-17 Q).
+  const [detail, setDetail] = useState<CaseDetail | null>(null);
   const [view, setView] = useState<CaseView | null>(null);
   const [memo, setMemo] = useState('');
   const [tasks, setTasks] = useState<Line[]>([]);
@@ -92,14 +96,16 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
     // `editing` 을 지난 회차로 되돌린다 — 그대로 저장하면 그 회차를 덮어쓴다.
     let live = true;
     void (async () => {
-      const [b, v, rec] = await Promise.all([
+      const [b, v, rec, d] = await Promise.all([
         getBriefing(caseId),
         getCase(caseId),
         editingId ? getSessionRecord(editingId) : Promise.resolve(null),
+        getCaseDetail(caseId),
       ]);
       if (!live) return;
       setBriefing(b);
       setView(v);
+      setDetail(d);
 
       if (rec) {
         setEditing(rec);
@@ -261,11 +267,19 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
 
   return (
     <>
-      <PageHeader
-        title={editing ? '상담 기록 고쳐 쓰기' : '상담 기록하기'}
-        meta={`${briefing.participant_card.name ?? briefing.participant_card.pseudonym} · ${
-          briefing.participant_card.program_name
-        } · ${seq}회차`}
+      {/* 당사자 카드가 머리다(2026-09-17 Q 확대 2단계 — 시안). 화면 용도는 아래 첫 구획 제목이
+          말하고, 머리는 사람을 말한다. 정보는 이 화면이 이미 받는 값만 올린다. */}
+      <ParticipantHero
+        name={briefing.participant_card.name}
+        pseudonym={briefing.participant_card.pseudonym}
+        details={[
+          ['당사자 ID', briefing.participant_card.pseudonym],
+          ['참여 사업', `${briefing.participant_card.program_name} · ${seq}회차${editing ? ' 고쳐 쓰기' : ''}`],
+          ['연락처', detail?.participant.phone ?? ''],
+          ['이메일', detail?.participant.email ?? ''],
+        ]}        actions={
+          <Button onClick={() => (window.location.hash = `#/cases/${caseId}/info`)}>당사자 정보</Button>
+        }
       />
       {/* 시작이 곧 회차 — 녹음·올리기·수기 첫 입력이 회차를 연다(2026-09-16 인계). */}
       <RecordingPanel
