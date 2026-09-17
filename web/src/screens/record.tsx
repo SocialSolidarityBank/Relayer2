@@ -494,7 +494,7 @@ export function RecordScreen({
 
 
           <Card title="4. 실무자 의견">
-            <Field label="실무자 의견" htmlFor="opinion" control="textarea">
+            <Field label="실무자 의견" htmlFor="opinion" control="textarea" hideLabel>
               <textarea
                 id="opinion"
                 rows={3}
@@ -506,11 +506,14 @@ export function RecordScreen({
           </Card>
 
           <Card title="5. 다음 상담 목표">
-            <Field
-              label="다음 상담 목표"
-              htmlFor="next-goal"
-            >
-              <input id="next-goal" type="text" value={nextGoal} onChange={(e) => setNextGoal(e.target.value)} />
+            <Field label="다음 상담 목표" htmlFor="next-goal" hideLabel>
+              <input
+                id="next-goal"
+                type="text"
+                aria-label="다음 상담 목표"
+                value={nextGoal}
+                onChange={(e) => setNextGoal(e.target.value)}
+              />
             </Field>
           </Card>
 

@@ -367,6 +367,7 @@ export function Field({
   hint,
   control = 'input',
   required,
+  hideLabel,
   children,
 }: {
   label: string;
@@ -374,14 +375,18 @@ export function Field({
   hint?: ReactNode;
   control?: 'input' | 'textarea' | 'select';
   required?: boolean;
+  /** 카드 제목이 이미 같은 말을 하면 라벨 행을 빼고 입력의 `aria-label` 로만 남긴다(2026-09-18 UI-8). */
+  hideLabel?: boolean;
   children: ReactNode;
 }) {
   return (
     <div className="wire-form-field">
-      <label className="wire-form-label" htmlFor={htmlFor}>
-        {label}
-        {required && <span className="wire-badge wire-required-marker"><span className="wire-badge-label">필수</span></span>}
-      </label>
+      {!hideLabel && (
+        <label className="wire-form-label" htmlFor={htmlFor}>
+          {label}
+          {required && <span className="wire-badge wire-required-marker"><span className="wire-badge-label">필수</span></span>}
+        </label>
+      )}
       <div className="wire-input-box" data-control={control}>
         {children}
         {/* select 는 네이티브 화살표를 끈다(wire.css). 꺽쇠가 없으면 입력칸으로 보인다. */}

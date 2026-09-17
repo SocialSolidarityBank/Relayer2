@@ -346,13 +346,11 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
           {INTAKE_GROUPS.map(renderGroup)}
 
           <Card title="전체 상담 목표">
-            <FormField
-              label="전체 상담 목표"
-              htmlFor="overall-goal"
-            >
+            <FormField label="전체 상담 목표" htmlFor="overall-goal" hideLabel>
               <input
                 id="overall-goal"
                 type="text"
+                aria-label="전체 상담 목표"
                 value={overallGoal}
                 onChange={(e) => setOverallGoal(e.target.value)}
               />
