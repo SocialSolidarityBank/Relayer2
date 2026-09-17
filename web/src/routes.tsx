@@ -18,8 +18,22 @@ import { ParticipantsScreen } from './screens/participants.tsx';
 import { RecordScreen } from './screens/record.tsx';
 import { ReviewScreen } from './screens/review.tsx';
 import { ScheduleNewScreen } from './screens/schedule-new.tsx';
+import { SignupScreen } from './screens/signup.tsx';
+import { OnboardingScreen } from './screens/onboarding.tsx';
+import { SetupPendingScreen, WorkspaceScreen } from './screens/workspace.tsx';
 
 const HOME = '#/schedule';
+/** 세션이 끊긴 사람이 보던 주소. 로그인 뒤 그 자리로 돌아간다(ASTRA 검토 D). 내부 라우트만 담는다. */
+const RETURN_TO = 'relayer:returnTo';
+const PUBLIC_HASHES = new Set(['', '#', '#/', HOME, '#/login', '#/signup']);
+const rememberReturnTo = (h: string) => {
+  if (!PUBLIC_HASHES.has(h) && h.startsWith('#/')) sessionStorage.setItem(RETURN_TO, h);
+};
+const takeReturnTo = (): string | null => {
+  const h = sessionStorage.getItem(RETURN_TO);
+  sessionStorage.removeItem(RETURN_TO);
+  return h && h.startsWith('#/') && !PUBLIC_HASHES.has(h) ? h : null;
+};
 
 export function Routes() {
   const [hash, setHash] = useState(window.location.hash || HOME);
@@ -77,19 +91,28 @@ export function Routes() {
     );
 
   if (me === 'loading') return <p className="empty">불러오는 중</p>;
-  if (!me)
+
+  /**
+   * 로그아웃 상태(2026-09-17 Q·ASTRA). 문은 하나 — **로그인 화면이 곧 랜딩**이다(`/`·`#/login`·홈·깊은 주소 모두).
+   * `#/signup` 만 가입 화면. 깊은 주소(세션 끊김)는 그 주소를 적어 두었다가 로그인 뒤 돌아간다.
+   * 로그인 응답이 온 뒤 주소를 바꾸는 일은 `afterLogin` 한 곳에서만 한다.
+   * 게이트 화면은 `.preview-gate` 가 스스로 `.page-content` 를 갖는다(CCC-new /login 과 같은 문법) — 셸만 씌운다.
+   */
+  if (!me) {
+    const afterLogin = () =>
+      void getMe().then((who) => {
+        const back = takeReturnTo();
+        // 가입·로그인 주소에 머물지 않는다. 돌아갈 곳이 있으면 거기로, 없으면 셸의 가두기 규칙이 도착지를 정한다.
+        window.location.hash = back ?? HOME;
+        setMe(who);
+      });
+    if (hash !== '#/signup') rememberReturnTo(hash);
     return (
       <div className="wire-shell">
-        <div className="page-content">
-          {/* 로그인 화면은 늘 `상담 일정 보기` 주소에서 뜬다 — 자리를 되돌리는 일은 **로그아웃
-              쪽**이 한다(아래 하단 버튼). 로그인 응답이 온 뒤에 주소를 바꾸면, 그 사이에 사람이
-              (또는 시험이) 다른 화면으로 옮겨 간 것을 뒤늦게 낚아챈다(2026-09-17 실측 — 로그인
-              직후 당사자 등록으로 간 동선이 일정으로 튕겼다). 세션이 끊겨 다시 로그인하는
-              경우에는 보던 주소가 남아 있어 그 자리로 돌아간다. */}
-          <LoginScreen onDone={() => void getMe().then(setMe)} />
-        </div>
+        {hash === '#/signup' ? <SignupScreen onDone={afterLogin} /> : <LoginScreen onDone={afterLogin} />}
       </div>
     );
+  }
 
   /**
    * 주소 뒤 물음표는 화면의 **첫 상태**를 얹는 자리다(2026-09-17 Q):
@@ -99,12 +122,49 @@ export function Routes() {
   const [path, rawQuery = ''] = hash.split('?');
   const query = new URLSearchParams(rawQuery);
 
+  /**
+   * 가두기(2026-09-17 Q·ASTRA). 서버 잠금은 없고 안내용 리다이렉트다.
+   * 준비 판정은 `onboarded` 하나다(2026-09-18 QA — 워크스페이스 이름까지 요구하면 #36 이전에 시드된 기존 DB(이름 비어 있음)에서
+   * 실무자가 `기관 준비 중`에, 관리자가 마법사에 갇혔다). 이름이 없는 채 마친 기관은 기관 정보에서 채운다.
+   * - 관리자: 마법사를 안 마쳤으면 #/onboarding(워크스페이스가 없으면 1단계부터).
+   * - 실무자: 마법사가 끝나기 전엔 #/setup-pending(기관 준비 중).
+   * - 마쳤는데 마법사·준비 중 주소면 홈으로. 로그인·가입·랜딩 주소도 홈으로.
+   */
+  const ready = me.onboarded;
+  if (!ready && me.role === 'admin' && path !== '#/onboarding') {
+    window.location.hash = '#/onboarding';
+    return null;
+  }
+  if (!ready && me.role === 'worker' && path !== '#/setup-pending') {
+    window.location.hash = '#/setup-pending';
+    return null;
+  }
+  // 마법사를 마친 직후는 기관 요약(완료 화면)으로 — 완료 핸들러가 `onboarded` 만 바꾸고 주소는 여기서 정한다.
+  // 주소와 상태를 따로 바꾸면 그 사이 렌더가 어긋난 조합을 본다(2026-09-17 실측).
+  if (ready && path === '#/onboarding') {
+    window.location.hash = '#/workspace?done=1';
+    return null;
+  }
+  if (ready && (path === '#/setup-pending' || PUBLIC_HASHES.has(hash)) && path !== HOME) {
+    window.location.hash = HOME;
+    return null;
+  }
   const screen = (() => {
     if (path === HOME) {
       const focus = Number(query.get('case'));
       return <HomeScreen focusCaseId={Number.isFinite(focus) && focus > 0 ? focus : null} />;
     }
-    if (path === '#/participants') return <ParticipantsScreen />;
+    // 0단계·완료 뒤에는 서버에서 `me` 를 다시 읽는다 — 워크스페이스(이름·주소 이름)와 onboarded 를 한 번에 맞춘다.
+    if (path === '#/onboarding') {
+      const refresh = () => void getMe().then(setMe);
+      return <OnboardingScreen me={me} onWorkspace={refresh} onDone={refresh} />;
+    }
+    if (path === '#/setup-pending') return <SetupPendingScreen me={me} onRefresh={() => void getMe().then(setMe)} />;
+    if (path === '#/workspace') return <WorkspaceScreen me={me} justDone={query.get('done') === '1'} />;
+    if (path === '#/participants') {
+      const programId = Number(query.get('program'));
+      return <ParticipantsScreen initialProgramId={Number.isInteger(programId) && programId > 0 ? programId : null} />;
+    }
     // 사례를 안 고른 채 상담 기록하기·상담 일정 등록을 누르면 여기로 온다.
     if (path === '#/pick/record') return <ParticipantsScreen pickFor="record" />;
     if (path === '#/pick/schedule') return <ParticipantsScreen pickFor="schedule" />;

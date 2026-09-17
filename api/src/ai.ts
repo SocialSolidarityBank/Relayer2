@@ -152,14 +152,28 @@ async function callGemini(prompt: string): Promise<Shape> {
 }
 
 /**
+ * OpenAI 키의 출처(2026-09-17 Q). 기관이 화면에서 넣은 키(DB 암호문)가 먼저고, 없으면 환경 변수다.
+ * 호출마다 다시 읽는다 — 키를 바꾸면 다음 호출부터 바로 적용된다. 값은 절대 응답·로그에 싣지 않는다.
+ */
+export async function openAiKey(): Promise<{ key: string; source: 'db' | 'env' } | null> {
+  const [row] = await sql<Array<{ enc_openai_key: string | null }>>`
+    select enc_openai_key from organization where id = 1`;
+  const stored = decryptPii(row?.enc_openai_key ?? null);
+  if (stored) return { key: stored, source: 'db' };
+  const env = process.env.OPENAI_API_KEY;
+  return env ? { key: env, source: 'env' } : null;
+}
+
+/**
  * OpenAI 에 응답 보관을 맡기지 않는다 — 동의 문안이 그렇게 약속한다(2026-09-17 Q).
  * 요청 본문과 감사 기록이 같은 값을 읽는다. 둘이 어긋나면 감사가 거짓이 된다.
  */
 const OPENAI_STORE = false;
 
 async function callOpenAi(prompt: string): Promise<Shape> {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) throw new AiUnavailable('AI 정리 불가, OPENAI_API_KEY 없음');
+  const found = await openAiKey();
+  if (!found) throw new AiUnavailable('AI 정리 불가, OpenAI API 키 없음');
+  const { key } = found;
 
   const res = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',

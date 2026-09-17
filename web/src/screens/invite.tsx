@@ -10,7 +10,7 @@ import { peekInvite, signUpWithInvite } from '../api.ts';
 import { Button, Card, ErrorText, Field, FormActions, PageHeader } from '../ui.tsx';
 
 export function InviteScreen({ token, onDone }: { token: string; onDone: () => void }) {
-  const [role, setRole] = useState<string | null | 'loading'>('loading');
+  const [invite, setInvite] = useState<{ role: string; org_name: string } | null | 'loading'>('loading');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -19,12 +19,12 @@ export function InviteScreen({ token, onDone }: { token: string; onDone: () => v
 
   useEffect(() => {
     void peekInvite(token)
-      .then((r) => setRole(r.role))
-      .catch(() => setRole(null));
+      .then(setInvite)
+      .catch(() => setInvite(null));
   }, [token]);
 
-  if (role === 'loading') return <p className="empty">불러오는 중</p>;
-  if (role === null)
+  if (invite === 'loading') return <p className="empty">불러오는 중</p>;
+  if (invite === null)
     return (
       <>
         <PageHeader title="쓸 수 없는 초대" />
@@ -50,7 +50,11 @@ export function InviteScreen({ token, onDone }: { token: string; onDone: () => v
 
   return (
     <>
-      <PageHeader title="릴레이어에 들어오기" meta={role === 'admin' ? '관리자 초대' : '실무자 초대'} />
+      {/* 어느 기관의 초대인지가 먼저다 — 기관 이름이 제목, 역할은 메타. */}
+      <PageHeader
+        title={invite.org_name ? `${invite.org_name} 들어오기` : '릴레이어에 들어오기'}
+        meta={invite.role === 'admin' ? '관리자 초대' : '실무자 초대'}
+      />
       <Card title="계정 만들기">
         <Field label="아이디" htmlFor="iv-email" required>
           <input id="iv-email" value={email} onChange={(e) => setEmail(e.target.value)} />

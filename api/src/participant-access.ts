@@ -143,8 +143,8 @@ export async function openAccess(token: string, code: string): Promise<OpenResul
   const schedule = await sql<
     Array<{ scheduled_at: string; method: string | null; place: string | null; program_name: string }>
   >`
-    select s.scheduled_at, s.method, s.place, c.program_name
-    from sessions s join support_cases c on c.id = s.case_id
+    select s.scheduled_at, s.method, s.place, pg.name as program_name
+    from sessions s join support_cases c on c.id = s.case_id join programs pg on pg.id = c.program_id
     where c.id = ${row.case_id}
       and s.status = 'planned' and s.scheduled_at >= now()
     order by s.scheduled_at`;

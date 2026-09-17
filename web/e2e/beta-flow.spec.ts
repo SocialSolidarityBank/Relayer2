@@ -48,7 +48,7 @@ const pickFromMenu = async (page: Page, kind: 'record' | 'schedule', name: strin
 test('등록부터 회차 기록·이어받기까지 한 바퀴', async ({ page }) => {
   // ── 로그인 ──────────────────────────────────────────────────
   // 로그인하지 않으면 어떤 화면도 열리지 않는다. 계정은 시드가 만든다.
-  await page.goto('/');
+  await page.goto('/#/login');
   await page.locator('#email').fill('test2');
   await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인' }).click();
@@ -70,8 +70,8 @@ test('등록부터 회차 기록·이어받기까지 한 바퀴', async ({ page 
   await page.locator('#name').fill(NAME);
   await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
   await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
-  // 사업은 고르기다(2026-09-16 Q) — 목록의 첫 사업을 집는다.
-  await page.locator('#program').selectOption({ index: 1 });
+  // 사업은 고르기다(2026-09-16 Q) — 시드 사업을 이름으로 집는다(목록은 최신이 위라 첫 칸이 매번 바뀐다).
+  await page.locator('#program').selectOption({ label: '함께온기금 울타리대출' });
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
 
   // ── 인테이크 작성하기 ───────────────────────────────────────
@@ -204,7 +204,7 @@ test('등록부터 회차 기록·이어받기까지 한 바퀴', async ({ page 
 test('예정 회차가 없어도 상담 기록하기에서 일시를 적고 기록한다', async ({ page }) => {
   const name = `E2E 즉석${Date.now()}`;
 
-  await page.goto('/');
+  await page.goto('/#/login');
   await page.locator('#email').fill('test2');
   await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인' }).click();
@@ -213,8 +213,8 @@ test('예정 회차가 없어도 상담 기록하기에서 일시를 적고 기�
   await page.locator('#name').fill(name);
   await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
   await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
-  // 사업은 고르기다(2026-09-16 Q) — 목록의 첫 사업을 집는다.
-  await page.locator('#program').selectOption({ index: 1 });
+  // 사업은 고르기다(2026-09-16 Q) — 시드 사업을 이름으로 집는다(목록은 최신이 위라 첫 칸이 매번 바뀐다).
+  await page.locator('#program').selectOption({ label: '함께온기금 울타리대출' });
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
   await expect(page).toHaveURL(/\/intake$/);
   await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
@@ -238,7 +238,7 @@ test('상담 종결은 회차를 만들지 않고 미완료 과제를 그대로 
   const name = `E2E 종결${Date.now()}`;
   const task = '주민센터에서 서류 떼어 오기';
 
-  await page.goto('/');
+  await page.goto('/#/login');
   await page.locator('#email').fill('test2');
   await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인' }).click();
@@ -247,8 +247,8 @@ test('상담 종결은 회차를 만들지 않고 미완료 과제를 그대로 
   await page.locator('#name').fill(name);
   await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
   await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
-  // 사업은 고르기다(2026-09-16 Q) — 목록의 첫 사업을 집는다.
-  await page.locator('#program').selectOption({ index: 1 });
+  // 사업은 고르기다(2026-09-16 Q) — 시드 사업을 이름으로 집는다(목록은 최신이 위라 첫 칸이 매번 바뀐다).
+  await page.locator('#program').selectOption({ label: '함께온기금 울타리대출' });
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
   await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
 
@@ -310,7 +310,7 @@ test('상담 종결은 회차를 만들지 않고 미완료 과제를 그대로 
 test('종결 상담으로 저장하면 종결 화면으로 이어진다', async ({ page }) => {
   const name = `E2E 종결상담${Date.now()}`;
 
-  await page.goto('/');
+  await page.goto('/#/login');
   await page.locator('#email').fill('test2');
   await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인' }).click();
@@ -319,8 +319,8 @@ test('종결 상담으로 저장하면 종결 화면으로 이어진다', async 
   await page.locator('#name').fill(name);
   await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
   await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
-  // 사업은 고르기다(2026-09-16 Q) — 목록의 첫 사업을 집는다.
-  await page.locator('#program').selectOption({ index: 1 });
+  // 사업은 고르기다(2026-09-16 Q) — 시드 사업을 이름으로 집는다(목록은 최신이 위라 첫 칸이 매번 바뀐다).
+  await page.locator('#program').selectOption({ label: '함께온기금 울타리대출' });
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
   await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
 
@@ -347,7 +347,7 @@ test('종결 상담으로 저장하면 종결 화면으로 이어진다', async 
 
 // 당사자는 비밀번호가 맞아도 들어오지 못한다. 열람은 실무자가 보낸 링크와 코드다(GLOSSARY §3).
 test('당사자 계정은 로그인되지 않고 이유를 말한다', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/#/login');
   await page.locator('#email').fill('test3');
   await page.locator('#password').fill('test3');
   await page.getByRole('button', { name: '로그인' }).click();
@@ -360,7 +360,7 @@ test('당사자 계정은 로그인되지 않고 이유를 말한다', async ({ 
 test('인테이크를 다시 열어 고쳐 쓴다', async ({ page }) => {
   const name = `E2E 인테이크수정${Date.now()}`;
 
-  await page.goto('/');
+  await page.goto('/#/login');
   await page.locator('#email').fill('test2');
   await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인' }).click();
@@ -369,8 +369,8 @@ test('인테이크를 다시 열어 고쳐 쓴다', async ({ page }) => {
   await page.locator('#name').fill(name);
   await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
   await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
-  // 사업은 고르기다(2026-09-16 Q) — 목록의 첫 사업을 집는다.
-  await page.locator('#program').selectOption({ index: 1 });
+  // 사업은 고르기다(2026-09-16 Q) — 시드 사업을 이름으로 집는다(목록은 최신이 위라 첫 칸이 매번 바뀐다).
+  await page.locator('#program').selectOption({ label: '함께온기금 울타리대출' });
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
   await expect(page).toHaveURL(/\/intake$/);
   await page.locator('#overall-goal').fill('처음 적은 목표');
@@ -420,7 +420,7 @@ test('회차를 고쳐 쓰고, 적어만 둔 줄도 저장된다', async ({ page
   const name = `E2E 회차수정${Date.now()}`;
   const task = '서류 떼어 오기';
 
-  await page.goto('/');
+  await page.goto('/#/login');
   await page.locator('#email').fill('test2');
   await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인' }).click();
@@ -429,8 +429,8 @@ test('회차를 고쳐 쓰고, 적어만 둔 줄도 저장된다', async ({ page
   await page.locator('#name').fill(name);
   await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
   await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
-  // 사업은 고르기다(2026-09-16 Q) — 목록의 첫 사업을 집는다.
-  await page.locator('#program').selectOption({ index: 1 });
+  // 사업은 고르기다(2026-09-16 Q) — 시드 사업을 이름으로 집는다(목록은 최신이 위라 첫 칸이 매번 바뀐다).
+  await page.locator('#program').selectOption({ label: '함께온기금 울타리대출' });
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
   // 인테이크에서 `추가`를 누르지 않고 적어만 둔다
   await page.getByRole('textbox', { name: '수행할 과제' }).fill(task);
@@ -477,7 +477,7 @@ test('회차를 고쳐 쓰고, 적어만 둔 줄도 저장된다', async ({ page
 test('민감정보 동의가 없으면 기록을 저장하지 못하고, 받으면 저장된다', async ({ page }) => {
   const name = `E2E 동의${Date.now()}`;
 
-  await page.goto('/');
+  await page.goto('/#/login');
   await page.locator('#email').fill('test2');
   await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인' }).click();
@@ -487,8 +487,8 @@ test('민감정보 동의가 없으면 기록을 저장하지 못하고, 받으�
   await page.locator('#name').fill(name);
   await expect(page.getByRole('button', { name: '등록하고 인테이크 쓰기' })).toBeDisabled();
   await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
-  // 사업은 고르기다(2026-09-16 Q) — 목록의 첫 사업을 집는다.
-  await page.locator('#program').selectOption({ index: 1 });
+  // 사업은 고르기다(2026-09-16 Q) — 시드 사업을 이름으로 집는다(목록은 최신이 위라 첫 칸이 매번 바뀐다).
+  await page.locator('#program').selectOption({ label: '함께온기금 울타리대출' });
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
 
   // 인테이크 저장이 막힌다
@@ -527,7 +527,7 @@ test('민감정보 동의가 없으면 기록을 저장하지 못하고, 받으�
 // P1 열람 기록. PII 를 실은 화면 조회 1건 = 감사 1행, 항목 이름만 남는다.
 test('PII 를 본 조회가 열람 기록에 남고, 관리자만 본다', async ({ page }) => {
   // 실무자가 당사자 정보를 본다
-  await page.goto('/');
+  await page.goto('/#/login');
   await page.locator('#email').fill('test2');
   await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인' }).click();
@@ -571,7 +571,7 @@ test('자유 글을 저장하고 다시 열면 그대로 읽힌다', async ({ pa
   const name = `E2E 암호화${Date.now()}`;
   const memo = '건강·채무 이야기가 섞인 상담 내용';
 
-  await page.goto('/');
+  await page.goto('/#/login');
   await page.locator('#email').fill('test2');
   await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인' }).click();
@@ -580,8 +580,8 @@ test('자유 글을 저장하고 다시 열면 그대로 읽힌다', async ({ pa
   await page.locator('#name').fill(name);
   await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
   await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
-  // 사업은 고르기다(2026-09-16 Q) — 목록의 첫 사업을 집는다.
-  await page.locator('#program').selectOption({ index: 1 });
+  // 사업은 고르기다(2026-09-16 Q) — 시드 사업을 이름으로 집는다(목록은 최신이 위라 첫 칸이 매번 바뀐다).
+  await page.locator('#program').selectOption({ label: '함께온기금 울타리대출' });
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
   await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
 
@@ -605,7 +605,7 @@ test('자유 글을 저장하고 다시 열면 그대로 읽힌다', async ({ pa
 test('당사자는 링크와 코드로 자기 일정만 본다', async ({ page, context }) => {
   const name = `E2E 열람${Date.now()}`;
 
-  await page.goto('/');
+  await page.goto('/#/login');
   await page.locator('#email').fill('test2');
   await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인' }).click();
@@ -615,8 +615,8 @@ test('당사자는 링크와 코드로 자기 일정만 본다', async ({ page, 
   await page.locator('#phone').fill('010-5555-6666');
   await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
   await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
-  // 사업은 고르기다(2026-09-16 Q) — 목록의 첫 사업을 집는다.
-  await page.locator('#program').selectOption({ index: 1 });
+  // 사업은 고르기다(2026-09-16 Q) — 시드 사업을 이름으로 집는다(목록은 최신이 위라 첫 칸이 매번 바뀐다).
+  await page.locator('#program').selectOption({ label: '함께온기금 울타리대출' });
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
   await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
 
@@ -669,7 +669,7 @@ test('당사자는 링크와 코드로 자기 일정만 본다', async ({ page, 
 test('외부 LLM 동의가 없으면 AI 정리를 하지 않는다', async ({ page }) => {
   const name = `E2E AI${Date.now()}`;
 
-  await page.goto('/');
+  await page.goto('/#/login');
   await page.locator('#email').fill('test2');
   await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인' }).click();
@@ -678,8 +678,8 @@ test('외부 LLM 동의가 없으면 AI 정리를 하지 않는다', async ({ pa
   await page.locator('#name').fill(name);
   await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
   await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
-  // 사업은 고르기다(2026-09-16 Q) — 목록의 첫 사업을 집는다.
-  await page.locator('#program').selectOption({ index: 1 });
+  // 사업은 고르기다(2026-09-16 Q) — 시드 사업을 이름으로 집는다(목록은 최신이 위라 첫 칸이 매번 바뀐다).
+  await page.locator('#program').selectOption({ label: '함께온기금 울타리대출' });
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
   await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
 
@@ -708,7 +708,7 @@ test('외부 LLM 동의가 없으면 AI 정리를 하지 않는다', async ({ pa
 // 잘못 쓴 요청은 **400** 이다. 500 으로 답하면 서버가 고장난 줄 안다.
 // 2026-09-15 실측: ZodError 를 잡는 곳이 없어 모든 잘못된 입력이 500 이었다.
 test('스키마에 안 맞는 요청은 400 으로 답한다', async ({ page, request }) => {
-  await page.goto('/');
+  await page.goto('/#/login');
   await page.locator('#email').fill('test2');
   await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인' }).click();
@@ -720,7 +720,7 @@ test('스키마에 안 맞는 요청은 400 으로 답한다', async ({ page, re
   // 개발 서버는 /api 를 API 로 넘긴다(web/src/api.ts:44).
   const res = await request.post(`${process.env.PLAYWRIGHT_API_PREFIX ?? '/api'}/cases`, {
     headers: { cookie, 'content-type': 'application/json' },
-    data: { name: '검증', program_name: 'x', consents: [{ domain: '없는_영역', decision: 'grant' }] },
+    data: { name: '검증', program_id: 1, consents: [{ domain: '없는_영역', decision: 'grant' }] },
   });
 
   expect(res.status()).toBe(400);

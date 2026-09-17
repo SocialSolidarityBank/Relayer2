@@ -39,12 +39,23 @@ const SORTS = [
   { key: 'date_desc', label: '다음 상담 늦은 순' },
 ] as const;
 
-export function ParticipantsScreen({ pickFor = null }: { pickFor?: PickFor }) {
+/**
+ * `initialProgramId` 는 사업 목록에서 `당사자 목록` 링크로 건너올 때 얹힌다(`#/participants?program=<id>`).
+ * 새 페이지가 아니라 같은 목록에 걸개가 걸린 채 열리는 것이다(2026-09-17 Q).
+ */
+export function ParticipantsScreen({
+  pickFor = null,
+  initialProgramId = null,
+}: {
+  pickFor?: PickFor;
+  initialProgramId?: number | null;
+}) {
   const [rows, setRows] = useState<ParticipantRow[] | null>(null);
   const [q, setQ] = useState('');
   // 고르기 모드(기록·일정)는 진행 중 사례가 기본이다 — 종결 사례는 새 기록·일정을 받지 않는다.
   const [status, setStatus] = useState<string>(pickFor ? 'open' : 'all');
-  const [program, setProgram] = useState('all');
+  // 사업 걸개는 id 로 건다 — 이름은 바뀔 수 있다.
+  const [program, setProgram] = useState(initialProgramId ? String(initialProgramId) : 'all');
   const [worker, setWorker] = useState('all');
   const [sort, setSort] = useState<string>('name');
   const [page, setPage] = useState(1);
@@ -62,14 +73,17 @@ export function ParticipantsScreen({ pickFor = null }: { pickFor?: PickFor }) {
 
   // 걸개 선택창의 값은 목록이 만든다 — 없는 사업·없는 실무자를 고르게 두지 않는다.
   const { programs, workers } = useMemo(() => {
-    const programs = new Set<string>();
+    const programs = new Map<number, string>();
     const workers = new Set<string>();
     for (const row of rows ?? []) {
-      programs.add(row.program_name);
+      programs.set(row.program_id, row.program_name);
       for (const name of workersOf(row)) workers.add(name);
     }
     const ko = (a: string, b: string) => a.localeCompare(b, 'ko');
-    return { programs: [...programs].sort(ko), workers: [...workers].sort(ko) };
+    return {
+      programs: [...programs].sort(([, a], [, b]) => ko(a, b)),
+      workers: [...workers].sort(ko),
+    };
   }, [rows]);
 
   const shown = useMemo(() => {
@@ -80,7 +94,7 @@ export function ParticipantsScreen({ pickFor = null }: { pickFor?: PickFor }) {
       if (status === 'need_assign' && row.can_access) return false;
       if (status === 'open' && row.status !== 'open') return false;
       if (status === 'closed' && row.status !== 'closed') return false;
-      if (program !== 'all' && row.program_name !== program) return false;
+      if (program !== 'all' && row.program_id !== Number(program)) return false;
       if (worker === 'none' && row.assignees.length > 0) return false;
       if (worker !== 'all' && worker !== 'none' && !workersOf(row).includes(worker)) return false;
       return true;
@@ -159,7 +173,7 @@ export function ParticipantsScreen({ pickFor = null }: { pickFor?: PickFor }) {
             </Select>
             <Select id="filter-program" aria-label="사업명 걸개" value={program} onChange={setProgram}>
               <option value="all">사업 전체</option>
-              {programs.map((name) => <option key={name} value={name}>{name}</option>)}
+              {programs.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
             </Select>
             <Select id="filter-worker" aria-label="담당 실무자 걸개" value={worker} onChange={setWorker}>
               <option value="all">실무자 전체</option>

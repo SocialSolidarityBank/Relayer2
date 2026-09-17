@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { DATABASE_URL, sql } from '../src/db.ts';
 import { app } from '../src/routes.ts';
+import { ensureProgram } from './voice-fixture.ts';
 import { issueCookie } from '../src/auth.ts';
 import { encryptText } from '../src/pii.ts';
 
@@ -32,7 +33,7 @@ describe.skipIf(!enabled)('recording access and comparison',()=>{
     const users=await sql<Array<{id:number}>>`insert into users(email,name,role) values
       (${prefix+'a'},'음성 A','worker'),(${prefix+'b'},'음성 B','worker'),(${prefix+'m'},'음성 관리자','admin') returning id`;
     const [a,b,admin]=users.map(u=>u.id);
-    const created=await req('/cases',a,'POST',{name:'음성 합성',program_name:'음성 검증',consents:[
+    const created=await req('/cases',a,'POST',{name:'음성 합성',program_id:await ensureProgram('음성 검증'),consents:[
       {domain:'personal_data_collection_use',decision:'grant'},
       {domain:'sensitive_information_processing',decision:'grant'},
       {domain:'counseling_recording',decision:'grant'},

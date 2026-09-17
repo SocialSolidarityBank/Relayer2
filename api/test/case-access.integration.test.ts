@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { DATABASE_URL, sql } from '../src/db.ts';
 import { app } from '../src/routes.ts';
+import { ensureProgram } from './voice-fixture.ts';
 import { issueCookie } from '../src/auth.ts';
 import { randomUUID } from 'node:crypto';
 import { encryptPii } from '../src/pii.ts';
@@ -28,7 +29,7 @@ async function fixtureUsers(): Promise<number[]> {
 describe.skipIf(!enabled)('shared case assignment boundary', () => {
   it('requires membership including admins, adds jointly, revokes immediately without discarding another member', async () => {
     const [a,b,admin] = await fixtureUsers();
-    const created = await request('/cases',a,'POST',{name:'공동배정 합성',program_name:'권한 검증',consents:[{domain:'personal_data_collection_use',decision:'grant'},{domain:'sensitive_information_processing',decision:'grant'}]});
+    const created = await request('/cases',a,'POST',{name:'공동배정 합성',program_id:await ensureProgram('권한 검증'),consents:[{domain:'personal_data_collection_use',decision:'grant'},{domain:'sensitive_information_processing',decision:'grant'}]});
     expect(created.status).toBe(201);
     const {case_id:caseId,participant_id:participantId}=await created.json();
     await sql`update participant_pii set enc_phone=${encryptPii('010-1111-2222')} where participant_id=${participantId}`;
@@ -74,7 +75,7 @@ describe.skipIf(!enabled)('shared case assignment boundary', () => {
 
   it('approval adds a second assignee instead of replacing the existing one', async()=>{
     const [a,b,admin] = await fixtureUsers();
-    const res=await request('/cases',a,'POST',{name:'추가배정 합성',program_name:'권한 검증',consents:[{domain:'personal_data_collection_use',decision:'grant'}]});
+    const res=await request('/cases',a,'POST',{name:'추가배정 합성',program_id:await ensureProgram('권한 검증'),consents:[{domain:'personal_data_collection_use',decision:'grant'}]});
     const {case_id}=await res.json();
     expect((await request('/settings/requests',b,'POST',{case_id,reason:'팀 합의'})).status).toBe(200);
     const [pending]=await sql<Array<{id:number}>>`select id from assignment_requests where case_id=${case_id} and requested_by=${b}`;
@@ -87,9 +88,9 @@ describe.skipIf(!enabled)('shared case assignment boundary', () => {
 
   it('limits participant links to the issuer case and invalidates links after issuer removal', async () => {
     const [a,b,admin] = await fixtureUsers();
-    const created=await request('/cases',a,'POST',{name:'다사업 합성',program_name:'A사업',consents:[{domain:'personal_data_collection_use',decision:'grant'}]});
+    const created=await request('/cases',a,'POST',{name:'다사업 합성',program_id:await ensureProgram('A사업'),consents:[{domain:'personal_data_collection_use',decision:'grant'}]});
     const {case_id,participant_id}=await created.json();
-    const [other]=await sql<Array<{id:number}>>`insert into support_cases(participant_id,program_name) values(${participant_id},'B사업') returning id`;
+    const [other]=await sql<Array<{id:number}>>`insert into support_cases(participant_id,program_id) values(${participant_id},${await ensureProgram('B사업')}) returning id`;
     await request('/settings/assign',admin,'POST',{case_id:other.id,user_ids:[b]});
     const tomorrow = new Date(Date.now()+86400000).toISOString();
     const otherConsents = await (await request(`/cases/${other.id}/consents`, b)).json();

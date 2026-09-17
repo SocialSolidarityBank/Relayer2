@@ -8,6 +8,7 @@ import type { Card, CardOutcome, Session, SupportCase } from '../src/domain/type
 const supportCase: SupportCase = {
   id: 1,
   participant_id: 1,
+  program_id: 1,
   program_name: '함께온기금 울타리대출',
   status: 'open',
   overall_goal: null,

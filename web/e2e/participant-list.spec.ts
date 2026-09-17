@@ -1,11 +1,12 @@
 import { expect, test } from '@playwright/test';
+import { createProgram } from './programs.ts';
 
 const api = process.env.PLAYWRIGHT_API_PREFIX ?? '/api';
 
 // Exercise real list responses: names, recording state and access boundaries must
 // survive the switch from collapsed actions to the CCC name-first card.
 test('이름 중심 목록에서 정보를 바로 보고 상세와 기록·일정으로 이동한다', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/#/login');
   await page.locator('#email').fill('test2');
   await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인', exact: true }).click();
@@ -14,7 +15,7 @@ test('이름 중심 목록에서 정보를 바로 보고 상세와 기록·일�
   const name = `가나다 목록 검증 ${Date.now()}`;
   const program = `목록 검증 사업 ${Date.now()}`;
   const created = await page.request.post(`${api}/cases`, { data: {
-    name, program_name: program,
+    name, program_id: await createProgram(program),
     consents: [
       { domain: 'personal_data_collection_use', decision: 'grant' },
       { domain: 'sensitive_information_processing', decision: 'grant' },
@@ -47,12 +48,12 @@ test('이름 중심 목록에서 정보를 바로 보고 상세와 기록·일�
   // 한 쪽은 열 장이다. 그보다 많으면 가운데 쪽 넘기기가 선다.
   // 쪽이 갈릴 만큼은 **이 spec 이 직접 만든다** — 남이 남긴 자료에 기대면 DB 를 비운 뒤 깨진다
   // (2026-09-18: 로컬 DB 를 시드만 남기고 비웠더니 `10장` 단정이 5장에서 떨어졌다).
-  // 채움 사례는 **다른 사업**이다 — 아래 `사업명 걸개` 단정이 이 사업으로 1장을 센다.
-  const fillerProgram = `쪽 넘기기 사업 ${Date.now()}`;
+  // 채움 사례는 **다른 사업**이다 — 아래 `사업명 걸개` 단정이 본 검증 사업으로 1장을 센다.
+  const fillerProgramId = await createProgram(`쪽 넘기기 사업 ${Date.now()}`);
   for (let i = 0; i < 10; i += 1) {
     const filler = await page.request.post(`${api}/cases`, { data: {
       name: `쪽 넘기기 검증 ${Date.now()}-${i}`,
-      program_name: fillerProgram,
+      program_id: fillerProgramId,
       consents: [{ domain: 'personal_data_collection_use', decision: 'grant' }],
     } });
     expect(filler.status()).toBe(201);

@@ -246,9 +246,12 @@ export function ParticipantHero({
   );
 }
 
-/** surface-card wire-card + 제목·구분선·본문. 카드 div 를 손으로 만들지 않는다(DESIGN.md §5). */
+/**
+ * surface-card wire-card + 제목·구분선·본문. 카드 div 를 손으로 만들지 않는다(DESIGN.md §5).
+ */
 export function Card({
   title,
+  badge,
   hint,
   action,
   tone,
@@ -256,6 +259,8 @@ export function Card({
   className,
 }: {
   title?: string;
+  /** 제목 옆에 붙는 식별자 배지(주소 이름 따위). 이식 `.wire-card-head` 는 배지를 auto 마진에서 뺀다. */
+  badge?: ReactNode;
   hint?: ReactNode;
   /** 제목과 같은 행 오른쪽 끝에 서는 행동 하나(이식 `.wire-card-head`). */
   action?: ReactNode;
@@ -268,10 +273,11 @@ export function Card({
     <section className={className ? `surface-card wire-card ${className}` : 'surface-card wire-card'}>
       {title && (
         <>
-          {action ? (
+          {badge || action ? (
             <div className="wire-card-title" data-tone={tone}>
               <div className="wire-card-head">
                 <h2>{title}</h2>
+                {badge && <span className="wire-badge"><span className="wire-badge-label">{badge}</span></span>}
                 {action}
               </div>
             </div>
@@ -611,7 +617,7 @@ export function Item({ title, desc, action }: { title: ReactNode; desc?: ReactNo
   );
 }
 
-export const Badge = ({ tone, children }: { tone?: 'mint' | 'lavender' | 'blue'; children: ReactNode }) => (
+export const Badge = ({ tone, children }: { tone?: 'mint' | 'lavender' | 'blue' | 'coral'; children: ReactNode }) => (
   <span className="wire-badge" data-tone={tone}>
     <span className="wire-badge-label">{children}</span>
   </span>
@@ -638,10 +644,10 @@ export const Meta = ({ parts }: { parts: ReadonlyArray<ReactNode> }) => {
 };
 
 /** 이름·값 표. 이식 CSS 의 CCC-81 표 부품을 그대로 쓴다. */
-export const DataRows = ({ rows }: { rows: ReadonlyArray<[string, ReactNode]> }) => (
+export const DataRows = ({ rows }: { rows: ReadonlyArray<[ReactNode, ReactNode]> }) => (
   <dl className="wire-data-rows">
-    {rows.map(([label, value]) => (
-      <div className="wire-data-row" key={label}>
+    {rows.map(([label, value], i) => (
+      <div className="wire-data-row" key={typeof label === 'string' ? label : i}>
         <dt>{label}</dt>
         <dd>{value}</dd>
       </div>
