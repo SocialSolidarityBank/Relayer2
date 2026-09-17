@@ -47,8 +47,8 @@ test('등록부터 회차 기록·이어받기까지 한 바퀴', async ({ page 
   await page.getByRole('button', { name: '로그인' }).click();
 
   // ── 당사자 등록 ─────────────────────────────────────────────
-  // 로그인하면 홈은 일정이다
-  await expect(page.getByRole('heading', { name: '일정', exact: true })).toBeVisible();
+  // 로그인하면 홈(상담 일정)이 연다 — 화면 제목이 아니라 셸의 내 계정 표시로 준비를 본다.
+  await expect(page.locator('.app-nav-me')).toBeVisible();
   const scheduleMenu = page.locator('.navigation-group', {
     has: page.locator('.navigation-section-title', { hasText: '일정' }),
   });
@@ -323,7 +323,7 @@ test('당사자 계정은 로그인되지 않고 이유를 말한다', async ({ 
   await page.getByRole('button', { name: '로그인' }).click();
 
   await expect(page.getByText('당사자는 로그인하지 않아요', { exact: false })).toBeVisible();
-  await expect(page.getByRole('heading', { name: '일정', exact: true })).toHaveCount(0);
+  await expect(page.locator('.app-nav-me')).toHaveCount(0);
 });
 
 // 인테이크는 한 번 쓰고 끝이 아니다. 다시 열어 고칠 수 있어야 한다(2026-09-15 Q).
@@ -492,7 +492,7 @@ test('PII 를 본 조회가 열람 기록에 남고, 관리자만 본다', async
   await page.locator('#email').fill('test2');
   await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인' }).click();
-  await expect(page.getByRole('heading', { name: '일정', exact: true })).toBeVisible();
+  await expect(page.locator('.app-nav-me')).toBeVisible();
   await page.goto('/#/cases/1/info');
   await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
 
@@ -673,7 +673,7 @@ test('스키마에 안 맞는 요청은 400 으로 답한다', async ({ page, re
   await page.locator('#email').fill('test2');
   await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인' }).click();
-  await expect(page.getByRole('heading', { name: '일정' })).toBeVisible();
+  await expect(page.locator('.app-nav-me')).toBeVisible();
 
   const cookies = await page.context().cookies();
   const cookie = cookies.map((c) => `${c.name}=${c.value}`).join('; ');

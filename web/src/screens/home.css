@@ -1,0 +1,86 @@
+/* 상담 일정 조회. 공용 탐색·선택·카드·날짜 선택 부품을 그대로 사용한다. */
+.sc-page { min-width: 0; }
+.sc-page > [aria-busy] { min-width: 0; }
+.sc-toolbar { --sc-control-height: 30px; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: var(--space-5); }
+.sc-view-select { width: 104px; flex: 0 0 104px; }
+.sc-view-select > .wire-input-box { min-height: var(--sc-control-height); }
+.sc-toolbar .schedule-nav-controls { justify-content: flex-start; min-width: 0; }
+.sc-toolbar .schedule-nav-period { grid-template-columns: var(--sc-control-height) minmax(0, auto) var(--sc-control-height); gap: var(--space-5); }
+/* 글자를 2px 오른쪽으로 민다: 박스 간격은 20/20 이지만 '2'와 '월·일' 글리프 여백 차로 왼쪽이 붙어 보였다(2026-09-17 Q). */
+.sc-toolbar .schedule-period-label { justify-self: center; height: var(--sc-control-height); padding-inline-start: 2px; }
+.sc-toolbar > .wire-button, .sc-toolbar .schedule-nav-period > .wire-button { min-width: var(--sc-control-height); min-height: var(--sc-control-height); flex-shrink: 0; }
+.sc-toolbar .schedule-nav-period > .wire-button { padding-inline: 0; }
+/* 일간의 꺽쇠 사이 날짜는 달력 모달을 여는 글자 버튼이다. 버튼 껍데기는 지우고 라벨 규칙만 남긴다. */
+.sc-toolbar .schedule-date-inline { border: 0; background: transparent; color: var(--ink); cursor: pointer; }
+.sc-toolbar .schedule-date-inline:hover { text-decoration: underline; text-underline-offset: 3px; }
+.sc-calendar { padding: 0; overflow: hidden; }
+.sc-calendar > .wire-card-body { display: block; padding: 0; }
+.sc-month-grid, .sc-time-grid { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; }
+.sc-month-grid thead { background: var(--gradient-action); }
+.sc-month-grid th { padding: var(--space-3) var(--space-2); text-align: left; font-size: var(--text-detail); font-weight: 500; color: var(--on-action); border-bottom: 1px solid var(--line); border-right: 1px solid var(--line-on-action); }
+.sc-month-grid td { padding: 0; vertical-align: top; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.sc-month-grid td:last-child { border-right: 0; }
+.sc-month-grid th:last-child { border-right: 0; }
+.sc-month-grid tr:last-child td { border-bottom: 0; }
+.sc-month-grid td[data-outside="true"] { background: var(--muted); }
+.sc-month-cell { min-height: 128px; display: flex; flex-direction: column; align-items: stretch; gap: var(--space-1); padding: var(--space-2); }
+.sc-day { display: flex; align-items: center; align-self: flex-start; justify-content: flex-start; gap: var(--space-1); min-width: 36px; min-height: 36px; padding: var(--space-1) 0; border: 1px solid transparent; border-radius: var(--radius-control); background: transparent; color: var(--ink); font: inherit; font-size: var(--text-detail); text-align: left; cursor: pointer; }
+/* 오늘은 배지 없이 숫자 색으로만 구분한다(2026-09-17 Q). 선택한 날짜는 그라데이션 면. */
+.sc-day[aria-current="date"] { color: var(--blue-deep); font-weight: 600; }
+.sc-day[aria-pressed="true"]:not([aria-current="date"]) { background: var(--gradient-action); color: var(--on-action); border-color: var(--line-on-action); font-weight: 600; }
+.sc-day small { font-size: 11px; }
+.sc-mobile-count { display: none; }
+.sc-month-events { display: grid; gap: var(--space-1); }
+.sc-event { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; width: 100%; min-width: 0; padding: var(--space-1) var(--space-2); border: 1px solid var(--line); border-left: 3px solid var(--blue-deep); border-radius: var(--radius-control); background: var(--panel); color: var(--ink); text-align: left; font: inherit; cursor: pointer; }
+.sc-event:hover { background: var(--muted); }
+.sc-event-time { font-size: var(--text-detail); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sc-event-name { font-size: var(--text-sm); font-weight: 600; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sc-more { align-self: flex-start; min-height: 28px; padding: 0 var(--space-1); border: 0; border-radius: var(--radius-control); background: transparent; color: var(--sub); text-align: left; font: inherit; font-size: var(--text-detail); cursor: pointer; }
+.sc-time-scroll { position: relative; max-height: min(65vh, 720px); overflow: auto; overscroll-behavior: contain; isolation: isolate; }
+.sc-time-grid[data-view="week"] { min-width: 900px; }
+.sc-time-grid th, .sc-time-grid td { border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); }
+.sc-time-grid tr > :last-child { border-right: 0; }
+.sc-time-grid th { color: var(--sub); font-size: var(--text-detail); font-weight: 500; }
+.sc-time-grid thead th { position: sticky; top: 0; z-index: 2; background: var(--panel); height: 56px; }
+.sc-time-grid th:first-child { width: 76px; }
+.sc-time-grid thead th:first-child { left: 0; z-index: 3; }
+.sc-time-grid thead button { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--space-1); width: 100%; min-height: 44px; padding: var(--space-2); border: 0; background: transparent; color: var(--ink); font: inherit; font-size: var(--text-sm); cursor: pointer; }
+.sc-time-grid tbody th { position: sticky; left: 0; z-index: 1; vertical-align: middle; padding: var(--space-2); background: var(--panel); white-space: nowrap; }
+.sc-time-grid tbody td { height: 64px; vertical-align: top; padding: var(--space-1); }
+.sc-time-grid thead [data-today="true"] { background: var(--gradient-action); color: var(--on-action); }
+.sc-time-grid thead [data-today="true"] button { color: var(--on-action); }
+.sc-time-heading { display: flex; align-items: center; }
+.sc-time-grid[data-view="day"] thead { position: sticky; top: 0; z-index: 3; background: var(--gradient-action); }
+/* 일간은 시간 행 단위로 스크롤이 멈춘다. 헤더 높이만큼의 scroll-padding-top 은 home.tsx 가 실측해 넣는다. */
+.sc-time-scroll[data-view="day"] { scroll-snap-type: y mandatory; }
+.sc-time-scroll[data-view="day"] tbody tr { scroll-snap-align: start; }
+.sc-time-scroll[data-view="day"] tbody tr:last-child { scroll-snap-align: end; }
+.sc-time-grid[data-view="day"] thead th { position: static; height: 44px; background: transparent; color: var(--on-action); }
+.sc-time-grid[data-view="day"] .sc-time-heading { gap: var(--space-3); padding-inline: var(--space-3); }
+.sc-time-grid[data-view="day"] thead button { flex: 1; width: auto; min-height: 44px; justify-content: flex-start; flex-wrap: nowrap; padding: 0; color: var(--on-action); }
+.sc-time-grid[data-view="day"] tbody th { vertical-align: middle; padding-block: var(--space-1); }
+.sc-time-grid[data-view="day"] tbody td { height: 36px; padding-block: 2px; }
+.sc-time-grid[data-view="day"] .sc-event { display: flex; align-items: center; gap: var(--space-2); min-height: 28px; }
+.sc-time-grid[data-view="day"] .sc-event-time { flex-shrink: 0; }
+.sc-time-grid[data-view="day"] .sc-event-name { min-width: 0; }
+.sc-time-grid .sc-event + .sc-event { margin-top: var(--space-1); }
+.sc-details { min-width: 0; scroll-margin-block: calc(var(--header-height) + var(--space-4)); }
+.sc-detail-item { border-left: 3px solid transparent; padding-left: var(--space-3); }
+.sc-detail-item[data-selected="true"] { border-left-color: transparent; background: linear-gradient(var(--panel), var(--panel)) padding-box, var(--gradient-action) border-box; }
+.sc-detail-item + .sc-detail-item { margin-top: var(--space-4); }
+.sc-detail-time { display: block; font-weight: 600; margin-bottom: var(--space-1); }
+.sc-page :is(button, a, [tabindex]):focus-visible { outline: 2px solid var(--blue-deep); outline-offset: 2px; }
+@media (max-width: 767px) {
+  .sc-toolbar { flex-wrap: nowrap; align-items: center; gap: var(--space-3); }
+  .sc-view-select { width: 80px; flex-basis: 80px; }
+  .sc-toolbar .schedule-nav-controls { flex: 1; }
+  .sc-toolbar .schedule-nav-period { width: 100%; grid-template-columns: var(--sc-control-height) minmax(0, 1fr) var(--sc-control-height); gap: var(--space-2); }
+  .sc-month-grid th { padding: var(--space-2) var(--space-1); }
+  .sc-month-cell { min-height: 76px; padding: var(--space-1); }
+  .sc-day { width: 100%; min-width: 0; min-height: 64px; flex-direction: column; align-items: flex-start; gap: 2px; padding: var(--space-1) 0; }
+  .sc-mobile-count { display: inline; }
+  .sc-month-events, .sc-more { display: none; }
+  .sc-time-scroll { max-height: 60vh; }
+  .sc-time-grid th:first-child { width: 64px; }
+  .sc-time-grid[data-view="day"] .sc-time-heading { gap: var(--space-1); padding-inline: var(--space-1); }
+}

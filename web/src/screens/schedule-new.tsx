@@ -1,4 +1,4 @@
-// A안: 날짜 선택 완료와 일정 저장을 구분한다. 예정 회차를 만드는 API는 그대로 쓴다.
+// A안: 선택 완료와 일정 저장을 구분한다. 예정 회차를 만드는 API는 그대로 쓴다.
 import { useEffect, useRef, useState } from 'react';
 import { getCase, planSession } from '../api.ts';
 import type { CaseView, NewSessionInput } from '../api.ts';
