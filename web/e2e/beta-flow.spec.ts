@@ -20,8 +20,13 @@ const OVERALL_GOAL = '연체를 정리하고 생활을 안정시킨다';
  * 화면은 당사자 카드(HERO) + 탭 4개이고 기본 탭은 `당사자 정보`다. 다른 탭이 필요하면
  * 이름을 준다 — 사람도 카드 아래 탭을 눌러 옮긴다.
  */
-const openInfo = async (page: Page, tab?: '당사자 정보' | '회차별 요약' | '회차별 전문 보기' | '목표') => {
-  const caseId = page.url().match(/#\/cases\/(\d+)\//)?.[1];
+const openInfo = async (
+  page: Page,
+  tab?: '당사자 정보' | '회차별 요약' | '회차별 전문 보기' | '목표',
+  // 일정을 저장하면 사례 주소를 떠나 일정 목록으로 간다(2026-09-17 Q) — 그때는 사례를 직접 준다.
+  fromCaseId?: string,
+) => {
+  const caseId = fromCaseId ?? page.url().match(/#\/cases\/(\d+)\//)?.[1];
   expect(caseId, '사례 주소에서 왔어야 한다').toBeTruthy();
   await page.goto(`/#/cases/${caseId}/info`);
   if (tab) await page.getByRole('tab', { name: tab, exact: true }).click();
@@ -85,11 +90,15 @@ test('등록부터 회차 기록·이어받기까지 한 바퀴', async ({ page 
 
   // ── 상담 일정 등록(2회차) ───────────────────────────────────
   await expect(page).toHaveURL(/\/schedule$/);
+  const caseId = page.url().match(/#\/cases\/(\d+)\//)?.[1];
+  expect(caseId, '일정 등록은 사례 주소다').toBeTruthy();
   await pickDateTime(page, 'schedule', '2026-10-01T10:00');
   await page.getByRole('radio', { name: '대면' }).check();
   await page.locator('#place').fill('사회연대은행 상담실');
   await page.getByRole('button', { name: '일정 저장', exact: true }).click();
-  await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
+  // 저장하면 상담 일정 보기로 돌아온다(2026-09-17 Q — 잇달아 잡는 일이 많다).
+  await expect(page).toHaveURL(/#\/schedule$/);
+  await expect(page.getByRole('heading', { name: '상담 일정', level: 1, exact: true })).toBeVisible();
 
   // ── 2회차 상담 기록하기 ─────────────────────────────────────
   await pickFromMenu(page, 'record', NAME);
@@ -108,18 +117,20 @@ test('등록부터 회차 기록·이어받기까지 한 바퀴', async ({ page 
   await page.locator('#next-goal').fill(NEXT_GOAL);
   // 질문 카드의 '확인함'은 일부러 누르지 않는다 → unchecked 로 남아야 한다.
   await page.getByRole('button', { name: '저장' }).click();
+  // 기록 저장의 도착지는 그 사람의 당사자 정보다(안 바뀐다).
+  await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
 
   // ── 3회차 일정 등록 ─────────────────────────────────────────
-  // 저장하면 그 사람의 당사자 정보로 돌아온다(2026-09-17 Q — 15초 다시보기 폐지).
-  await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
   await pickFromMenu(page, 'schedule', NAME);
   await pickDateTime(page, 'schedule', '2026-10-08T10:00');
   await page.getByRole('radio', { name: '전화' }).check();
   await page.getByRole('button', { name: '일정 저장', exact: true }).click();
-  await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
+  // 저장하면 상담 일정 보기로 돌아온다(2026-09-17 Q — 잇달아 잡는 일이 많다).
+  await expect(page).toHaveURL(/#\/schedule$/);
+  await expect(page.getByRole('heading', { name: '상담 일정', level: 1, exact: true })).toBeVisible();
 
   // ── 회차별 요약 탭: 맨 위가 위험 신호다(2026-09-17 Q — 구 15초 다시보기 자리) ──
-  await page.getByRole('tab', { name: '회차별 요약' }).click();
+  await openInfo(page, '회차별 요약', caseId);
   const risk = page.locator('.risk-banner');
   await expect(risk).toContainText('위험 신호 없음');
   await expect(risk).toContainText('AI 확인 안 함');
@@ -300,9 +311,9 @@ test('종결 상담으로 저장하면 종결 화면으로 이어진다', async 
   await pickDateTime(page, 'schedule', '2026-10-01T10:00');
   await page.getByRole('checkbox', { name: '종결 상담' }).check();
   await page.getByRole('button', { name: '일정 저장', exact: true }).click();
+  await expect(page).toHaveURL(/#\/schedule$/);
 
   // 기록 화면이 그 표시를 이어받는다
-  await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
   await pickFromMenu(page, 'record', name);
   await expect(page.getByRole('checkbox', { name: '이번이 마지막 상담이에요' })).toBeChecked();
   await page.locator('#memo').fill('마지막으로 정리하고 마무리함');
@@ -585,12 +596,13 @@ test('당사자는 링크와 코드로 자기 일정만 본다', async ({ page, 
 
   // 앞으로의 일정 하나
   await expect(page).toHaveURL(/\/schedule$/);
+  const caseId = page.url().match(/#\/cases\/(\d+)\//)?.[1];
   await pickDateTime(page, 'schedule', '2026-12-01T10:00');
   await page.getByRole('button', { name: '일정 저장', exact: true }).click();
+  await expect(page).toHaveURL(/#\/schedule$/);
 
   // 실무자가 열람 링크를 만든다
-  await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
-  await openInfo(page);
+  await openInfo(page, undefined, caseId);
   await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
   await page.getByRole('tab', { name: '당사자 정보' }).click();
   const access = page

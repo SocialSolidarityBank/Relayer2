@@ -35,8 +35,8 @@ test('날짜 선택은 저장하지 않고, 취소를 보존하며 한국 시간
   await page.locator('#schedule-minute').selectOption('15');
   await page.getByRole('radio', { name: '전화', exact: true }).check();
   await page.getByRole('button', { name: '일정 저장', exact: true }).click();
-  // 저장 뒤 도착지는 그 사람의 당사자 정보다(2026-09-17 Q — 15초 다시보기 폐지).
-  await expect(page).toHaveURL(new RegExp(`/cases/${caseId}/info$`));
+  // 저장 뒤 도착지는 상담 일정 보기다(2026-09-17 Q — 잇달아 잡는 일이 많다).
+  await expect(page).toHaveURL(/#\/schedule$/);
   const saved = await (await page.request.get(`${api}/cases/${caseId}`)).json();
   expect(saved.sessions).toHaveLength(1);
   expect(new Date(saved.sessions[0].scheduled_at).toISOString()).toBe('2027-01-30T15:15:00.000Z');
