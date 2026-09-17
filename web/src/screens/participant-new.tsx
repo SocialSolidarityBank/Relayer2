@@ -15,7 +15,7 @@ import {
   Card,
   Chevron,
   Choice,
-  DataRows,
+  ConsentDetail,
   ErrorText,
   Field,
   Fold,
@@ -208,52 +208,39 @@ export function ParticipantNewScreen() {
             이중 접힘(`자세히 보기`)도 걷었다.
             이 화면에서는 **체크가 접힌 머리에 선다** — 등록에서 할 일은 동의를 받는 것이고
             문안 전체는 필요할 때만 펼친다(당사자 정보 탭은 이미 받은 동의를 읽는 자리라
-            체크가 본문 아래다). 체크를 눌러도 카드가 접히거나 펼쳐지지 않는다. */}
-        {copies.map((c) => (
-          <Fold
-            key={c.domain}
-            group="consents"
-            title={
-              <>
-                <span
-                  className="consent-head-check"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <Choice
-                    type="checkbox"
-                    label={c.label}
-                    checked={!!granted[c.domain]}
-                    onChange={() => setGranted((prev) => ({ ...prev, [c.domain]: !prev[c.domain] }))}
-                  />
-                </span>
-                {c.required && (
-                  <span className="wire-required-mark">
-                    <span className="wire-required-mark-label">필수</span>
+            체크가 본문 아래다). 체크를 눌러도 카드가 접히거나 펼쳐지지 않는다.
+            머리 설명은 동의 항목 한 줄이고 본문 표는 당사자 정보 탭과 같은 부품이다(H1). */}
+        <div className="consent-folds">
+          {copies.map((c) => (
+            <Fold
+              key={c.domain}
+              group="consents"
+              title={
+                <>
+                  <span
+                    className="consent-head-check"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <Choice
+                      type="checkbox"
+                      label={c.label}
+                      checked={!!granted[c.domain]}
+                      onChange={() => setGranted((prev) => ({ ...prev, [c.domain]: !prev[c.domain] }))}
+                    />
                   </span>
-                )}
-              </>
-            }
-            desc={
-              <span title={c.body}>
-                {c.domain === 'sensitive_information_processing'
-                  ? `미동의 시 인테이크·상담 기록 저장 불가, ${c.body}`
-                  : c.body}
-              </span>
-            }
-          >
-            <DataRows
-              rows={[
-                ['동의문', c.body],
-                ['무엇을 받나', c.items.join(', ')],
-                ['왜 받나', c.purpose_text],
-                ['얼마나 두나', c.retention_text],
-                ...(c.recipient ? ([['어디로 가나', c.recipient]] as Array<[string, string]>) : []),
-                ['거부할 수 있나', c.refusal_text],
-                ['문안 판', `${c.version}, 지문 ${c.hash}`],
-              ]}
-            />
-          </Fold>
-        ))}
+                  {c.required && (
+                    <span className="wire-required-mark">
+                      <span className="wire-required-mark-label">필수</span>
+                    </span>
+                  )}
+                </>
+              }
+              desc={c.items.join(', ')}
+            >
+              <ConsentDetail copy={c} />
+            </Fold>
+          ))}
+        </div>
 
         {/* 만드는 화면이라 `등록`이다(2026-09-18 Q — `저장`은 이미 있는 것을 고칠 때 쓴다). */}
         <FormActions>

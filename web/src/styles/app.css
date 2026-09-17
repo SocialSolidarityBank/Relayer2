@@ -601,3 +601,82 @@ body { margin: 0; }
 @container (max-width: 760px) {
   .participant-hero-details { grid-template-columns: minmax(0, 1fr); }
 }
+/* ==== L3 당사자 정보 (2026-09-18 UI 개편) ==== */
+/* 회차 원본 팝업(E2·F5) — 큰 모달 두 열. 폭은 min(1200px, 96vw), 열은 같은 폭이다(AC-E2).
+   달력 선택창의 dialog 틀을 쓰고 크기만 덮는다. 머리·행동은 고정이 아니라 본문과 함께 스크롤한다. */
+.schedule-date-dialog[data-size='wide'] { width: min(1200px, 96vw); max-width: 96vw; }
+.original-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6); align-items: start; }
+.original-col { min-width: 0; display: grid; gap: var(--space-4); align-content: start; }
+.original-col:focus { outline: none; }
+.original-col:focus-visible { outline: 2px solid var(--blue-deep); outline-offset: 4px; border-radius: var(--radius-control); }
+/* 인테이크 원본은 작성 화면을 그대로 잠근 것이라 자기 열 여백을 갖고 온다 — 팝업 안에서는 뺀다. */
+.original-col > .wire-container { padding: 0; }
+.original-section > .info-original { margin-top: 0; }
+.original-line { white-space: normal; }
+/* 열 안의 행동 줄(수정·저장·기록 수정)은 오른쪽 끝 알약이다 — 달력 dialog 의 44 높이·위 여백 규칙을 되돌린다. */
+.original-dialog .original-actions { margin-top: 0; display: flex; justify-content: flex-end; flex-wrap: wrap; gap: var(--space-2); }
+.original-dialog .original-actions .wire-button { min-height: var(--pill-height); }
+.original-dialog .original-actions > .wire-error { margin-right: auto; }
+.original-revisions { display: grid; gap: var(--space-1); }
+.original-recording { display: grid; gap: var(--space-2); }
+.original-segments { display: grid; gap: var(--space-1); }
+.original-segments .wire-item-title { font-size: var(--text-sm); font-weight: 400; white-space: normal; }
+@media (max-width: 767px) {
+  .original-cols { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* 회차별 요약(F1~F3). 펼친 머리는 두 테마 모두 파스텔 면이라 회차 번호·날짜도 `--on-action`
+   으로 뒤집는다 — 다크에서 `--ink`(밝음)·`--sub`(회색)가 파스텔 위에 얹혀 안 보였다(F1).
+   테마별 리터럴은 없다: 모두 토큰이다. */
+.wire-card-details[open]:not(.is-crisis) > .wire-card-summary .seq-head-no,
+.wire-card-details[open]:not(.is-crisis) > .wire-card-summary .seq-head-meta { color: var(--on-action); }
+/* 구역 제목은 배지다(F2): 정해진 배경 + 어두운 글씨. 배지 면(`--badge-*`)은 두 테마 모두 밝아
+   `--on-action`(항상 어두운 잉크)이 읽힌다. 계열은 §6 그대로 — AI 산출=라벤더, 변화=민트,
+   확인필요=코랄, 시간·상태=블루, 완료=중립선. */
+.seq-section-title {
+  justify-self: start;
+  align-self: start;
+  min-height: var(--badge-height);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-badge);
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--panel);
+}
+.seq-section-title.is-ai { border-color: var(--badge-lavender); background: var(--badge-lavender); color: var(--on-action); }
+.seq-section-title.is-change { border-color: var(--badge-mint); background: var(--badge-mint); color: var(--on-action); }
+.seq-section-title.is-warn { border-color: var(--badge-coral); background: var(--badge-coral); color: var(--on-action); }
+.seq-section-title.is-state { border-color: var(--badge-blue); background: var(--badge-blue); color: var(--on-action); }
+.seq-section-title.is-risk { border-color: var(--risk); background: var(--risk); color: var(--on-badge); }
+.seq-section-title > .wire-badge { margin-inline-start: var(--space-1); }
+/* 한글 본문 여백(F3): 행간 1.6, 단락 사이 0.75em, 낱말 안 줄바꿈 없음. */
+.seq-sections { line-height: 1.6; word-break: keep-all; overflow-wrap: anywhere; }
+.seq-list { margin: 0; padding-inline-start: 1.25em; display: grid; gap: 0.25em; font-size: var(--text-sm); color: var(--ink); }
+.seq-list > li > .seq-section-note { margin-inline-start: var(--space-2); }
+.seq-text { margin: 0; font-size: var(--text-sm); color: var(--ink); }
+.seq-section > .seq-list + .seq-list,
+.seq-section > .seq-text + .seq-text,
+.seq-section > .seq-list + .seq-text,
+.seq-section > .seq-text + .seq-list { margin-block-start: 0.75em; }
+/* 요약 머리 행동 넷(F4)은 넓은 화면에서 한 줄, 767 이하는 기존 줄바꿈 규칙을 탄다. */
+
+/* 목표 탭(G1~G3). 카드 하나 안에서 두 구획은 라벨 색으로 갈린다 — 전체 목표는 기본(민트),
+   다음 상담 목표는 블루(시간 축). 전체 목표 칸은 그라데이션 아웃라인 2px 로 강조한다(G2 —
+   캘린더 외곽선과 같은 `--gradient-brand`). */
+.goal-overall { margin-block-end: var(--space-5); }
+.goal-overall .wire-input-box {
+  border: 2px solid transparent;
+  background: linear-gradient(var(--panel), var(--panel)) padding-box, var(--gradient-brand) border-box;
+}
+.goal-next .wire-form-label { color: var(--blue-deep); }
+.next-goal-list { display: grid; gap: var(--space-2); width: 100%; }
+/* 줄마다 칸 하나 + 위쪽에 선 +/- 스테퍼(AC-G3: 스테퍼 top = 칸 top). 스테퍼 어휘는 등록 화면의
+   `.number-stepper` 그대로이고 여기서는 세로 자리만 칸의 윗선에 못박는다. */
+.next-goal-row { position: relative; }
+.next-goal-row > textarea { padding-inline-end: var(--space-6); resize: none; }
+.next-goal-row > .number-stepper { top: var(--control-pad); }
+
+/* 당사자 등록(H1): 동의 접힘 카드 사이 여백 8. */
+.consent-folds { display: grid; gap: var(--space-2); }

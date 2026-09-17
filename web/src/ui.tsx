@@ -99,37 +99,37 @@ export function Confirm({
 }
 
 /**
- * 동의 문안의 표준 양식 항목. **동의를 받는 자리마다 같은 것을 보여 준다**(2026-09-16 검수).
+ * 동의 문안의 표준 양식 항목. **동의를 받는 자리마다 같은 것을 보여 준다**(2026-09-16 검수) —
+ * 당사자 등록·당사자 정보·설정 › 동의서 관리가 이 하나를 쓴다. 라벨을 바꾸는 곳도 여기 하나다.
  *
  * 해시에 묶인 내용이 곧 이것이다 — 무엇을 받고, 왜 받고, 얼마나 두고, 거부하면 어떻게 되는지.
  * 이걸 감춘 채 받은 동의는 당사자가 본 적 없는 문안에 대한 동의다.
+ * 행 이름은 개인정보보호위원회 동의 안내서의 서식 열 이름이다(2026-09-18 Q E6). 문안 판·지문은
+ * 당사자 화면에서 숨긴다(D9) — 설정 › 동의서 관리가 따로 적는다.
  */
 export function ConsentDetail({
   copy,
 }: {
   copy: {
+    body: string;
     items: string[];
     purpose_text: string;
     retention_text: string;
     refusal_text: string;
     recipient: string | null;
-    version: string;
-    hash: string;
   };
 }) {
   return (
-    <Fold title="자세히 보기">
-      <DataRows
-        rows={[
-          ['무엇을 받나', copy.items.join(', ')],
-          ['왜 받나', copy.purpose_text],
-          ['얼마나 두나', copy.retention_text],
-          ...(copy.recipient ? ([['어디로 가나', copy.recipient]] as Array<[string, ReactNode]>) : []),
-          ['거부할 수 있나', copy.refusal_text],
-          ['문안 판', `${copy.version}, 지문 ${copy.hash}`],
-        ]}
-      />
-    </Fold>
+    <DataRows
+      rows={[
+        ['동의 내용', copy.body],
+        ['동의 항목', copy.items.join(', ')],
+        ['동의 목적', copy.purpose_text],
+        ['보유·이용 기간', copy.retention_text],
+        ...(copy.recipient ? ([['제공받는 자', copy.recipient]] as Array<[string, ReactNode]>) : []),
+        ['동의 거부권과 불이익', copy.refusal_text],
+      ]}
+    />
   );
 }
 

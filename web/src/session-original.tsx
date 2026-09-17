@@ -1,13 +1,14 @@
-// 회차 원본 드로어 — 한 회차의 **수기 기록**과 **녹음·전사**를 오른쪽에서 열어 읽는다
-// (2026-09-18 Q 승인). 구 `회차별 원본 보기` 탭과 `상담 내용 원본 보기` 화면을 대체한다.
+// 회차 원본 팝업 — 한 회차의 **수기 기록**(왼쪽)과 **녹음 전사**(오른쪽)를 큰 모달 두 열로
+// 나란히 읽고 고친다(2026-09-18 Q E2·F5 — 구 오른쪽 드로어 폐지).
 //
-// 왜 모달이 아니라 드로어인가: 원본은 **옆의 회차 목록·요약과 대조하면서** 읽는 것이다. 팀 목업
-// 넷은 1,040px 모달이라 화면을 다 가려서 그 대조를 못 한다. 드로어는 회차 목록을 왼쪽에 남긴다.
+// 수기 열은 작성 양식 그대로다: 인테이크 회차는 인테이크 화면을 잠근 채 그대로 보이고, 상담
+// 회차는 기록 화면의 구획 순서(오늘 상담 내용 → 수행할 과제 → 다음에 물어볼 것 → 실무자 의견
+// → 다음 상담 목표)로 편다. 전사 열은 녹음 목록과 전사문이다.
 //
-// 입구는 `회차별 원본 보기` 탭 하나다(2026-09-18 Q — 요약 머리의 버튼 둘은 걷었다). 한 회차에서
-// 볼 것이 둘이면(수기·녹음) 드로어 **안에서** 오간다.
-// 인테이크 회차의 수기 기록은 인테이크 작성 화면을 잠근 채 그대로 보여 준다 — 구획·순서·라벨이
-// 작성할 때와 같아야 "처음에 적은 것"으로 읽힌다(2026-09-18 UI-3).
+// 수정은 **편집 모드 + 리비전 로그**다(플래너 판단 D3). `수정` → 원문 칸이 열리고 `저장` 하면
+// 새 리비전이 붙는다(`POST /sessions/:id/revisions`, append-only — 지울 수 없다). 원본이 바뀌면
+// 그 회차의 AI 요약·불일치는 `재정리 필요` 가 되고, 자동 재처리는 하지 않는다(비용·동의 게이트).
+// 서버가 아직 이 경로를 모르면 저장은 실패로 **그 자리에 그대로** 보인다 — 성공한 척하지 않는다.
 import { useEffect, useRef, useState } from 'react';
 import { getSessionRecord, type SessionRecord } from './api.ts';
 import {
@@ -18,17 +19,19 @@ import {
   type Recording,
   type Transcript,
 } from './speech-api.ts';
-import { Badge, Button, Empty, ErrorText, Item } from './ui.tsx';
+import { Badge, Button, Empty, ErrorText, Item, Meta } from './ui.tsx';
+import { Dialog } from './dialog.tsx';
 import { fmtBytes, fmtMs } from './screens/session-audio.tsx';
 import { IntakeScreen } from './screens/intake.tsx';
 
-/** 카드의 출처 구획 라벨 — 기록 화면의 구획 이름과 같다. */
+/** 기록 화면의 구획 이름 그대로다 — 원본은 적을 때의 양식으로 읽혀야 한다. */
 const KIND_LABEL: Record<string, string> = {
   promise: '수행할 과제',
   question: '다음에 물어볼 것',
   judgment: '실무자 의견',
   fact: '확인한 사실',
 };
+const KIND_ORDER = ['promise', 'question', 'judgment', 'fact'];
 
 const TRANSCRIBE_LABEL: Record<Recording['transcribe_state'], string> = {
   pending: '전사 중',
@@ -39,25 +42,212 @@ const TRANSCRIBE_LABEL: Record<Recording['transcribe_state'], string> = {
 
 export type OriginalPart = 'written' | 'voice';
 
-function Written({ rec, caseId }: { rec: SessionRecord; caseId: number }) {
+// ── 리비전(L5 계약 §4) ───────────────────────────────────────────────────
+// `api.ts` 는 이 레인 소유가 아니라 여기서 부른다. 배너(`API_FAILED`)를 띄우지 않는 이유는
+// 실패를 **그 자리에서** 보여 주기 때문이다 — 같은 실패가 두 번 보이면 안 된다.
+type RevisionKind = 'memo' | 'transcript' | 'summary';
+export type Revision = { id: number; kind: RevisionKind; text: string; actor: string; created_at: string };
+
+const BASE = import.meta.env.DEV ? '/api' : '';
+
+async function revisionCall<T>(path: string, init?: RequestInit): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      ...init,
+      credentials: 'same-origin',
+      headers: init?.body ? { 'content-type': 'application/json' } : undefined,
+    });
+  } catch {
+    throw new Error('서버 연결 실패');
+  }
+  if (!res.ok) {
+    const message = (await res.json().catch(() => ({}))).error;
+    throw new Error(message ?? (res.status === 404 ? '서버 미지원' : `${res.status}`));
+  }
+  return (await res.json()) as T;
+}
+
+const listRevisions = (sessionId: number) => revisionCall<Revision[]>(`/sessions/${sessionId}/revisions`);
+const postRevision = (sessionId: number, kind: RevisionKind, text: string) =>
+  revisionCall<Revision>(`/sessions/${sessionId}/revisions`, { method: 'POST', body: JSON.stringify({ kind, text }) });
+
+const stamp = (iso: string): string => {
+  const d = new Date(iso);
+  const two = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}. ${d.getMonth() + 1}. ${d.getDate()}. ${two(d.getHours())}:${two(d.getMinutes())}`;
+};
+
+/**
+ * 원문 한 단 + 편집 모드. 읽을 때는 본문 단, `수정` 을 누르면 같은 자리가 textarea 가 된다.
+ * 저장은 리비전을 붙이고, 실패는 그 자리에 남는다. 리비전 로그는 아래에 최신순으로 쌓인다.
+ */
+function Revisable({
+  sessionId,
+  kind,
+  label,
+  text,
+  revisions,
+  onSaved,
+}: {
+  sessionId: number;
+  kind: RevisionKind;
+  label: string;
+  /** 원문. 없으면(수기 미작성·전사 없음) 편집도 없다. */
+  text: string | null;
+  revisions: Revision[] | 'failed' | null;
+  onSaved: (rev: Revision) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const mine = revisions === 'failed' || revisions === null ? [] : revisions.filter((r) => r.kind === kind);
+  // 최신 리비전이 곧 현재 원문이다 — 저장한 것이 화면에 그대로 보여야 고친 줄 안다.
+  const current = mine.length > 0 ? mine[mine.length - 1].text : text;
+
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const rev = await postRevision(sessionId, kind, draft);
+      onSaved(rev);
+      setEditing(false);
+    } catch (e) {
+      setError(`저장 실패, ${e instanceof Error ? e.message : '다시 시도'}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="seq-section original-section">
+      <h3 className="seq-section-title">{label}</h3>
+      {current === null ? (
+        <Empty>없음</Empty>
+      ) : editing ? (
+        <div className="wire-input-box" data-control="textarea">
+          <textarea
+            aria-label={label}
+            rows={8}
+            value={draft}
+            disabled={saving}
+            onChange={(e) => setDraft(e.target.value)}
+          />
+        </div>
+      ) : (
+        <p className="info-original">{current}</p>
+      )}
+      {current !== null && (
+        <div className="wire-form-actions original-actions">
+          {error && <ErrorText>{error}</ErrorText>}
+          {editing ? (
+            <>
+              <Button disabled={saving} onClick={() => setEditing(false)}>
+                취소
+              </Button>
+              <Button
+                variant="primary"
+                disabled={saving || draft.trim() === '' || draft === current}
+                onClick={() => void save()}
+              >
+                {saving ? '저장 중…' : '저장'}
+              </Button>
+            </>
+          ) : (
+            <Button
+              onClick={() => {
+                setDraft(current);
+                setEditing(true);
+              }}
+            >
+              수정
+            </Button>
+          )}
+        </div>
+      )}
+      {/* 수정 기록은 지울 수 없다(F5). 최신이 위다. */}
+      {revisions === 'failed' ? (
+        <p className="seq-section-note">수정 기록 불러오기 실패</p>
+      ) : (
+        mine.length > 0 && (
+          <div className="original-revisions">
+            <p className="seq-section-note">수정 기록 {mine.length}</p>
+            {[...mine].reverse().map((r) => (
+              <p className="seq-section-note" key={r.id}>
+                <Meta parts={[stamp(r.created_at), r.actor]} />
+              </p>
+            ))}
+          </div>
+        )
+      )}
+    </section>
+  );
+}
+
+function Written({
+  rec,
+  caseId,
+  revisions,
+  onSaved,
+}: {
+  rec: SessionRecord;
+  caseId: number;
+  revisions: Revision[] | 'failed' | null;
+  onSaved: (rev: Revision) => void;
+}) {
+  if (rec.kind === 'intake') return <IntakeScreen caseId={caseId} readOnly />;
   const written =
     (rec.memo?.trim() ?? '') !== '' || rec.cards.length > 0 || (rec.next_goal_text?.trim() ?? '') !== '';
-  if (rec.kind === 'intake') return <IntakeScreen caseId={caseId} readOnly />;
   if (!written) return <Empty>수기 미작성</Empty>;
   return (
     <>
-      {rec.memo?.trim() && <p className="info-original">{rec.memo}</p>}
-      {rec.next_goal_text?.trim() && <Item title="다음 상담 목표" desc={rec.next_goal_text} />}
-      {rec.cards.map((c, i) => (
-        <div className="wire-repeat-card" key={i}>
-          <Item title={c.text} desc={KIND_LABEL[c.kind] ?? c.kind} />
-        </div>
+      <Revisable
+        sessionId={rec.session_id}
+        kind="memo"
+        label="오늘 상담 내용"
+        text={rec.memo?.trim() ? rec.memo : null}
+        revisions={revisions}
+        onSaved={onSaved}
+      />
+      {KIND_ORDER.filter((k) => rec.cards.some((c) => c.kind === k)).map((k) => (
+        <section className="seq-section original-section" key={k}>
+          <h3 className="seq-section-title">{KIND_LABEL[k]}</h3>
+          {rec.cards
+            .filter((c) => c.kind === k)
+            .map((c, i) => (
+              <p className="wire-item-desc original-line" key={i} title={c.text}>
+                {c.text}
+              </p>
+            ))}
+        </section>
       ))}
+      {rec.next_goal_text?.trim() && (
+        <section className="seq-section original-section">
+          <h3 className="seq-section-title">다음 상담 목표</h3>
+          <p className="info-original">{rec.next_goal_text}</p>
+        </section>
+      )}
+      {/* 과제·질문·의견·다음 목표는 기록 화면에서 고친다(구조화된 카드라 원문 칸이 아니다).
+          인테이크 회차는 잠근 화면 스스로 `수정` 을 갖는다. */}
+      <div className="wire-form-actions original-actions">
+        <Button onClick={() => (window.location.hash = `#/cases/${caseId}/sessions/${rec.session_id}/edit`)}>
+          기록 수정
+        </Button>
+      </div>
     </>
   );
 }
 
-function Voice({ sessionId }: { sessionId: number }) {
+function Voice({
+  sessionId,
+  revisions,
+  onSaved,
+}: {
+  sessionId: number;
+  revisions: Revision[] | 'failed' | null;
+  onSaved: (rev: Revision) => void;
+}) {
   const [recordings, setRecordings] = useState<Recording[] | null>(null);
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -96,6 +286,12 @@ function Voice({ sessionId }: { sessionId: number }) {
   };
 
   if (recordings === null) return <Empty>불러오는 중</Empty>;
+  const transcriptText =
+    transcript === null
+      ? null
+      : transcript.segments && transcript.segments.length > 0
+        ? transcript.segments.map((s) => s.text).join('\n')
+        : transcript.text;
   return (
     <>
       {error && <ErrorText>{error}</ErrorText>}
@@ -103,7 +299,7 @@ function Voice({ sessionId }: { sessionId: number }) {
         <Empty>올라온 녹음 없음</Empty>
       ) : (
         recordings.map((r) => (
-          <div className="wire-repeat-card" key={r.id}>
+          <div className="original-recording" key={r.id}>
             <Item
               title={`${r.created_at.slice(0, 10)} 녹음, ${fmtBytes(r.bytes)}${
                 r.duration_ms ? `, ${fmtMs(r.duration_ms)}` : ''
@@ -133,34 +329,37 @@ function Voice({ sessionId }: { sessionId: number }) {
       )}
       {transcript ? (
         <>
-          <h3 className="wire-subhead">
-            전사문
-            {transcript.status === 'draft' && (
-              <>
-                {' '}
-                <Badge>확인 전</Badge>
-              </>
-            )}
-          </h3>
-          {/* 자동 전사는 틀릴 수 있다 — 목업 넷이 공통으로 띄운 경고를 한 줄로 남긴다.
-              없는 발화·시각·화자를 화면이 만들어 채우지 않는다. */}
-          <p className="panel-meta">자동 전사라 틀린 곳 있음</p>
-          {transcript.segments && transcript.segments.length > 0 ? (
-            transcript.segments.map((s, i) => (
-              <div className="wire-repeat-card" key={i}>
-                <Item
-                  title={s.text}
-                  action={
-                    <Button variant="ghost" onClick={() => seek(transcript.recording_id, s.offset_ms)}>
-                      {fmtMs(s.offset_ms)}
-                    </Button>
-                  }
-                />
+          <section className="seq-section original-section">
+            <h3 className="seq-section-title">
+              전사문
+              {transcript.status === 'draft' && <Badge>확인 전</Badge>}
+            </h3>
+            {/* 자동 전사는 틀릴 수 있다 — 없는 발화·시각·화자를 화면이 만들어 채우지 않는다. */}
+            <p className="seq-section-note">자동 전사라 틀린 곳 있음</p>
+            {transcript.segments && transcript.segments.length > 0 && (
+              <div className="original-segments">
+                {transcript.segments.map((s, i) => (
+                  <Item
+                    key={i}
+                    title={s.text}
+                    action={
+                      <Button variant="ghost" onClick={() => seek(transcript.recording_id, s.offset_ms)}>
+                        {fmtMs(s.offset_ms)}
+                      </Button>
+                    }
+                  />
+                ))}
               </div>
-            ))
-          ) : (
-            <p className="info-original">{transcript.text}</p>
-          )}
+            )}
+          </section>
+          <Revisable
+            sessionId={sessionId}
+            kind="transcript"
+            label="전사 원문"
+            text={transcriptText}
+            revisions={revisions}
+            onSaved={onSaved}
+          />
         </>
       ) : (
         recordings.length > 0 && <Empty>전사문 없음</Empty>
@@ -170,91 +369,73 @@ function Voice({ sessionId }: { sessionId: number }) {
 }
 
 /**
- * 오른쪽 드로어. 네이티브 `<dialog>` 라 Escape 로 닫히고 초점이 안에 갇힌다.
- * 열고 닫는 것은 부르는 화면이 정한다(회차 카드가 어느 회차·어느 쪽인지 안다).
+ * 큰 팝업 두 열. 왼쪽 수기, 오른쪽 녹음 전사 — 둘 다 늘 그려서 없는 쪽은 `없음` 으로 말한다
+ * (두 열 폭이 같아야 한다, AC-E2). `focus` 는 열 때 초점을 둘 열이다(요약 탭의 버튼 둘).
+ * 열고 닫는 것은 부르는 화면이 정한다(회차 목록이 어느 회차인지 안다).
  */
-export function SessionOriginalDrawer({
+export function SessionOriginalDialog({
   caseId,
   sessionId,
   seq,
-  part,
-  hasVoice = false,
+  focus = 'written',
   onClose,
+  onRevised,
 }: {
   caseId: number;
   sessionId: number;
   seq: number;
-  /** 처음 열 때 볼 쪽. 안에서 바꿀 수 있다. */
-  part: OriginalPart;
-  /** 수기와 녹음이 **둘 다 있는 회차**는 드로어 안에서 오간다 — 닫고 다시 열지 않는다. */
-  hasVoice?: boolean;
+  focus?: OriginalPart;
   onClose: () => void;
+  /** 리비전이 붙었다 — 부르는 화면이 그 회차의 AI 요약·불일치를 `재정리 필요` 로 표시한다. */
+  onRevised?: (sessionId: number) => void;
 }) {
-  const dialog = useRef<HTMLDialogElement>(null);
-  const [view, setView] = useState<OriginalPart>(part);
   const [rec, setRec] = useState<SessionRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    dialog.current?.showModal();
-  }, []);
+  const [revisions, setRevisions] = useState<Revision[] | 'failed' | null>(null);
+  const body = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let alive = true;
     setRec(null);
+    setRevisions(null);
     void getSessionRecord(sessionId)
       .then((r) => alive && setRec(r))
       .catch((e) => alive && setError(e instanceof Error ? e.message : '불러오기 실패'));
+    void listRevisions(sessionId)
+      .then((rows) => alive && setRevisions(rows))
+      .catch(() => alive && setRevisions('failed'));
     return () => {
       alive = false;
     };
   }, [sessionId]);
 
+  useEffect(() => {
+    body.current?.querySelector<HTMLElement>(`.original-col[data-part="${focus}"]`)?.focus();
+  }, [focus, sessionId]);
+
+  const onSaved = (rev: Revision) => {
+    setRevisions((prev) => (prev === null || prev === 'failed' ? [rev] : [...prev, rev]));
+    onRevised?.(sessionId);
+  };
+
   return (
-    <dialog
-      ref={dialog}
-      className="side-drawer"
-      aria-labelledby="drawer-title"
-      onClose={onClose}
-      // 바깥(백드롭)을 누르면 닫는다 — 드로어 면 안의 클릭은 그대로 둔다.
-      onClick={(event) => {
-        if (event.target === dialog.current) dialog.current?.close();
-      }}
-    >
-      <div className="side-drawer-head">
-        <h2 id="drawer-title">
-          {seq}회차 {view === 'written' ? '상담 기록' : '녹음 전사'}
-        </h2>
-        {hasVoice && (
-          // 탭은 당사자 정보 탭과 같은 토글 상자다(`.info-tabs`) — 새 CSS 를 만들지 않는다.
-          <div className="info-tabs" data-cols="2" role="tablist">
-            {(['written', 'voice'] as const).map((p) => (
-              <button
-                key={p}
-                type="button"
-                role="tab"
-                aria-selected={view === p}
-                className="wire-step"
-                onClick={() => setView(p)}
-              >
-                {p === 'written' ? '수기 기록' : '녹음 전사'}
-              </button>
-            ))}
-          </div>
-        )}
-        <Button onClick={() => dialog.current?.close()}>닫기</Button>
+    <Dialog id="session-original" title={`${seq}회차 원본`} size="wide" className="original-dialog" open onClose={onClose}>
+      <div className="original-cols" ref={body}>
+        <section className="original-col" data-part="written" tabIndex={-1} aria-label="수기 기록">
+          <h3 className="wire-subhead">수기 기록</h3>
+          {error ? (
+            <ErrorText>{error}</ErrorText>
+          ) : rec === null ? (
+            <Empty>불러오는 중</Empty>
+          ) : (
+            <Written rec={rec} caseId={caseId} revisions={revisions} onSaved={onSaved} />
+          )}
+        </section>
+        <section className="original-col" data-part="voice" tabIndex={-1} aria-label="녹음 전사">
+          <h3 className="wire-subhead">녹음 전사</h3>
+          <Voice sessionId={sessionId} revisions={revisions} onSaved={onSaved} />
+        </section>
       </div>
-      <div className="side-drawer-body">
-        {error ? (
-          <ErrorText>{error}</ErrorText>
-        ) : view === 'voice' ? (
-          <Voice sessionId={sessionId} />
-        ) : rec === null ? (
-          <Empty>불러오는 중</Empty>
-        ) : (
-          <Written rec={rec} caseId={caseId} />
-        )}
-      </div>
-    </dialog>
+    </Dialog>
   );
 }
