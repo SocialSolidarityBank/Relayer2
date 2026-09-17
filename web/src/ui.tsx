@@ -240,22 +240,42 @@ export function Fold({
   title,
   desc,
   open,
+  group,
+  action,
+  onOpen,
   children,
 }: {
   title: string;
   /** 접힌 채로도 보이는 한 줄. 펼치지 않고 고를 수 있어야 한다. */
   desc?: ReactNode;
   open?: boolean;
+  /** 같은 이름을 준 카드끼리는 하나만 펼쳐진다(브라우저가 하는 일, `<details name>`). */
+  group?: string;
+  /**
+   * 머리줄 오른쪽 끝(꺽쇠 앞)에 서는 행동. 접힌 채로도 누를 수 있다.
+   * 누를 때 카드가 접히거나 펼쳐지지 않게 호출부가 `stopPropagation` 을 건다.
+   */
+  action?: ReactNode;
+  /** 펼치는 순간 한 번 부른다 — 펼쳐야 필요한 값을 그때 불러오는 자리다. */
+  onOpen?: () => void;
   children: ReactNode;
 }) {
   return (
-    <details className="surface-card wire-card wire-card-details" open={open}>
+    <details
+      className="surface-card wire-card wire-card-details"
+      name={group}
+      open={open}
+      onToggle={event => {
+        if (event.currentTarget.open) onOpen?.();
+      }}
+    >
       <summary className="wire-card-summary">
         <span className="wire-card-title">
           <span className="fold-title-text">{title}</span>
           {desc && <span className="wire-item-desc fold-title-desc">{desc}</span>}
         </span>
         <span className="wire-card-summary-right">
+          {action}
           <Chevron dir="down" />
         </span>
       </summary>

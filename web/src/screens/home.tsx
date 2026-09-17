@@ -1,11 +1,11 @@
 // 상담 일정 — 월간 기본, 주간·일간은 시작 시각 기준의 시간표다. 일정의 길이는 추정하지 않는다.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { listSchedules } from '../api.ts';
+import { getCaseDetail, listSchedules } from '../api.ts';
 import type { ScheduleRow } from '../api.ts';
 import { calendarPeriod, calendarTime, koreanDay, shiftPeriod } from '../calendar.ts';
 import type { CalendarTime, CalendarView } from '../calendar.ts';
 import { DatePicker } from '../date-picker.tsx';
-import { Badge, Button, Card, Chevron, Empty, ErrorText, Item, PageHeader, Select } from '../ui.tsx';
+import { Button, Card, Chevron, Empty, ErrorText, Fold, FormActions, PageHeader, Select } from '../ui.tsx';
 import { METHOD_LABEL } from '../vocab.ts';
 import '../date-time-input.css';
 import './home.css';
@@ -17,6 +17,13 @@ const dayFormatter = new Intl.DateTimeFormat('ko-KR', { timeZone: 'UTC', year: '
 const shortDayFormatter = new Intl.DateTimeFormat('ko-KR', { timeZone: 'UTC', month: 'numeric', day: 'numeric', weekday: 'short' });
 type CalendarEvent = { row: ScheduleRow; time: CalendarTime };
 const EMPTY_EVENTS: CalendarEvent[] = [];
+/** 다가오는 일정은 다섯 건까지 보여 주고 나머지는 `날짜 더보기`가 펼친다(2026-09-17 Q). */
+const UPCOMING_LIMIT = 5;
+/** 접힌 줄의 12px 한 줄. 잘리면 전체는 `title` 로 남는다(이식 규칙: 말줄임 + title). */
+const metaLine = (parts: Array<string | null>) => {
+  const text = parts.filter(Boolean).join(' · ');
+  return <span title={text}>{text}</span>;
+};
 
 export function HomeScreen() {
   const [view, setView] = useState<CalendarView>('month');
@@ -25,6 +32,21 @@ export function HomeScreen() {
   const [selectedSession, setSelectedSession] = useState<number | null>(null);
   const [detailRequest, setDetailRequest] = useState(0);
   const [retry, setRetry] = useState(0);
+  // 다가오는 일정은 달력이 보는 기간과 별개다 — 오늘부터 앞으로 180일을 따로 부른다.
+  const [upcoming, setUpcoming] = useState<ScheduleRow[] | null>(null);
+  const [upcomingShown, setUpcomingShown] = useState(UPCOMING_LIMIT);
+  /**
+   * 연락처·이메일은 `/schedules` 가 주지 않는다. 줄을 **펼칠 때** 그 한 건만 부른다 —
+   * 목록을 여는 것만으로 열지도 않은 사례의 금고를 열고 감사 기록을 남기지 않는다.
+   */
+  const [contacts, setContacts] = useState<Record<number, { phone: string | null; email: string | null } | 'loading' | 'error'>>({});
+  const openContact = (caseId: number) => {
+    if (contacts[caseId]) return;
+    setContacts(prev => ({ ...prev, [caseId]: 'loading' }));
+    void getCaseDetail(caseId)
+      .then(detail => setContacts(prev => ({ ...prev, [caseId]: { phone: detail.participant.phone, email: detail.participant.email } })))
+      .catch(() => setContacts(prev => ({ ...prev, [caseId]: 'error' })));
+  };
   const [loaded, setLoaded] = useState<{ key: string; rows: ScheduleRow[] | null; error: string | null }>({ key: '', rows: null, error: null });
   const period = useMemo(() => calendarPeriod(view, anchor), [view, anchor]);
   const requestKey = `${period.start}/${period.end}`;
@@ -45,6 +67,17 @@ export function HomeScreen() {
     });
     return () => { live = false; };
   }, [period.start, period.end, requestKey, retry]);
+
+  // 오늘 이후 가까운 순. 달력을 옮겨도 이 목록은 바뀌지 않는다.
+  useEffect(() => {
+    let live = true;
+    const from = new Date();
+    const to = new Date(from.getTime() + 180 * 86_400_000);
+    void listSchedules(from.toISOString(), to.toISOString())
+      .then(data => { if (live) setUpcoming(data); })
+      .catch(() => { if (live) setUpcoming([]); });
+    return () => { live = false; };
+  }, [retry]);
 
   const { byDay, byHour, firstHour } = useMemo(() => {
     const byDay = new Map<string, CalendarEvent[]>();
@@ -100,9 +133,32 @@ export function HomeScreen() {
     </button>;
   };
   const selectedEvents = byDay.get(selectedDay) ?? EMPTY_EVENTS;
+  // 사람이 달력에서 오늘이 아닌 날짜를 고르면 그 날짜 카드로, 기본은 다가오는 일정이다.
+  const dayPicked = selectedDay !== today;
+  const upcomingEvents: CalendarEvent[] = useMemo(() => {
+    const now = Date.now();
+    return (upcoming ?? [])
+      .filter(row => new Date(row.scheduled_at).getTime() >= now - 3_600_000)
+      .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at))
+      .map(row => ({ row, time: calendarTime(row.scheduled_at) }));
+  }, [upcoming]);
+  const listed = dayPicked
+    ? rows === null
+      ? null
+      : selectedEvents
+    : upcoming === null
+      ? null
+      : upcomingEvents.slice(0, upcomingShown);
+  const upcomingHint =
+    upcoming === null
+      ? undefined
+      : upcomingEvents.length > upcomingShown
+        ? `가까운 ${upcomingShown}건 · 모두 ${upcomingEvents.length}건`
+        : `${upcomingEvents.length}건`;
 
   return <>
-    <PageHeader title="상담 일정" meta={rows ? `표시 범위 ${rows.length}건 · 한국 시간 기준` : '한국 시간 기준'} />
+    {/* 제목 아래 설명 줄은 걷었다(2026-09-17 Q). 건수는 아래 카드가, 시간대는 값이 말한다. */}
+    <PageHeader title="상담 일정" />
     <div className="wire-container sc-page">
       <div className="sc-toolbar">
         <div className="sc-view-select">
@@ -147,7 +203,7 @@ export function HomeScreen() {
             </table> : <>
               <div className="sc-time-scroll" data-view={view} ref={timeScroll} tabIndex={0} role="region" aria-label={view === 'week' ? '주간 시간표' : '일간 시간표'}>
                 <table className="sc-time-grid" data-view={view} aria-label={view === 'week' ? '주간 상담 일정' : '일간 상담 일정'}>
-                  <thead><tr><th scope="col">시간</th>{period.days.map(day => <th key={day} scope="col" data-today={day === today}>
+                  <thead><tr><th scope="col"><span className="wire-toolbar-label">시간</span></th>{period.days.map(day => <th key={day} scope="col" data-today={day === today}>
                     <div className="sc-time-heading">
                       <button type="button" data-day={day} aria-label={`${dayFormatter.format(new Date(`${day}T00:00:00Z`))} 일간 보기`} onClick={() => { jumpTo(day); setView('day'); }}>
                         {shortDayFormatter.format(new Date(`${day}T00:00:00Z`))}
@@ -169,19 +225,95 @@ export function HomeScreen() {
             </>}
           </Card>
         </div>
+        {/* 달력 아래 카드(2026-09-17 Q). 기본은 **다가오는 일정** — 오늘 이후 가까운 순 다섯 건이고
+            넘치면 `날짜 더보기`로 나머지를 펼친다. 달력에서 다른 날짜를 고르면 그 날짜 카드로 바뀐다.
+            줄은 모두 접힌 카드다. 접힌 줄에 이름(당사자 카드와 같은 18/600)과 일시가 서고,
+            펼치면 회차·일시·사업명·장소가 라벨/값으로 붙는다. */}
         <section ref={detail} tabIndex={-1} aria-labelledby="sc-detail-label" className="sc-details">
-          <span id="sc-detail-label" hidden>선택한 날짜의 상담 일정 · {selectedDateLabel}</span>
-          <Card title={selectedDateLabel} hint={rows ? `${selectedEvents.length}건` : undefined}>
-            {!rows ? <Empty>일정을 불러오는 중이에요.</Empty> : selectedEvents.length === 0 ? <Empty>선택한 날짜에 상담 일정이 없어요.</Empty> : selectedEvents.map(({ row, time }) => <div key={row.session_id} data-selected={row.session_id === selectedSession} className="sc-detail-item">
-              <Item title={`${row.name ?? row.pseudonym} · ${row.seq}회차`} desc={<>
-                <span className="sc-detail-time">{time.label}</span>
-                <span>{[row.program_name, row.method ? (METHOD_LABEL[row.method] ?? row.method) : null, row.place, row.plan_memo].filter(Boolean).join(' · ')}</span>
-                {(row.open_tasks > 0 || row.open_questions > 0) && <span className="home-open">
-                  {row.open_tasks > 0 && <Badge tone="lavender">확인할 과제 {row.open_tasks}</Badge>}
-                  {row.open_questions > 0 && <Badge tone="blue">물어볼 것 {row.open_questions}</Badge>}
-                </span>}
-              </>} action={<a className="wire-button" data-variant="secondary" href={`#/cases/${row.case_id}/info`}><span className="wire-button-text">당사자 정보</span></a>} />
-            </div>)}
+          <span id="sc-detail-label" hidden>
+            {dayPicked ? `선택한 날짜의 상담 일정 · ${selectedDateLabel}` : '다가오는 상담 일정'}
+          </span>
+          <Card
+            title={dayPicked ? selectedDateLabel : '다가오는 일정'}
+            hint={dayPicked ? (rows ? `${selectedEvents.length}건` : undefined) : upcomingHint}
+          >
+            {listed === null ? (
+              <Empty>일정을 불러오는 중이에요.</Empty>
+            ) : listed.length === 0 ? (
+              <Empty>{dayPicked ? '선택한 날짜에 상담 일정이 없어요.' : '앞으로 잡힌 상담이 없어요.'}</Empty>
+            ) : (
+              <>
+                {listed.map(({ row, time }) => {
+                  const contact = contacts[row.case_id];
+                  return (
+                    <Fold
+                      key={row.session_id}
+                      group="sc-upcoming"
+                      open={row.session_id === selectedSession}
+                      onOpen={() => openContact(row.case_id)}
+                      title={row.name ?? row.pseudonym}
+                      // 접힌 줄은 한 행이다(2026-09-17 Q): 이름 · 아이디 · 참여 사업 · 일시.
+                      // 잘리는 쪽은 뒤라 사업명을 마지막 앞에 두고, 전체는 `title` 로 남긴다.
+                      desc={metaLine([
+                        row.name ? row.pseudonym : null,
+                        `${row.program_name} ${row.seq}회차`,
+                        `${shortDayFormatter.format(new Date(`${time.day}T00:00:00Z`))} ${time.label}`,
+                      ])}
+                      action={
+                        <>
+                          <a
+                            className="wire-button"
+                            data-variant="secondary"
+                            href={`#/cases/${row.case_id}/info`}
+                            onClick={event => event.stopPropagation()}
+                          >
+                            <span className="wire-button-text">당사자 정보</span>
+                          </a>
+                          {/* 두 행동 모두 세컨더리다 — 다섯 줄에 채운 버튼이 다섯 개면
+                              강조가 아니라 소음이다(2026-09-17). */}
+                          <a
+                            className="wire-button"
+                            data-variant="secondary"
+                            href={`#/cases/${row.case_id}/record`}
+                            onClick={event => event.stopPropagation()}
+                          >
+                            <span className="wire-button-text">상담 기록하기</span>
+                          </a>
+                        </>
+                      }
+                    >
+                      {/* 가로선 격자(`DataRows`)는 줄마다 칸을 키웠다 — 컬러 라벨 + 값으로 바꿨다
+                          (2026-09-17 Q). 머리가 말한 것은 되풀이하지 않는다. 연락처·이메일은
+                          이 줄을 펼칠 때 그 사례만 따로 부른다. */}
+                      <div className="participant-card-fields">
+                        {([
+                          ['연락처', contact === 'loading' ? '불러오는 중' : contact === 'error' ? '불러오지 못했어요' : (contact?.phone ?? '')],
+                          ['이메일', contact === 'loading' ? '불러오는 중' : contact === 'error' ? '' : (contact?.email ?? '')],
+                          ['방식', row.method ? (METHOD_LABEL[row.method] ?? row.method) : '정하지 않음'],
+                          ...(row.place ? [['장소', row.place]] : []),
+                          ...(row.plan_memo ? [['메모', row.plan_memo]] : []),
+                          ...(row.open_tasks > 0 ? [['확인할 과제', `${row.open_tasks}건`]] : []),
+                          ...(row.open_questions > 0 ? [['물어볼 것', `${row.open_questions}건`]] : []),
+                        ] as Array<[string, string]>)
+                          .filter(([, value]) => value !== '')
+                          .map(([label, value]) => (
+                            <div className="wire-field-row" data-layout="stack" data-size="sm" key={label}>
+                              <span className="wire-field-label">{label}</span>
+                              <span className="wire-field-value">{value}</span>
+                            </div>
+                          ))}
+                      </div>
+                    </Fold>
+                  );
+                })}
+                {/* 한 번에 모두 펼치지 않는다 — 다섯 건씩 더 붙인다(77건이 벽처럼 쏟아졌다). */}
+                {!dayPicked && upcomingEvents.length > upcomingShown && (
+                  <FormActions>
+                    <Button onClick={() => setUpcomingShown(n => n + UPCOMING_LIMIT)}>날짜 더보기</Button>
+                  </FormActions>
+                )}
+              </>
+            )}
           </Card>
         </section>
       </>}

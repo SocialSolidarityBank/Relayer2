@@ -54,8 +54,14 @@ body { margin: 0; }
    설명이 길면 제목이 "AI / 요약" 두 줄로 쪼개졌다.
    말줄임 조각은 `flex:1 1 0` 이어야 한다 — `1 1 auto` 면 글자 길이가 곧 최소폭이 되어
    페이지가 2,900px 로 늘어났다(2026-09-16 Q "장폭이 비정상적으로 길어졌어"). */
-.fold-title-text { flex: none; white-space: nowrap; }
+/* 제목도 줄어들 수는 있어야 한다(2026-09-17 실측): `flex: none` 이면 띄어쓰기 없는 긴 이름
+   하나가 390 화면을 431px 로 밀어냈다. `0 1 auto` 는 제목 길이를 기준폭으로 두되 부족하면
+   말줄임으로 물러난다 — 설명(`1 1 0`)이 먼저 줄어들고 제목이 나중에 줄어든다. */
+.fold-title-text { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fold-title-desc { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 카드 안에 접힘 카드를 넣으면 grid 항목의 `min-width:auto` 가 안쪽 제목의 최소폭을 그대로
+   물려받는다 — 390 화면에서 페이지가 473px 로 늘어났다(2026-09-17 실측). 항목마다 0 을 박는다. */
+.wire-card-body > .wire-card-details { min-width: 0; }
 .wire-card-details[open] > .wire-card-summary .fold-title-desc { white-space: normal; }
 /* 펼친 접힘 카드의 제목 줄 아래 선을 끈다(2026-09-17 Q "의미 없는 가로선"). 이식 CSS 는
    WireCard 의 제목 구분선과 같은 선을 여기에도 두지만, 접힘 카드는 제목 줄 하나와 본문

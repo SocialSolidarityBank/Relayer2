@@ -68,11 +68,41 @@
 .sc-time-grid[data-view="day"] thead button { flex: 1; width: auto; min-height: 44px; justify-content: flex-start; flex-wrap: nowrap; padding: 0; color: var(--on-action); }
 .sc-time-grid[data-view="day"] tbody th { vertical-align: middle; padding-block: var(--space-1); }
 .sc-time-grid[data-view="day"] tbody td { height: 36px; padding-block: 2px; }
+/* 주간은 1행(요일 머리)과 1열(시각)을 옅은 면으로 깐다(2026-09-17 Q — 흰 면에 선만으로는
+   머리와 본문이 구분되지 않았다). 좌상단 모서리도 같은 면이고, 그 칸의 `시간` 글자는
+   화면에서 숨기고 접근 이름으로만 남긴다(`.wire-toolbar-label`). 오늘 열 머리의
+   그라데이션은 그대로 이긴다(아래 선언 순서). */
+.sc-time-grid[data-view="week"] thead th,
+.sc-time-grid[data-view="week"] tbody th { background: var(--muted); }
+.sc-time-grid[data-view="week"] thead [data-today="true"] { background: var(--gradient-action); }
+/* 다가오는 일정 줄(2026-09-17 Q).
+   - 머리는 한 행이다: 이름 16/600 · 12px 요약(아이디 · 사업명 회차 · 일시) · 행동 둘 · 꺽쇠.
+     요약은 볼드를 쓰지 않고(제목 줄의 600 을 물려받았다) 모자라면 뒤에서 말줄임한다.
+   - 카드 사이 간격은 8 이다(24 는 다섯 장을 세로로 흩어 놓았다). */
+.sc-details .fold-title-text { font-size: var(--text-md); line-height: var(--leading-tight); }
+.sc-details .wire-card-title { flex-wrap: nowrap; column-gap: var(--space-3); }
+.sc-details .fold-title-desc {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: var(--text-badge);
+  font-weight: 400;
+  color: var(--sub);
+  white-space: nowrap;
+}
+/* 펼쳐도 한 줄을 유지한다 — 이식 CSS 는 펼친 머리의 설명을 여러 줄로 푼다. */
+.sc-details .wire-card-details[open] > .wire-card-summary .fold-title-desc { white-space: nowrap; }
+/* 간격은 카드 본문 격자가 쥔다(margin 을 더하면 12 + 8 = 20 이 됐다). */
+.sc-details > .wire-card > .wire-card-body { gap: var(--space-2); }
+/* 머리줄 행동 둘은 꺽쇠 앞에 선다. 접힌 줄에서도 누를 수 있어야 하므로 높이는 30 으로 맞춘다. */
+.sc-details .wire-card-summary-right { gap: var(--space-2); flex: none; }
+.sc-details .wire-card-summary-right .wire-button { min-height: 30px; white-space: nowrap; }
+/* 본문은 가로선 없는 컬러 라벨 + 값이다. 폭이 되면 세 열까지 앉는다. */
+.sc-details .participant-card-fields {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-3) var(--space-5);
+}
 .sc-details { min-width: 0; scroll-margin-block: calc(var(--header-height) + var(--space-4)); }
-.sc-detail-item { padding: var(--space-2) var(--space-3); border: 1px solid transparent; border-radius: var(--radius-control); }
-.sc-detail-item[data-selected="true"] { background: linear-gradient(var(--panel), var(--panel)) padding-box, var(--gradient-action) border-box; }
-.sc-detail-item + .sc-detail-item { margin-top: var(--space-2); }
-.sc-detail-time { display: block; font-weight: 600; margin-bottom: var(--space-1); }
+/* `.sc-detail-item`(선택한 줄 강조 테두리)은 접힘 카드로 바뀌며 쓰이지 않는다 — 걷었다. */
 .sc-page :is(button, a, [tabindex]):focus-visible { outline: 2px solid var(--blue-deep); outline-offset: 2px; }
 @media (max-width: 767px) {
   .sc-toolbar { flex-wrap: nowrap; align-items: center; gap: var(--space-3); }
@@ -85,6 +115,14 @@
   .sc-mobile-count { display: inline; }
   .sc-month-events, .sc-more { display: none; }
   .sc-time-scroll { max-height: 60vh; }
+  /* 좁은 화면에서는 한 행이 안 된다 — 행동 둘이 폭을 다 먹어 이름이 0px 이 됐다(390 실측).
+     이름 / 12px 요약 / 행동 둘을 세 줄로 푼다. */
+  .sc-details .wire-card-summary { flex-wrap: wrap; row-gap: var(--space-2); }
+  .sc-details .wire-card-title { flex: 1 1 100%; flex-wrap: wrap; row-gap: 2px; }
+  /* 좁은 화면에서는 요약을 자르지 않고 두 줄로 흘린다 — 잘리면 일시(정렬 기준)가 사라졌다. */
+  .sc-details .fold-title-desc,
+  .sc-details .wire-card-details[open] > .wire-card-summary .fold-title-desc { flex-basis: 100%; white-space: normal; }
+  .sc-details .wire-card-summary-right { margin-left: auto; }
   .sc-time-grid th:first-child { width: 64px; }
   .sc-time-grid[data-view="day"] .sc-time-heading { gap: var(--space-1); padding-inline: var(--space-1); }
 }
