@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { getCase, getCaseDetail, planSession } from '../api.ts';
 import type { CaseDetail, CaseView, NewSessionInput } from '../api.ts';
-import { Button, Card, Choice, ChoiceGroup, ErrorText, Field, ParticipantHero } from '../ui.tsx';
+import { Button, Card, Choice, ChoiceGroup, Empty, ErrorText, Field, ParticipantHero } from '../ui.tsx';
 import { METHODS } from '../vocab.ts';
 import { DateTimeInput } from '../date-time-input.tsx';
 import { dateTimeToIso, EMPTY_DATE_TIME } from '../date-time.ts';
@@ -77,6 +77,20 @@ export function ScheduleNewScreen({ caseId }: { caseId: number }) {
         </>
       }
     />
+    {/* 종결 사례에는 일정을 잡지 않는다(2026-09-18 검수) — 서버도 409 로 거절한다. */}
+    {detail?.case.status === 'closed' ? (
+      <div className="wire-container">
+        <Card
+          title="상담 종결"
+          tone="warn"
+          action={
+            <Button onClick={() => (window.location.hash = `#/cases/${caseId}/info`)}>당사자 정보</Button>
+          }
+        >
+          <Empty>종결된 상담, 새 일정 불가</Empty>
+        </Card>
+      </div>
+    ) : (
     <form className="wire-container schedule-form" onSubmit={e => { e.preventDefault(); void save(); }}>
       <fieldset className="schedule-inputs" disabled={saving} aria-label="상담 일정 입력">
         <Card title="상담 일시">
@@ -107,5 +121,6 @@ export function ScheduleNewScreen({ caseId }: { caseId: number }) {
         <Button type="submit" variant="primary" disabled={!scheduledAt || saving}>{saving ? '저장 중…' : '일정 저장'}</Button>
       </footer>
     </form>
+    )}
   </>;
 }

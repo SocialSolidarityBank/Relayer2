@@ -42,7 +42,8 @@ const SORTS = [
 export function ParticipantsScreen({ pickFor = null }: { pickFor?: PickFor }) {
   const [rows, setRows] = useState<ParticipantRow[] | null>(null);
   const [q, setQ] = useState('');
-  const [status, setStatus] = useState<string>('all');
+  // 고르기 모드(기록·일정)는 진행 중 사례가 기본이다 — 종결 사례는 새 기록·일정을 받지 않는다.
+  const [status, setStatus] = useState<string>(pickFor ? 'open' : 'all');
   const [program, setProgram] = useState('all');
   const [worker, setWorker] = useState('all');
   const [sort, setSort] = useState<string>('name');

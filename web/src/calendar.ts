@@ -20,7 +20,8 @@ export type CalendarTime = { day: string; hour: number; label: string };
 
 const DAY_MS = 86_400_000;
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
-const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'] as const;
+/** 요일 머리글 — 월요일 시작. 월간·주간 표가 이 하나를 쓴다(2026-09-18). */
+export const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일'] as const;
 
 // Intl 인스턴스는 모듈에서 한 번만 만든다 — 행마다 새로 만들지 않는다.
 const dayFormatter = new Intl.DateTimeFormat('sv-SE', {
@@ -76,7 +77,7 @@ function rangeTitle(startMs: number, endMs: number): string {
 /**
  * anchor(YYYY-MM-DD)가 속한 기간을 돌려준다.
  * month: 그 달을 감싸는 앞 월요일~뒤 일요일(인접 달 칸 포함, 28/35/42일).
- * week: 일~토 7일. day: 하루.
+ * week: 월~일 7일. day: 하루.
  * start/end는 서버 BETWEEN에 그대로 넘기는 KST ISO(포함 범위).
  */
 export function calendarPeriod(view: CalendarView, anchor: string): CalendarPeriod {
@@ -95,14 +96,14 @@ export function calendarPeriod(view: CalendarView, anchor: string): CalendarPeri
     endMs = lastMs + ((7 - new Date(lastMs).getUTCDay()) % 7) * DAY_MS;
     title = `${year}년 ${month + 1}월`;
   } else if (view === 'week') {
-    startMs = anchorMs - new Date(anchorMs).getUTCDay() * DAY_MS;
+    startMs = anchorMs - ((new Date(anchorMs).getUTCDay() + 6) % 7) * DAY_MS;
     endMs = startMs + 6 * DAY_MS;
     title = rangeTitle(startMs, endMs);
   } else {
     startMs = anchorMs;
     endMs = anchorMs;
     const d = new Date(anchorMs);
-    title = `${d.getUTCFullYear()}년 ${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일 ${WEEKDAYS[d.getUTCDay()]}요일`;
+    title = `${d.getUTCFullYear()}년 ${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일 ${WEEKDAYS[(d.getUTCDay() + 6) % 7]}요일`;
   }
 
   return {

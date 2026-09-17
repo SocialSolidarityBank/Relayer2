@@ -32,6 +32,7 @@ import {
   revokeInvite,
   saveOrg,
   saveProfile,
+  Unauthorized,
   workerCases,
   type AssignmentCase,
   type Connections,
@@ -140,6 +141,9 @@ export const SETTINGS_GROUP_LIST: readonly SettingsGroup[] = SETTINGS_GROUPS.map
 export const visibleGroups = (isAdmin: boolean): readonly SettingsGroup[] =>
   SETTINGS_GROUP_LIST.map((g) => ({
     ...g,
+    // 실무자에게 이 묶음의 내용은 `내가 올린 배정 요청` 하나뿐이다 — `실무자 관리`라
+    // 부르면 없는 것을 기대하게 한다(2026-09-18). 사이드바·페이지 제목이 같은 값을 쓴다.
+    title: g.key === 'staff' && !isAdmin ? '담당 배정 요청' : g.title,
     items: g.items.filter((i) => (i.admin ? isAdmin : !(i.workerOnly && isAdmin))),
   })).filter((g) => g.items.length > 0);
 
@@ -961,9 +965,27 @@ function DownloadPane() {
 
 function ConnectionsPane() {
   const [c, setC] = useState<Connections | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
-    void getConnections().then(setC);
-  }, []);
+    void getConnections()
+      .then(setC)
+      .catch((e) => {
+        // 401 은 로그인 만료다 — 셸이 로그인 화면으로 바꾸게 다시 불러온다(routes.tsx 와 같은 경로).
+        if (e instanceof Unauthorized) { window.location.reload(); return; }
+        setError(e instanceof Error ? e.message : '연결 상태 불러오기 실패');
+      });
+  }, [retry]);
+  if (error) {
+    return (
+      <Card title="API 연결 관리">
+        <ErrorText>연결 상태 불러오기 실패</ErrorText>
+        <FormActions>
+          <Button onClick={() => { setError(null); setRetry((n) => n + 1); }}>다시 불러오기</Button>
+        </FormActions>
+      </Card>
+    );
+  }
   if (!c) return <Empty>불러오는 중</Empty>;
 
   const row = (title: string, ok: boolean, desc: string, env: string) => (

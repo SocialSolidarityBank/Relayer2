@@ -233,7 +233,13 @@ export function ParticipantNewScreen() {
                 )}
               </>
             }
-            desc={<span title={c.body}>{c.body}</span>}
+            desc={
+              <span title={c.body}>
+                {c.domain === 'sensitive_information_processing'
+                  ? `미동의 시 인테이크·상담 기록 저장 불가, ${c.body}`
+                  : c.body}
+              </span>
+            }
           >
             <DataRows
               rows={[

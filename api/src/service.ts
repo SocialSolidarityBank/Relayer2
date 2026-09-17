@@ -258,6 +258,7 @@ export async function planSession(
     is_closing?: boolean;
   },
 ): Promise<{ session_id: number; seq: number }> {
+  await assertCaseOpen(caseId);
   return await sql.begin(async (tx) => {
     // 사례 행을 먼저 잠근다(2026-09-16 검수). 안 잠그면 일정 등록을 빨리 두 번 눌렀을 때
     // 두 요청이 같은 `max(seq)+1` 을 읽고, 뒤엣것이 `unique (case_id, seq)` 에 걸려 500 이 난다.
