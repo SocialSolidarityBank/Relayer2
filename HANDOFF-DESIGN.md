@@ -33,9 +33,26 @@ PLAYWRIGHT_BASE_URL=http://localhost:8798 PLAYWRIGHT_API_PREFIX= VOICE_ENABLED=1
 
 ## 로컬 검증 환경
 
-- 서버: `node api/src/index.ts`, `PORT=8798`, `web/dist` 를 같은 원점에서 낸다
-- DB: 일회용 `relayer_design`(운영 `.env` 에 붙지 않는다)
-- 계정: `test1`(관리자) · `test2`(실무자, 시드 사례) · `test3`(당사자, 로그인 불가). 비밀번호 = 아이디
+- 서버: `node --env-file=.env.design api/src/index.ts`, `PORT=8798`, `web/dist` 를 같은 원점에서 낸다.
+  `.env.design`(gitignore 됨)에 `DATABASE_URL`·`PII_ENC_KEY`·`SESSION_SECRET`·`PORT`·`VOICE_ENABLED=1` 이 있다.
+- DB: 일회용 `relayer_design`(운영 `.env` 에 붙지 않는다). **시드만 남긴다** — e2e 가 만든 자료는
+  쌓아 두지 않는다(2026-09-18 Q). 지저분해지면 통째로 다시 만든다:
+  ```bash
+  # 서버를 먼저 멈춘다(연결이 남아 있으면 drop 이 막힌다)
+  docker exec relayer-db psql -U relayer -d postgres -c "drop database if exists relayer_design"
+  docker exec relayer-db psql -U relayer -d postgres -c "create database relayer_design"
+  node --env-file=.env.design api/src/migrate.ts && node --env-file=.env.design api/src/seed.ts
+  docker exec relayer-db psql -U relayer -d relayer_design -tAc "
+    insert into programs(name) select distinct program_name from support_cases where program_name <> '' on conflict do nothing;
+    insert into case_assignments(case_id, user_id, assigned_by)
+      select 1, u.id, (select id from users where email='test1') from users u where u.email in ('test1','test2')
+      on conflict do nothing"
+  ```
+  마지막 두 줄이 없으면 `사업` 선택창이 비어 여러 spec 이 타임아웃하고, `measure-cards` 가 사례를 못 찾는다.
+  **PII_ENC_KEY 를 바꾸면 기존 금고를 못 읽는다** — DB 를 새로 만들 때만 새 열쇠를 쓴다.
+- **다른 레인의 마이그레이션을 이 DB 에 적용하지 않는다.** 0025(온보딩)를 적용했더니 `main` 코드가
+  아직 읽는 `support_cases.program_name` 이 사라져 목록이 500 이 됐다. 그 레인 검증은 그 레인 DB 에서 한다.
+- 계정: `test1`(관리자) · `test2`(실무자, 시드 사례 1) · `test3`(당사자, 로그인 불가). 비밀번호 = 아이디
 - **접근은 역할이 아니라 배정이 정한다**(`case_assignments`). 관리자도 배정이 없으면 사례 상세가 막힌다
 - `#/cases/:id/...` 를 주소창으로 바로 열면 목록을 거치지 않아 홈으로 튕기는 자리가 있다 — 실측은 목록에서 카드를 눌러 들어간다
 
