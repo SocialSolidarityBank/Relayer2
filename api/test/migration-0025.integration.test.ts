@@ -29,7 +29,7 @@ describe.skipIf(!enabled)('migration 0025 + 0026', () => {
     // 기존 배포 = 관리자가 있다. **기관 이름은 비어 있어도**(#36 이전 시드) 마법사와 첫 가입 문을 둘 다 건너뛰어야 한다(0026).
     await db`insert into users (email, name, role) values ('old-admin', '기존 관리자', 'admin')`;
 
-    expect(await scratch.migrate()).toEqual(['0025_onboarding_programs.sql', '0026_onboarding_existing_admins.sql']);
+    expect(await scratch.migrate('0027')).toEqual(['0025_onboarding_programs.sql', '0026_onboarding_existing_admins.sql']);
 
     const caseCols = await db<Array<{ column_name: string; is_nullable: string }>>`
       select column_name, is_nullable from information_schema.columns

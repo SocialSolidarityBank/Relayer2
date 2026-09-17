@@ -4,8 +4,9 @@ import {
   CONSENT_COPY,
   CONSENT_DOMAINS,
   copyHash,
+  copyText,
+  copyVersion,
   foldConsent,
-  COPY_VERSION,
   type ConsentDecision,
   type ConsentDomain,
   type ConsentEventRow,
@@ -94,7 +95,7 @@ export async function createCase(input: {
         insert into consent_events
           (participant_id, case_id, domain, decision, purpose, copy_version, copy_hash, effective_at, recorded_by)
         values (${participant.id}, ${c.id}, ${consent.domain}, ${consent.decision},
-                ${CONSENT_COPY[consent.domain].purpose}, ${COPY_VERSION}, ${copyHash(consent.domain)},
+                ${CONSENT_COPY[consent.domain].purpose}, ${copyVersion()}, ${copyHash(consent.domain)},
                 ${new Date().toISOString()}, ${input.actorId})`;
     }
     return { case_id: c.id, participant_id: participant.id, pseudonym };
@@ -262,6 +263,7 @@ export async function planSession(
     place?: string | null;
     plan_memo?: string | null;
     is_closing?: boolean;
+    duration_min?: number | null;
   },
 ): Promise<{ session_id: number; seq: number }> {
   // 두 가드는 서로 다른 것을 막는다: 종결된 사례(QA 여정)와 멈춘 사업(기관 준비).
@@ -275,9 +277,9 @@ export async function planSession(
     const [{ seq }] = await tx<{ seq: number }[]>`
       select coalesce(max(seq), 0) + 1 as seq from sessions where case_id = ${caseId}`;
     const [s] = await tx<{ id: number }[]>`
-      insert into sessions (case_id, seq, kind, status, scheduled_at, method, place, plan_memo, is_closing)
+      insert into sessions (case_id, seq, kind, status, scheduled_at, method, place, plan_memo, is_closing, duration_min)
       values (${caseId}, ${seq}, 'regular', 'planned', ${input.scheduled_at}, ${input.method},
-              ${input.place ?? null}, ${encryptText(input.plan_memo)}, ${input.is_closing ?? false})
+              ${input.place ?? null}, ${encryptText(input.plan_memo)}, ${input.is_closing ?? false}, ${input.duration_min ?? null})
       returning id`;
     return { session_id: s.id, seq };
   });
@@ -346,6 +348,8 @@ export async function recordSession(
     outcomes?: OutcomeSubmission[];
     actorId?: number;
     is_closing?: boolean;
+    /** 소요 분. 안 보내면 있던 값을 지키고, null 은 지운다. */
+    duration_min?: number | null;
   },
 ): Promise<{ session_id: number; unchecked: number }> {
   const [owner] = await sql<Array<{ case_id: number; status: string }>>`
@@ -408,6 +412,7 @@ export async function recordSession(
         next_goal_text = ${encryptText(input.next_goal_text)},
         created_by = coalesce(created_by, ${input.actorId ?? null}),
         is_closing = ${input.is_closing ?? false},
+        duration_min = ${input.duration_min === undefined ? target.duration_min : input.duration_min},
         today_goal_text = coalesce(today_goal_text, ${encryptText(carry?.text)}),
         today_goal_from_session_id = coalesce(today_goal_from_session_id, ${carry?.fromSessionId ?? null})
       where id = ${sessionId}`;
@@ -458,6 +463,9 @@ export type SessionRecord = {
   next_goal_text: string | null;
   overall_goal: string | null;
   is_closing: boolean;
+  duration_min: number | null;
+  /** 원본(수기·전사)을 고친 뒤 AI 요약·불일치 확인이 옛것이 됐는가(2026-09-18 Q D3). */
+  stale: Stale;
   /** 이 회차가 만든 카드. 결과가 붙은 것은 지울 수 없다. */
   cards: Array<{ kind: string; text: string; area: string | null; owner: Card['owner']; locked: boolean }>;
   /** 이 회차에 올라와 있던 카드와 이 회차가 매긴 결과(고쳐 쓸 때 그대로 다시 보여 준다). */
@@ -475,6 +483,7 @@ export type SessionRecord = {
 
 /** 저장해 둔 회차를 다시 연다. 고쳐 쓰기 화면의 재료다. */
 export async function getSessionRecord(sessionId: number): Promise<SessionRecord | null> {
+  const stale = await staleFlags([sessionId]);
   const [found] = await sql<Session[]>`select case_id from sessions where id = ${sessionId}`;
   if (!found) return null;
   const loaded = await loadCase(found.case_id);
@@ -505,6 +514,8 @@ export async function getSessionRecord(sessionId: number): Promise<SessionRecord
     next_goal_text: target.next_goal_text,
     overall_goal: supportCase.overall_goal,
     is_closing: target.is_closing ?? false,
+    duration_min: target.duration_min,
+    stale: stale[sessionId] ?? { ai_summary: false, mismatch: false },
     cards: cards
       .filter((c) => c.source_session_id === sessionId)
       .map((c) => ({
@@ -562,6 +573,40 @@ export async function updateNextGoal(sessionId: number, text: string | null): Pr
   if (s.status !== 'done') throw new GoalLocked('아직 기록하지 않은 회차');
   if (s.next_goal_consumed_by_session_id) throw new GoalLocked('다음 회차가 이미 이어받은 목표');
   await sql`update sessions set next_goal_text = ${encryptText(text)} where id = ${sessionId}`;
+}
+
+/**
+ * 다음 상담 목표를 줄 배열로 고친다(2026-09-18 Q D5 — 다음 목표만 복수). 스키마는 그대로다:
+ * 서버가 '\n' 으로 이어 기존 컬럼에 둔다. 대상 회차는 detail 의 `pending_next_goal` 과 같다 —
+ * 마지막 기록 회차이고 아직 어느 회차도 이어받지 않은 것. 없으면 409.
+ */
+export async function updateNextGoalLines(caseId: number, lines: string[]): Promise<{ session_id: number }> {
+  const [last] = await sql<Array<{ id: number }>>`
+    select id from sessions where case_id = ${caseId} and status = 'done' order by seq desc limit 1`;
+  if (!last) throw new GoalLocked('기록된 회차 없음');
+  const text = lines.map((l) => l.trim()).filter(Boolean).join('\n');
+  await updateNextGoal(last.id, text || null);
+  return { session_id: last.id };
+}
+
+export type Stale = { ai_summary: boolean; mismatch: boolean };
+
+/**
+ * 원본을 고친 뒤 파생물이 옛것이 됐는가(2026-09-18 Q D3). 자동 재처리는 하지 않는다 — 배지만 붙인다.
+ * - `ai_summary`: 수기·전사 리비전이 마지막 AI 초안·승인 행보다 뒤다. 요약 리비전·재정리는 새 행을 쌓아 스스로 푼다.
+ * - `mismatch`: 수기 리비전이 마지막 전사 승인보다 뒤다 — 승인 때 견준 수기가 지금 수기가 아니다.
+ *   전사 리비전은 같은 트랜잭션에서 승인 행을 쌓으므로(같은 now()) 스스로 풀린다.
+ */
+export async function staleFlags(sessionIds: number[]): Promise<Record<number, Stale>> {
+  if (sessionIds.length === 0) return {};
+  const rows = await sql<Array<{ session_id: number } & Stale>>`
+    select s.id as session_id,
+      coalesce((select max(r.created_at) from session_revisions r where r.session_id = s.id and r.kind in ('memo', 'transcript'))
+             > (select max(d.created_at) from ai_drafts d where d.session_id = s.id), false) as ai_summary,
+      coalesce((select max(r.created_at) from session_revisions r where r.session_id = s.id and r.kind = 'memo')
+             > (select max(t.created_at) from transcripts t where t.session_id = s.id and t.status = 'approved'), false) as mismatch
+    from sessions s where s.id in ${sql(sessionIds)}`;
+  return Object.fromEntries(rows.map((r) => [r.session_id, { ai_summary: r.ai_summary, mismatch: r.mismatch }]));
 }
 
 async function insertCards(
@@ -687,7 +732,7 @@ export async function getConsents(caseId: number): Promise<ConsentView | null> {
     return {
       domain,
       label: CONSENT_COPY[domain].label,
-      copy: CONSENT_COPY[domain].copy,
+      copy: copyText(domain).copy,
       status: foldConsent(domain, events),
       decided_at: mine.at(-1)?.effective_at ?? null,
     };
@@ -705,7 +750,7 @@ export async function recordConsent(
     insert into consent_events
       (participant_id, case_id, domain, decision, purpose, copy_version, copy_hash, effective_at, recorded_by)
     values (${supportCase.participant_id}, ${caseId}, ${input.domain}, ${input.decision},
-            ${CONSENT_COPY[input.domain].purpose}, ${COPY_VERSION}, ${copyHash(input.domain)},
+            ${CONSENT_COPY[input.domain].purpose}, ${copyVersion()}, ${copyHash(input.domain)},
             ${new Date().toISOString()}, ${input.actorId ?? null})`;
   return (await getConsents(caseId)) ?? [];
 }
@@ -732,6 +777,7 @@ export type CaseDetail = {
     kind: string;
     status: string;
     held_at: string | null;
+    duration_min: number | null;
     scheduled_at: string | null;
     line: string;
     memo: string | null;
@@ -739,6 +785,8 @@ export type CaseDetail = {
     written: boolean;
     /** 녹음·전사 상태. 여러 녹음이면 가장 최근 녹음 기준. */
     voice: { recordings: number; transcript: SessionTranscriptState };
+    /** 원본 수정 뒤 재확인이 필요한 파생물(D3). 화면이 `원본 수정됨 · 재정리 필요` 배지를 붙인다. */
+    stale: Stale;
     today_goal_text: string | null;
     /** 승인된 AI 정리. 없거나 마지막 행이 초안이면 null. */
     ai_summary: ApprovedSummary | null;
@@ -795,6 +843,7 @@ export async function getCaseDetail(caseId: number): Promise<CaseDetail | null> 
   const { supportCase, pseudonym, sessions, cards, outcomes } = loaded;
   const approved = await approvedSummaries(sessions.map((s) => s.id));
   const voice = await voiceStates(sessions.map((s) => s.id));
+  const stale = await staleFlags(sessions.map((s) => s.id));
 
   const [vault] = await sql<Array<{ enc_name: string | null; enc_phone: string | null; enc_email: string | null }>>`
     select enc_name, enc_phone, enc_email from participant_pii
@@ -825,6 +874,7 @@ export async function getCaseDetail(caseId: number): Promise<CaseDetail | null> 
         kind: s.kind,
         status: s.status,
         held_at: s.held_at,
+        duration_min: s.duration_min,
         scheduled_at: s.scheduled_at,
         line: buildSessionLine(s, cards),
         memo,
@@ -832,6 +882,7 @@ export async function getCaseDetail(caseId: number): Promise<CaseDetail | null> 
         voice: voice[s.id] ?? { recordings: 0, transcript: 'none' as const },
         today_goal_text: decryptText(s.today_goal_text),
         ai_summary: approved[s.id] ?? null,
+        stale: stale[s.id] ?? { ai_summary: false, mismatch: false },
       };
     }),
     goal_revisions: revisions,

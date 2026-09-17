@@ -4,7 +4,7 @@ import {
   canonicalPreimage,
   CONSENT_COPY,
   copyHash,
-  COPY_VERSION,
+  copyVersion,
   foldConsent,
   type ConsentEventRow,
 } from '../src/consent.ts';
@@ -13,7 +13,7 @@ const grant = (id: number, hash = copyHash('sensitive_information_processing')):
   id,
   domain: 'sensitive_information_processing',
   decision: 'grant',
-  copy_version: COPY_VERSION,
+  copy_version: copyVersion(),
   copy_hash: hash,
   effective_at: '2026-09-15T00:00:00.000Z',
 });

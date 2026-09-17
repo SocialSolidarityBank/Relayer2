@@ -10,7 +10,7 @@ import { randomBytes, createHash } from 'node:crypto';
 import { sql } from './db.ts';
 import { audit } from './audit.ts';
 import { hashPassword } from './auth.ts';
-import { encryptPii } from './pii.ts';
+import { decryptPii, encryptPii } from './pii.ts';
 import { assertProgramActive } from './access.ts';
 import type { Assignee } from './domain/types.ts';
 
@@ -411,6 +411,79 @@ export async function workerCases(userId: number): Promise<WorkerCase[]> {
     order by c.status, c.id desc`;
 }
 
+export type UserCase = { case_id: number; name: string | null; program: string; seq: number; next_at: string | null };
+
+/**
+ * 실무자 한 사람이 맡은 당사자 — 담당 중인 당사자 팝업(ui-plan J1). 이름을 실으므로
+ * 남의 목록을 볼 때는 라우트가 `assign.view` 를 남긴다. 회차 = 기록된 회차 수, 다음 상담 = 첫 예정 회차.
+ */
+export async function userCases(userId: number): Promise<UserCase[]> {
+  const rows = await sql<Array<Omit<UserCase, 'name'> & { enc_name: string | null }>>`
+    select c.id as case_id, v.enc_name, pg.name as program,
+           (select count(*)::int from sessions s where s.case_id = c.id and s.status = 'done') as seq,
+           (select min(s.scheduled_at) from sessions s where s.case_id = c.id and s.status = 'planned') as next_at
+    from case_assignments a
+    join support_cases c on c.id = a.case_id
+    join programs pg on pg.id = c.program_id
+    left join participant_pii v on v.participant_id = c.participant_id
+    where a.user_id = ${userId} and c.status = 'open'
+    order by c.id desc`;
+  return rows.map(({ enc_name, ...row }) => ({ ...row, name: decryptPii(enc_name) }));
+}
+
+export type AssignCase = {
+  case_id: number;
+  name: string | null;
+  /** 당사자 아이디 = 가명(HERO 의 ID 칸과 같다). 당사자는 로그인 계정이 없다. */
+  login: string;
+  program: string;
+  seq: number;
+  phone: string | null;
+  email: string | null;
+  assignees: Assignee[];
+};
+
+export const ASSIGN_PAGE = 10;
+
+/**
+ * 담당 실무자 배정 목록(ui-plan J3). 열린 사례만, 10건씩. `q` 는 가명·사업 이름에 건다 —
+ * 이름·연락처는 금고에 있어 SQL 로 거르지 못한다(가명은 목록 카드에 늘 보이므로 검색 열쇠로 충분하다).
+ */
+export async function assignCases(input: { q: string; programId: number | null; page: number }): Promise<{ items: AssignCase[]; total: number }> {
+  const where = sql`
+    c.status = 'open'
+    and ${input.programId === null ? sql`true` : sql`c.program_id = ${input.programId}`}
+    and ${input.q ? sql`(p.pseudonym ilike ${'%' + input.q + '%'} or pg.name ilike ${'%' + input.q + '%'})` : sql`true`}`;
+  const [{ total }] = await sql<Array<{ total: number }>>`
+    select count(*)::int as total from support_cases c
+    join programs pg on pg.id = c.program_id
+    join participants p on p.id = c.participant_id
+    where ${where}`;
+  const rows = await sql<Array<Omit<AssignCase, 'name' | 'phone' | 'email'> & { enc_name: string | null; enc_phone: string | null; enc_email: string | null }>>`
+    select c.id as case_id, p.pseudonym as login, pg.name as program,
+           v.enc_name, v.enc_phone, v.enc_email,
+           (select count(*)::int from sessions s where s.case_id = c.id and s.status = 'done') as seq,
+           (select coalesce(jsonb_agg(jsonb_build_object('id', u.id, 'name', u.name) order by u.name), '[]'::jsonb)
+              from case_assignments a join users u on u.id = a.user_id
+             where a.case_id = c.id) as assignees
+    from support_cases c
+    join programs pg on pg.id = c.program_id
+    join participants p on p.id = c.participant_id
+    left join participant_pii v on v.participant_id = p.id
+    where ${where}
+    order by c.id desc
+    limit ${ASSIGN_PAGE} offset ${(input.page - 1) * ASSIGN_PAGE}`;
+  return {
+    items: rows.map(({ enc_name, enc_phone, enc_email, ...row }) => ({
+      ...row,
+      name: decryptPii(enc_name),
+      phone: decryptPii(enc_phone),
+      email: decryptPii(enc_email),
+    })),
+    total,
+  };
+}
+
 export type AssignmentCase = {
   id: number;
   pseudonym: string;
@@ -484,7 +557,7 @@ export async function assign(
   if ('error' in result) return result;
   await audit({
     actorId,
-    action: 'case.assign',
+    action: 'assignment.set',
     caseId,
     fields: ids.map((id) => `assignee=${id}`),
   });

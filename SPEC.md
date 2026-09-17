@@ -312,6 +312,10 @@ case_closures(id, case_id UNIQUE, last_session_id, closed_at, close_reason,
 > 2026-09-16 검수: 이 절은 **P1 시점**을 적은 것이다. 지금은 일곱 영역을 전부 쓴다 —
 > 정본 여섯에 `document_attachment`(서면 문서 보관)가 더 붙었고(§17-2), 문안은
 > 표준 양식 v2 다(§21). 해시 원문도 늘었다. 아래 표와 해시 설명은 그 시점 기록이다.
+>
+> 2026-09-18 Q D6: 문안은 **DB 판이 우선**이다(`consent_copy`, `0027`). 관리자가 고치면 판이
+> `consent-standard-form-v<N+1>` 로 오르고 모든 영역의 지난 동의가 `확인 필요`로 떨어진다(§21-3).
+> 표에 없는 영역은 코드 정본(`consent.ts`)이 그대로 문안이다. 해시 규칙은 그대로다.
 
 | 영역 | 화면 이름 |
 |---|---|
@@ -465,7 +469,7 @@ API 응답 전체에 `cache-control: no-store` 를 건다(정적 파일 제외).
 ### 15-2. 마스킹 (`api/src/domain/masking.ts`)
 
 화면 문구는 **`마스킹`** 이다(2026-09-16 Q — `가림`은 쓰지 않는다). 동의 문안은 해시에 묶여 있어
-화면 정리로 바꾸지 않는다 — 판(`COPY_VERSION`)을 올리고 다시 받는다. v3(2026-09-18)에서 문안의
+화면 정리로 바꾸지 않는다 — 판을 올리고 다시 받는다(2026-09-18 부터는 설정 › 동의서 관리, §21-3). v3(2026-09-18)에서 문안의
 `가림 처리한`도 `마스킹한`으로 바뀌었다.
 
 순수 함수다. 두 축으로 가린다.
@@ -669,6 +673,32 @@ AI 와 같은 원칙이다 — **없으면 없다고 한다.** 가짜로 켜 두
 당사자 정보의 `15초 다시보기` 탭에서 `지금`과 회차들을 고른다.
 
 2026-09-16 실측(사례 1): `seq=1` 과제 0건 · `seq=2` 과제 1건(출처 2회차) · `지금` 과제 1건.
+
+### 17-4. 회차 원본 리비전·소요 분·다음 목표 줄 (2026-09-18 Q, `0027`)
+
+**원본은 편집 모드로 고치고 리비전을 쌓는다**(D3). 메모 추가 방식은 원문이 틀린 채 남아 채택하지 않았다.
+
+```
+session_revisions(id, session_id, kind memo|transcript|summary, text(암호문), actor, created_at)  -- append-only(행 트리거)
+POST /sessions/:id/revisions { kind, text } → 201 {id, kind, text, actor, actor_id, created_at}   -- 감사 session.revise
+GET  /sessions/:id/revisions → [...]                                                              -- 오래된 것부터
+```
+
+- `memo` 는 `sessions.memo` 를 덮고, `transcript` 는 `transcripts` 에 승인 행(타임스탬프 없음)을, `summary` 는
+  `ai_drafts` 에 승인 행을 **쌓는다** — 두 표가 append-only 라 덮지 않는다. 요약 리비전은 과제·질문 카드를 건드리지 않는다.
+- 기록 전 회차, 전사문 없음, 승인된 요약 없음 → `409`.
+- **자동 재처리는 하지 않는다**(비용·동의 게이트). `GET /sessions/:id`(= `/sessions/:id/detail`)와
+  `GET /cases/:id/detail` 의 회차마다 `stale: { ai_summary, mismatch }` 가 실린다 — 화면이 `원본 수정됨 · 재정리 필요`
+  배지와 `AI 정리 다시 하기` 를 붙인다.
+  - `ai_summary` — 수기·전사 리비전이 마지막 AI 초안·승인 행보다 뒤. 요약 리비전·재정리는 새 행을 쌓아 스스로 푼다.
+  - `mismatch` — 수기 리비전이 마지막 전사 승인보다 뒤(승인 때 견준 수기가 지금 수기가 아니다).
+
+**소요 분**(D4): `sessions.duration_min int null`. `POST /cases/:id/sessions`·`PATCH /sessions/:id` 가 받는다
+(1~1440, `null` 은 지움, 안 보내면 그대로). 종료 시각은 화면이 분으로 바꿔 보낸다. 회차 상세·당사자 정보 detail 에 실린다.
+
+**다음 상담 목표 줄 배열**(D5): `PATCH /cases/:id/next-goals { lines: string[] }`. 서버가 빈 줄을 버리고 `'\n'` 으로
+이어 기존 컬럼에 둔다 — 스키마 불변. 대상은 detail 의 `pending_next_goal` 회차이고, 기록 회차가 없으면 `409`.
+전체 상담 목표는 하나다(`PATCH /cases/:id/goal`).
 
 ---
 
@@ -939,15 +969,26 @@ claude-fable-5-1)이 따로 쓰고 대조해 합쳤고, OpenAI·Azure 의 보관
 
 v1 → v2 로 판이 올라, **이미 받은 동의는 전부 `확인 필요`로 떨어진다.** 설계대로다.
 
-### 21-3. 고치는 버튼은 아직 없다
+### 21-3. 관리자가 고친다 — 판은 DB 에서 오른다 (2026-09-18 Q D6, `0027`)
 
-화면은 읽기만 한다. 아코디언으로 영역을 펴 문안 전체를 본다.
+2026-09-16 의 "버튼은 아직 없다"를 이 결정이 대체한다. 문안은 **DB 판이 우선**이고 코드는 바닥값이다.
 
-문안을 고치면 그 영역에 동의한 **모든 사람에게 다시 알리고 받아야 한다.** 받기 전에는
-그 기능이 멈춘다. 고치는 장치는 **알리는 절차가 정해진 뒤에** 붙인다(2026-09-16 Q) —
-버튼이 먼저 생기면 절차 없이 눌린다.
+```
+consent_copy(id, domain, version, copy, items jsonb, purpose_text, retention_text, refusal_text, created_by, created_at)
+  -- append-only(행 트리거) · unique (domain, version)
+GET /consent-copy            → 기존 + { editable: bool(관리자) }
+PUT /consent-copy/:domain { copy, items[], purpose_text, retention_text, refusal_text }   -- 관리자, 감사 consent.copy.update
+  → 새 판 consent-standard-form-v<N+1>, 그 영역의 새 문안
+```
 
-`동의서 관리` 아래 `문안을 고칠 때` 카드가 그 사실을 네 줄로 적어 둔다.
+- 판은 **전역 하나**다. 어느 영역을 고치든 판이 오르고, 문안이 그대로인 영역도 `copy_version` 이 달라
+  **모든 당사자의 모든 동의가 `확인 필요`로 떨어진다.** 저장 전 경고창은 화면이 띄운다 —
+  "저장하면 모든 당사자의 동의가 `확인 필요`로 떨어지며, 실사용 중이면 이메일 등 정해진 방식으로 고지하고 다시 받아야 합니다".
+- 고칠 수 있는 칸은 다섯(전문·항목·목적·보유기간 문구·거부권 문구)이다. `label`·`purpose`·수신자(`provider`)·
+  보유기간 값(`retentionDuration`)은 코드 정본이라 화면에서 못 바꾼다 — 수신자가 바뀌는 것은 배포다.
+- 해시 규칙(§21-2)은 그대로다. `canonicalPreimage` 가 지금 판의 문안(`copyText`)으로 굽는다.
+- 서버는 뜰 때 표를 읽어 프로세스 캐시에 앉히고(`consent-copy.ts`), 저장 뒤 다시 읽는다. 표가 없으면(0027 전) 코드 판으로 뜬다.
+- 판·지문은 **설정 › 동의서 관리에만** 보인다(D9). 당사자 화면에서는 숨긴다.
 
 ### 21-4. 실무자 관리 배치
 
@@ -962,6 +1003,19 @@ v1 → v2 로 판이 올라, **이미 받은 동의는 전부 `확인 필요`로
 목록이 맨 위다 — 누가 있는지 보고 나서 배정을 다룬다. 승인할 것과 내가 올린 것을 한 카드에
 두는 이유는 **관리자도 당사자를 맡는 사람**이라, 둘이 갈리면 흐름이 끊기기 때문이다.
 실무자에게는 `담당 배정 요청하기` 항목이 따로 선다.
+
+2026-09-18 UI 개편(ui-plan §4, `J1·J3·J4`)의 서버 계약. 배정 규칙은 §22 그대로다 — 복수 담당은 권한이 모두 같다(D7).
+
+```
+GET /users/:id/cases → [{case_id, name, program, seq, next_at}]     -- 본인 또는 관리자. 열린 사례. 남의 것은 감사 assign.view
+GET /assign/cases?q&program&page → { items:[{case_id, name, login(=가명), program, seq, phone, email, assignees}], total, page, page_size:10 }
+                                                                     -- 관리자. q 는 가명·사업 이름. 감사 assign.view(10분 접힘)
+PUT /cases/:id/assignments { user_ids[] }  → { ok, assignees }      -- 전체 치환(빈 배열 = 전원 해제). 감사 assignment.set
+POST /assignment-requests/:id/approve       → { ok }                -- 승인 트랜잭션에서 case_assignments insert. 감사 assignment.decide
+```
+
+`/settings/workers/:id/cases`·`/settings/assign`·`/settings/requests/:id` 는 화면(L4)이 옮겨 갈 때까지 남긴다.
+`case.assign` 감사 행은 2026-09-18 전 기록이고, 새 배정은 `assignment.set` 으로 남는다.
 
 ---
 

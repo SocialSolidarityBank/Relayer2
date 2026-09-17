@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { app } from './routes.ts';
+import { loadConsentCopy } from './consent-copy.ts';
 import { startRetentionSweep } from './retention.ts';
 import { failStaleTranscriptions } from './stt.ts';
 
@@ -20,6 +21,13 @@ if (existsSync(webDist)) {
   app.get('*', serveStatic({ root, path: './index.html' }));
   console.log('serving web from', webDist);
 }
+
+// 동의 문안 DB 판을 먼저 앉힌다(2026-09-18 Q D6). 안 앉히면 첫 요청이 코드 판으로 동의를 받는다.
+// 표가 아직 없으면(0027 전) 코드 판으로 간다 — 서버가 안 뜨는 것보다 낫고, 그 사실을 로그에 남긴다.
+console.log(
+  'consent copy',
+  await loadConsentCopy().catch((e: unknown) => `code fallback (${(e as Error).message})`),
+);
 
 serve({ fetch: app.fetch, port }, (info) => {
   console.log(`relayer on http://localhost:${info.port}`);

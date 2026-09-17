@@ -27,6 +27,7 @@ export const AUDIT_KINDS = {
   'voice.read': { kind: '열람', label: '녹음 재생', fold: false },
   'audit.view': { kind: '열람', label: '열람 기록 조회', fold: true },
   'audit.export': { kind: '열람', label: '열람 기록 내려받기', fold: false },
+  'assign.view': { kind: '열람', label: '배정 목록 조회(이름·연락처)', fold: true },
 
   'consent.record': { kind: '기록', label: '동의 받음', fold: false },
   'ai.draft': { kind: '기록', label: '외부 AI 로 보냄', fold: false },
@@ -38,10 +39,13 @@ export const AUDIT_KINDS = {
   'voice.approve': { kind: '기록', label: '전사 승인', fold: false },
   'voice.sweep': { kind: '기록', label: '기한 지난 녹음 삭제', fold: false },
   'voice.withdraw': { kind: '기록', label: '동의 철회로 녹음 삭제', fold: false },
+  'session.revise': { kind: '기록', label: '회차 원본 수정', fold: false },
 
   'assignment.request': { kind: '운영', label: '담당 배정 요청', fold: false },
   'assignment.decide': { kind: '운영', label: '담당 배정 결정', fold: false },
+  // `case.assign` 은 2026-09-18 전 행이다. 새 배정은 `assignment.set` 으로 남긴다(ui-plan §4).
   'case.assign': { kind: '운영', label: '담당 바꿈', fold: false },
+  'assignment.set': { kind: '운영', label: '담당 실무자 배정', fold: false },
   'invite.create': { kind: '운영', label: '초대 링크 만듦', fold: false },
   'invite.revoke': { kind: '운영', label: '초대 취소', fold: false },
   'invite.accept': { kind: '운영', label: '초대로 들어옴', fold: false },
@@ -55,6 +59,7 @@ export const AUDIT_KINDS = {
   'user.role.update': { kind: '운영', label: '역할 바꿈', fold: false },
   'user.deactivate': { kind: '운영', label: '계정 삭제', fold: false },
   'ai.key.set': { kind: '운영', label: 'AI 키 설정', fold: false },
+  'consent.copy.update': { kind: '운영', label: '동의 문안 고침(새 판)', fold: false },
 } as const;
 
 export type AuditAction = keyof typeof AUDIT_KINDS;
