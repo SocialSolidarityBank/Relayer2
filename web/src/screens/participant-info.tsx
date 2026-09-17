@@ -83,7 +83,12 @@ const AI_OFF_LABEL: Record<string, string> = {
  */
 function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
   const [brief, setBrief] = useState<Briefing | null>(null);
-  const [open, setOpen] = useState<{ sessionId: number; seq: number; part: OriginalPart } | null>(null);
+  const [open, setOpen] = useState<{
+    sessionId: number;
+    seq: number;
+    part: OriginalPart;
+    hasVoice: boolean;
+  } | null>(null);
   useEffect(() => {
     void getBriefing(caseId).then(setBrief);
   }, [caseId]);
@@ -165,7 +170,14 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
                       탭과 `상담 내용 원본 보기` 화면을 대체한다. 회차 목록을 떠나지 않고 대조한다. */}
                   <OriginalButtons
                     hasVoice={s.voice.recordings > 0}
-                    onOpen={(part) => setOpen({ sessionId: s.id, seq: s.seq, part })}
+                    onOpen={(part) =>
+                      setOpen({
+                        sessionId: s.id,
+                        seq: s.seq,
+                        part,
+                        hasVoice: s.voice.recordings > 0,
+                      })
+                    }
                   />
                   {/* 이름이 상태를 말한다(2026-09-17 Q): 승인 전에는 검토, 승인 뒤에는 보기. */}
                   <Button
@@ -289,6 +301,7 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
           sessionId={open.sessionId}
           seq={open.seq}
           part={open.part}
+          hasVoice={open.hasVoice}
           onClose={() => setOpen(null)}
         />
       )}

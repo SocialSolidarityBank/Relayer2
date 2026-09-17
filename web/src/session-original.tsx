@@ -199,15 +199,20 @@ export function SessionOriginalDrawer({
   sessionId,
   seq,
   part,
+  hasVoice = false,
   onClose,
 }: {
   caseId: number;
   sessionId: number;
   seq: number;
+  /** 처음 열 때 볼 쪽. 안에서 바꿀 수 있다. */
   part: OriginalPart;
+  /** 수기와 녹음이 **둘 다 있는 회차**는 드로어 안에서 오간다 — 닫고 다시 열지 않는다. */
+  hasVoice?: boolean;
   onClose: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const [view, setView] = useState<OriginalPart>(part);
   const [rec, setRec] = useState<SessionRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -239,14 +244,31 @@ export function SessionOriginalDrawer({
     >
       <div className="side-drawer-head">
         <h2 id="drawer-title">
-          {seq}회차 {part === 'written' ? '상담 기록' : '녹음 전사'}
+          {seq}회차 {view === 'written' ? '상담 기록' : '녹음 전사'}
         </h2>
+        {hasVoice && (
+          // 탭은 당사자 정보 탭과 같은 토글 상자다(`.info-tabs`) — 새 CSS 를 만들지 않는다.
+          <div className="info-tabs" data-cols="2" role="tablist">
+            {(['written', 'voice'] as const).map((p) => (
+              <button
+                key={p}
+                type="button"
+                role="tab"
+                aria-selected={view === p}
+                className="wire-step"
+                onClick={() => setView(p)}
+              >
+                {p === 'written' ? '수기 기록' : '녹음 전사'}
+              </button>
+            ))}
+          </div>
+        )}
         <Button onClick={() => dialog.current?.close()}>닫기</Button>
       </div>
       <div className="side-drawer-body">
         {error ? (
           <ErrorText>{error}</ErrorText>
-        ) : part === 'voice' ? (
+        ) : view === 'voice' ? (
           <Voice sessionId={sessionId} />
         ) : rec === null ? (
           <Empty>불러오는 중</Empty>
