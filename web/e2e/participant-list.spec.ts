@@ -31,10 +31,26 @@ test('이름 중심 목록에서 정보를 바로 보고 상세와 기록·일�
   await page.goto('/#/participants');
   const card = page.getByRole('link', { name: `${name}, ${program}, 당사자 정보`, exact: true });
   await expect(card.getByText(name, { exact: true })).toBeVisible();
-  // 카드는 한 행이다(2026-09-17 Q): 이름 + 12px 요약 `가명 · 담당 실무자 · 사업명 N회차 · 다음 상담`.
-  const meta = card.locator('.participant-card-id');
-  await expect(meta).toHaveText(new RegExp(`시험 실무자 · ${program} 1회차 · \\d+월 \\d+일`));
+  // 카드는 두 줄이다(2026-09-17 Q): `가명 · 사업명 N회차` / `연락처 · 이메일 · 다음 상담`.
+  // 담당 실무자는 카드에서 걷었다 — 위 걸개가 가른다.
+  await expect(card.locator('.participant-card-id')).toHaveText(new RegExp(`^[a-z]+-\\d+ · ${program} 1회차$`));
+  await expect(card.locator('.participant-card-reach')).toHaveText(/다음 상담 \d+월 \d+일/);
   await expect(card.getByText('예정 없음', { exact: true })).toHaveCount(0);
+
+  // 현황판은 걸개 아래에서 지금 무엇을 보고 있는지 말한다(종결은 세지 않는다).
+  const stats = page.locator('.participant-stats');
+  for (const label of ['보이는 사람', '전체', '진행 중', '배정 필요', '담당 실무자']) {
+    await expect(stats.getByText(label, { exact: true })).toBeVisible();
+  }
+  await expect(stats).not.toContainText('종결');
+
+  // 한 쪽은 열 장이다. 그보다 많으면 가운데 쪽 넘기기가 선다.
+  await expect(page.getByRole('article')).toHaveCount(10);
+  const pager = page.getByRole('navigation', { name: '쪽 넘기기', exact: true });
+  await expect(pager).toContainText('1 /');
+  await pager.getByRole('button', { name: '다음 쪽', exact: true }).click();
+  await expect(pager).toContainText('2 /');
+  await expect(page.getByRole('article')).toHaveCount(10);
   await expect(page.getByRole('button', { name: '내가 맡기', exact: true })).toHaveCount(0);
 
   await page.getByLabel('찾기', { exact: true }).fill(name);
@@ -48,6 +64,7 @@ test('이름 중심 목록에서 정보를 바로 보고 상세와 기록·일�
     ['schedule', 'schedule', '상담 일정 등록'],
   ]) {
     await page.goto(`/#/pick/${pick}`);
+    await page.locator('#q').fill(name);
     await page.getByRole('link', { name: `${name}, ${program}, ${title}`, exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/cases/${caseId}/${destination}$`));
     // 화면 이름은 더 이상 제목이 아니다 — 당사자 카드가 머리이고 제목은 사람 이름이다(2026-09-17 Q).
