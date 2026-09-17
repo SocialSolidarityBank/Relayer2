@@ -3,6 +3,8 @@ export type BriefingItem = {
   text: string;
   source_session_seq: number;
   last_result: string | null;
+  closed_session_seq?: number;
+  last_follow?: string | null;
 };
 
 export type Briefing = {
@@ -27,6 +29,8 @@ export type Briefing = {
   };
   today_questions: BriefingItem[] | null;
   open_tasks: { items: BriefingItem[]; unchecked_carried_over: number } | null;
+  closed_tasks: BriefingItem[];
+  closed_questions: BriefingItem[];
 };
 
 export type CaseView = {

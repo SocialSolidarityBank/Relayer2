@@ -47,14 +47,19 @@ const TASK_RESULTS: ReadonlyArray<{ label: string; value: OutcomeInput }> = [
   { label: '완료', value: { card_id: 0, result: 'done' } },
 ];
 
+/** 상태 어휘는 명사형이다(2026-09-18 Q): 진행 전 · 진행 중 · 완료 · 중단. 행동 체크박스 `그만두기`만 동사형. */
 const taskResultLabel = (o: OutcomeInput | undefined): string | null => {
   if (!o) return null;
-  if (o.follow === 'stop') return '그만둠';
+  if (o.follow === 'stop') return '중단';
   if (o.result === 'done') return '완료';
   if (o.result === 'in_progress') return '진행 중';
   if (o.result === 'not_done') return '진행 전';
   return null;
 };
+
+/** 닫힌 카드 한 줄의 꼬리. 과제는 완료·중단, 질문은 확인함. */
+const closedLabel = (result: string | null, follow: string | null | undefined): string =>
+  result === 'confirmed' ? '확인함' : follow === 'stop' ? '중단' : '완료';
 
 export function RecordScreen({
   caseId,
@@ -386,6 +391,30 @@ export function RecordScreen({
               ))
             )}
           </Card>
+          {/* 닫힌 카드는 다시 볼 일이 드물어 접어 둔다(2026-09-18 Q). 펼쳐도 읽기만이고,
+              다시 열려면 그 회차를 수정한다. 비어 있으면 카드를 아예 안 그린다. */}
+          {briefing.closed_tasks.length > 0 && (
+            <Fold title={`완료한 과제 ${briefing.closed_tasks.length}`}>
+              {briefing.closed_tasks.map((t) => (
+                <Item
+                  key={t.card_id}
+                  title={t.text}
+                  desc={`${t.source_session_seq}회차 · ${t.closed_session_seq}회차 ${closedLabel(t.last_result, t.last_follow)}`}
+                />
+              ))}
+            </Fold>
+          )}
+          {briefing.closed_questions.length > 0 && (
+            <Fold title={`확인한 질문 ${briefing.closed_questions.length}`}>
+              {briefing.closed_questions.map((q) => (
+                <Item
+                  key={q.card_id}
+                  title={q.text}
+                  desc={`${q.source_session_seq}회차 · ${q.closed_session_seq}회차 확인함`}
+                />
+              ))}
+            </Fold>
+          )}
         </aside>
 
         <main className="record-main">
