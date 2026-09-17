@@ -100,7 +100,6 @@ function RiskBanner({ caseId }: { caseId: number }) {
 }
 
 function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
-  const [openIds, setOpenIds] = useState<number[]>([]);
   const done = detail.sessions.filter((s) => s.status === 'done');
 
   // 아직 아무 기록이 없으면 **여기서 바로 시작할 수 있어야 한다.**
@@ -159,17 +158,9 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
                 }
                 action={
                 <>
-                  {/* `전문 보기`는 `회차별 전문 보기` 탭이 갖는다(2026-09-17 Q) — 한 행동에
-                      입구가 둘이면 어느 것이 정본인지 알 수 없다. */}
-                  <Button
-                    onClick={() =>
-                      setOpenIds((prev) =>
-                        prev.includes(s.id) ? prev.filter((id) => id !== s.id) : [...prev, s.id],
-                      )
-                    }
-                  >
-                    {openIds.includes(s.id) ? '원문 닫기' : '원문 보기'}
-                  </Button>
+                  {/* 원문은 `회차별 전문 보기` 탭이 유일한 입구다(2026-09-17 Q). 요약 줄에서
+                      수기 본문을 펼치던 `원문 보기`는 그 탭의 부분집합이라 걷었다 —
+                      요약은 상태와 AI 정리, 전문은 원문이다(§4 탭별 성격). */}
                   <Button
                     onClick={() => (window.location.hash = `#/cases/${caseId}/sessions/${s.id}/review`)}
                   >
@@ -209,7 +200,7 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
                 </Fold>
               </div>
             )}
-            {openIds.includes(s.id) && <p className="info-original">{s.memo ?? '수기 기록이 없어요.'}</p>}
+
           </div>
           );
         })}

@@ -553,13 +553,14 @@ test('자유 글을 저장하고 다시 열면 그대로 읽힌다', async ({ pa
   await page.getByRole('button', { name: '저장' }).click();
   await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
 
-  // 회차별 요약의 원문 보기에 그대로 뜬다
-  await openInfo(page, '회차별 요약');
-  const summary = page
-    .locator('section.wire-card')
-    .filter({ has: page.getByRole('heading', { name: '회차별 요약' }) });
-  await summary.locator('.wire-item', { hasText: '2회차' }).getByRole('button', { name: '원문 보기' }).click();
-  await expect(summary).toContainText(memo);
+  // 원문은 `회차별 전문 보기` 탭이 유일한 입구다(2026-09-17 Q — 요약의 인라인 `원문 보기` 폐지).
+  await openInfo(page, '회차별 전문 보기');
+  await page
+    .locator('.wire-repeat-card', { hasText: '2회차' })
+    .getByRole('button', { name: '전문 보기' })
+    .click();
+  await expect(page.getByRole('heading', { name: '상담 내용 원문 보기' })).toBeVisible();
+  await expect(page.locator('details', { hasText: '수기 기록' }).first()).toContainText(memo);
 });
 
 // P2 당사자 열람. 당사자는 로그인하지 않고 링크+코드로 자기 정보와 일정만 본다.
