@@ -23,9 +23,11 @@ await page.getByRole('button', { name: '로그인' }).click();
 await page.locator('.app-nav-me').waitFor();
 
 // 시드 사례 하나를 찾는다 — 목록 첫 카드의 사례 주소.
+// 카드가 접힘 카드가 되면서 카드 전체를 감싼 `a.participant-card-link` 는 없어졌고(2026-09-18 A2),
+// 사례 주소는 머리 오른쪽 `당사자 정보` 행동이 갖는다.
 await page.goto(`${base}/#/participants`);
-await page.locator('a.participant-card-link[href*="#/cases/"]').first().waitFor();
-const href = await page.locator('a.participant-card-link[href*="#/cases/"]').first().getAttribute('href');
+await page.locator('.participant-list a[href*="#/cases/"]').first().waitFor();
+const href = await page.locator('.participant-list a[href*="#/cases/"]').first().getAttribute('href');
 const caseId = href?.match(/#\/cases\/(\d+)/)?.[1];
 if (!caseId) throw new Error('시드 사례를 찾지 못함');
 

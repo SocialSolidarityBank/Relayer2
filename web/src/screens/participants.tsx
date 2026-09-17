@@ -1,9 +1,9 @@
 // 당사자 목록. CCC apps/web/app/components/wire/participant-card.tsx와
 // participants/page.tsx의 이름·상태·정보 행·카드 링크 구조를 이식했다(Apache-2.0).
 // 서버 계약은 그대로 쓴다. 목록에 없는 연락처를 얻으려고 상담 상세를 미리 읽지 않는다.
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { getCaseDetail, listParticipants, type ParticipantRow } from '../api.ts';
-import { Badge, Button, Card, Chevron, Empty, Meta, PageHeader, Select } from '../ui.tsx';
+import { Button, Card, Chevron, Empty, Meta, PageHeader, Select } from '../ui.tsx';
 import './participants.css';
 
 const scheduleDate = new Intl.DateTimeFormat('ko-KR', {
@@ -12,17 +12,8 @@ const scheduleDate = new Intl.DateTimeFormat('ko-KR', {
 const displayName = (row: ParticipantRow) => (row.can_access && row.name) || row.pseudonym;
 const workersOf = (row: ParticipantRow) => row.assignees.map((a) => a.name);
 
-/** 무엇을 하러 왔는가. 메뉴에서 사례 없이 눌렀을 때 붙는다. */
-export type PickFor = 'record' | 'schedule' | null;
-
-/**
- * 제목은 **사이드바 메뉴와 같은 이름**이다(2026-09-17 Q). `누구의 일정을 잡을까요` 같은
- * 질문형 제목은 이 두 화면에만 있던 말투였다 — 누구를 고르는 자리라는 건 목록이 말한다.
- */
-const PURPOSE: Record<Exclude<PickFor, null>, { title: string; go: string; label: string }> = {
-  record: { title: '상담 기록하기', go: 'record', label: '상담 기록하기' },
-  schedule: { title: '상담 일정 등록', go: 'schedule', label: '상담 일정 등록' },
-};
+/** 상태는 배지가 아니라 이름 뒤 컬러 텍스트다(2026-09-18 Q A3). 배지는 면이 커서 목록에서 줄을 밀었다. */
+const STATE_TONE = { need_assign: 'warn', open: 'mint', closed: 'neutral' } as const;
 
 /** 상태 걸개는 하나의 선택창이다 — 배정·진행·종결이 서로 배타적인 자리다. */
 const STATUS = [
@@ -31,7 +22,7 @@ const STATUS = [
   { key: 'open', label: '진행 중' },
   { key: 'closed', label: '종결' },
 ] as const;
-/** 한 쪽은 열 장이다(2026-09-17 Q — 2열 × 5행, 화면을 굴리지 않고 한눈에 든다). */
+/** 한 쪽은 열 장이다(2026-09-17 Q). 목록은 1열이라 열 줄이고, 카드는 접힌다(2026-09-18 Q A4). */
 const PAGE_SIZE = 10;
 const SORTS = [
   { key: 'name', label: '가나다순' },
@@ -44,28 +35,24 @@ const SORTS = [
  * 새 페이지가 아니라 같은 목록에 걸개가 걸린 채 열리는 것이다(2026-09-17 Q).
  */
 export function ParticipantsScreen({
-  pickFor = null,
   initialProgramId = null,
 }: {
-  pickFor?: PickFor;
   initialProgramId?: number | null;
 }) {
   const [rows, setRows] = useState<ParticipantRow[] | null>(null);
   const [q, setQ] = useState('');
-  // 고르기 모드(기록·일정)는 진행 중 사례가 기본이다 — 종결 사례는 새 기록·일정을 받지 않는다.
-  const [status, setStatus] = useState<string>(pickFor ? 'open' : 'all');
+  const [status, setStatus] = useState<string>('all');
   // 사업 걸개는 id 로 건다 — 이름은 바뀔 수 있다.
   const [program, setProgram] = useState(initialProgramId ? String(initialProgramId) : 'all');
   const [worker, setWorker] = useState('all');
   const [sort, setSort] = useState<string>('name');
   const [page, setPage] = useState(1);
   /**
-   * 연락처·이메일은 목록 API 가 주지 않는다. 아코디언이 없으니 카드에 바로 드러나야 해서
-   * (2026-09-17 Q) **보이는 쪽의 열 건만** `GET /cases/:id/detail` 로 따로 부른다.
-   * 한 번 부른 사례는 다시 부르지 않는다 — 쪽을 오가도 요청과 감사 줄이 늘지 않는다.
+   * 연락처·이메일은 목록 API 가 주지 않는다. **카드를 펼칠 때 그 사례만** `GET /cases/:id/detail`
+   * 로 부른다(2026-09-18 Q A4 — 구 규칙은 보이는 열 건을 미리 불러 감사 줄을 열 개씩 남겼다).
+   * 한 번 부른 사례는 다시 부르지 않는다.
    */
-  const [contacts, setContacts] = useState<Record<number, { phone: string | null; email: string | null }>>({});
-  const asked = useRef<Set<number>>(new Set());
+  const [contacts, setContacts] = useState<Record<number, 'loading' | 'error' | { phone: string | null; email: string | null }>>({});
 
   useEffect(() => {
     void listParticipants().then(setRows);
@@ -133,26 +120,23 @@ export function ParticipantsScreen({
     };
   }, [rows]);
 
-  useEffect(() => {
-    for (const row of pageRows) {
-      if (!row.can_access || asked.current.has(row.case_id)) continue;
-      asked.current.add(row.case_id);
-      void getCaseDetail(row.case_id)
-        .then((detail) =>
-          setContacts((prev) => ({
-            ...prev,
-            [row.case_id]: { phone: detail.participant.phone, email: detail.participant.email },
-          })),
-        )
-        .catch(() => {});
-    }
-  }, [pageRows]);
-
-  const purpose = pickFor ? PURPOSE[pickFor] : null;
+  /** 카드를 펼칠 때 한 번. 실패도 기억한다 — 여닫기를 되풀이해도 요청이 쌓이지 않는다. */
+  const openContact = (caseId: number) => {
+    if (contacts[caseId]) return;
+    setContacts((prev) => ({ ...prev, [caseId]: 'loading' }));
+    void getCaseDetail(caseId)
+      .then((detail) =>
+        setContacts((prev) => ({
+          ...prev,
+          [caseId]: { phone: detail.participant.phone, email: detail.participant.email },
+        })),
+      )
+      .catch(() => setContacts((prev) => ({ ...prev, [caseId]: 'error' })));
+  };
 
   return (
     <>
-      <PageHeader title={purpose ? purpose.title : '당사자 목록'} />
+      <PageHeader title="당사자 목록" />
       <div className="wire-container participant-search-layout">
         {/* 업무 바 한 줄: 왼쪽은 검색칸(라벨 없이 `aria-label` 만), 오른쪽은 걸개와 정렬이다
             (2026-09-17 Q — 구 `찾기` 카드 제목과 전폭 입력칸을 걷었다). */}
@@ -211,62 +195,106 @@ export function ParticipantsScreen({
           </Card>
         )}
 
-        <div className="participant-row-list">
+        <div className="participant-list">
           {pageRows.map((row) => {
             const name = displayName(row);
             const contact = contacts[row.case_id];
-            // 첫 줄은 누구인가(2026-09-17 Q): 이름 · 아이디 · 사업명 회차. 담당 실무자는 걷었다 —
-            // 실무자는 자기 담당만 보고, 관리자는 위 걸개로 가른다.
+            const state = !row.can_access ? 'need_assign' : row.status === 'open' ? 'open' : 'closed';
+            // 접힌 줄은 한 행이다: 이름 · 상태 · 아이디 · 사업명 회차 · 다음 상담.
             // 권한 때문에 비워 온 회차는 '기록 없음'으로 바꾸지 않는다 — 아예 말하지 않는다.
             const meta = [
               name === row.pseudonym ? null : row.pseudonym,
               row.can_access && row.last_session_seq
                 ? `${row.program_name} ${row.last_session_seq}회차`
                 : row.program_name,
-            ];
-            // 둘째 줄은 어떻게 닿고 언제 만나나. 아코디언이 없으니 여기서 바로 드러난다.
-            const reach = [
-              contact?.phone ?? null,
-              contact?.email ?? null,
               row.can_access && row.next_scheduled_at
                 ? `다음 상담 ${scheduleDate.format(new Date(row.next_scheduled_at))}`
                 : null,
             ];
-            const card = (
-              <article className="surface-card participant-card" data-variant="list">
-                <header className="participant-card-header">
-                  <span className="participant-card-identity">
-                    <span className="participant-name-group participant-card-name-group" data-size="row">
-                      <span className={`participant-name participant-card-name${name === row.pseudonym ? ' is-empty' : ''}`}>
-                        {name}
-                      </span>
-                    </span>
-                    <span className="participant-card-id"><Meta parts={meta} /></span>
-                  </span>
-                  <span className="participant-card-badges">
-                    {!row.can_access && <Badge>배정 필요</Badge>}
-                    <Badge tone={row.status === 'open' ? 'mint' : undefined}>
-                      {row.status === 'open' ? '진행 중' : '종결'}
-                    </Badge>
-                  </span>
-                </header>
-                {reach.some(Boolean) && <p className="participant-card-reach"><Meta parts={reach} /></p>}
-              </article>
-            );
+            const reach = contact === 'loading'
+              ? ([['연락처', '불러오는 중']] as Array<[string, string]>)
+              : contact === 'error'
+                ? ([['연락처', '불러오기 실패']] as Array<[string, string]>)
+                : ([
+                    ['연락처', contact?.phone ?? ''],
+                    ['이메일', contact?.email ?? ''],
+                    ['담당 실무자', workersOf(row).join(', ')],
+                  ] as Array<[string, string]>).filter(([, value]) => value !== '');
+            /**
+             * 카드는 접힘 카드다(2026-09-18 Q A2·A4 — 일정 화면의 `Fold` 와 같은 골격).
+             * 공용 `Fold`(ui.tsx)를 그대로 쓰지 못하는 것은 `className` 을 받지 않아
+             * 카드 요소에 `.participant-card`(§3 실측 단언이 재는 이름)를 붙일 수 없기 때문이다.
+             * `Fold` 에 `className` 이 생기면 이 지역 마크업은 지운다(PR 요청).
+             */
             return (
-              <div key={row.case_id}>
-                {row.can_access ? (
-                  <a
-                    className="participant-card-link"
-                    href={`#/cases/${row.case_id}/${purpose?.go ?? 'info'}`}
-                    aria-label={`${name}, ${row.program_name}, ${purpose?.label ?? '당사자 정보'}`}
-                  >
-                    {card}
-                  </a>
-                ) : (
-                  <div className="participant-card-link">{card}</div>
-                )}
-              </div>
+              <details
+                key={row.case_id}
+                className="surface-card wire-card wire-card-details participant-card"
+                name="participant-list"
+                onToggle={(event) => {
+                  if (event.currentTarget.open && row.can_access) openContact(row.case_id);
+                }}
+              >
+                <summary className="wire-card-summary">
+                  <span className="wire-card-title">
+                    <span className="fold-head">
+                      <span className="participant-name-group participant-card-name-group" data-size="row">
+                        <span className={`participant-name participant-card-name${name === row.pseudonym ? ' is-empty' : ''}`}>
+                          {name}
+                        </span>
+                      </span>
+                      {/* 상태는 컬러 텍스트로 이름 뒤에 붙는다(A3) — 배지 면을 두지 않는다. */}
+                      <span className="participant-state" data-tone={STATE_TONE[state]}>
+                        {state === 'need_assign' ? '배정 필요' : state === 'open' ? '진행 중' : '종결'}
+                      </span>
+                      <span className="participant-card-id"><Meta parts={meta} /></span>
+                    </span>
+                  </span>
+                  <span className="wire-card-summary-right">
+                    {/* 행동 둘은 오른쪽 끝에 선다(A2). 배정이 없으면 열 수 없으므로 그리지 않는다. */}
+                    {row.can_access && (
+                      <span className="wire-item-action">
+                        <a
+                          className="wire-button"
+                          data-variant="secondary"
+                          href={`#/cases/${row.case_id}/info`}
+                          aria-label={`${name}, ${row.program_name}, 당사자 정보`}
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <span className="wire-button-text">당사자 정보</span>
+                        </a>
+                        {/* 기록은 늘 일정 예약을 지난다(Q 결정 D1) — 일시를 확인하지 않은 기록을 막는다. */}
+                        <a
+                          className="wire-button"
+                          data-variant="secondary"
+                          href={`#/cases/${row.case_id}/schedule?then=record`}
+                          aria-label={`${name}, ${row.program_name}, 상담 기록하기`}
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <span className="wire-button-text">상담 기록하기</span>
+                        </a>
+                      </span>
+                    )}
+                    <span className="wire-chevron-button wire-disclosure-chevron" aria-hidden="true">
+                      <Chevron dir="down" />
+                    </span>
+                  </span>
+                </summary>
+                <div className="wire-card-body">
+                  {reach.length === 0 ? (
+                    <Empty>연락처 없음</Empty>
+                  ) : (
+                    <div className="participant-card-fields">
+                      {reach.map(([label, value]) => (
+                        <div className="wire-field-row" data-layout="stack" data-size="sm" key={label}>
+                          <span className="wire-field-label">{label}</span>
+                          <span className="wire-field-value">{value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </details>
             );
           })}
         </div>

@@ -30,13 +30,16 @@ test('이름 중심 목록에서 정보를 바로 보고 상세와 기록·일�
   } })).status()).toBe(201);
 
   await page.goto('/#/participants');
-  const card = page.getByRole('link', { name: `${name}, ${program}, 당사자 정보`, exact: true });
+  const card = page.locator('.participant-card').filter({ hasText: name });
   await expect(card.getByText(name, { exact: true })).toBeVisible();
-  // 카드는 두 줄이다(2026-09-17 Q): `가명 · 사업명 N회차` / `연락처 · 이메일 · 다음 상담`.
-  // 담당 실무자는 카드에서 걷었다 — 위 걸개가 가른다.
-  await expect(card.locator('.participant-card-id')).toHaveText(new RegExp(`^[a-z]+-\\d+ ${program} 1회차$`));
-  await expect(card.locator('.participant-card-reach')).toHaveText(/다음 상담 \d+월 \d+일/);
+  // 접힌 머리는 한 줄이다(2026-09-18 Q A2·A3): 이름 · 상태 컬러 텍스트 · 가명 사업명 회차 다음 상담.
+  // 담당 실무자는 머리에서 걷었다 — 위 걸개가 가르고, 펼친 본문이 이름을 싣는다.
+  await expect(card.locator('.participant-state')).toHaveText('진행 중');
+  await expect(card.locator('.participant-card-id'))
+    .toHaveText(new RegExp(`^[a-z]+-\\d+ ${program} 1회차 다음 상담 \\d+월 \\d+일 \\d+:\\d+$`));
   await expect(card.getByText('예정 없음', { exact: true })).toHaveCount(0);
+  // 연락처는 펼칠 때 그 사례만 부른다(A4) — 접힌 채로는 카드에 없다.
+  await expect(card.locator('.participant-card-fields')).toBeHidden();
 
   // 현황판은 걸개 아래에서 지금 무엇을 보고 있는지 말한다(종결은 세지 않는다).
   const stats = page.locator('.participant-stats');
@@ -59,46 +62,49 @@ test('이름 중심 목록에서 정보를 바로 보고 상세와 기록·일�
     expect(filler.status()).toBe(201);
   }
   await page.reload();
-  await expect(page.getByRole('article')).toHaveCount(10);
+  await expect(page.locator('.participant-card')).toHaveCount(10);
   const pager = page.getByRole('navigation', { name: '쪽 넘기기', exact: true });
   await expect(pager).toContainText('1 /');
   await pager.getByRole('button', { name: '다음 쪽', exact: true }).click();
   await expect(pager).toContainText('2 /');
-  const secondPage = await page.getByRole('article').count();
+  const secondPage = await page.locator('.participant-card').count();
   expect(secondPage).toBeGreaterThan(0);
   expect(secondPage).toBeLessThanOrEqual(10);
   await expect(page.getByRole('button', { name: '내가 맡기', exact: true })).toHaveCount(0);
 
   await page.getByLabel('찾기', { exact: true }).fill(name);
-  await card.focus();
-  await page.keyboard.press('Enter');
+  // 펼치면 연락처가 그때 올라온다(A4) — 미리 부르지 않는다.
+  await card.locator('summary').click();
+  await expect(card.locator('.participant-card-fields')).toContainText('연락처');
+
+  // 카드 행동 둘(A2). `당사자 정보`는 상세로, `상담 기록하기`는 **일정 예약을 지나** 기록으로 간다(D1).
+  await card.getByRole('link', { name: `${name}, ${program}, 당사자 정보`, exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/cases/${caseId}/info$`));
   await expect(page.getByRole('tab', { name: '당사자 정보', exact: true })).toBeVisible();
 
-  for (const [pick, destination, title] of [
-    ['record', 'record', '상담 기록하기'],
-    ['schedule', 'schedule', '상담 일정 등록'],
-  ]) {
-    await page.goto(`/#/pick/${pick}`);
-    await page.locator('#q').fill(name);
-    await page.getByRole('link', { name: `${name}, ${program}, ${title}`, exact: true }).click();
-    await expect(page).toHaveURL(new RegExp(`/cases/${caseId}/${destination}$`));
-    // 화면 이름은 더 이상 제목이 아니다 — 당사자 카드가 머리이고 제목은 사람 이름이다(2026-09-17 Q).
-    await expect(page.getByRole('heading', { name, level: 1, exact: true })).toBeVisible();
-  }
+  await page.goto('/#/participants');
+  await page.locator('#q').fill(name);
+  await card.getByRole('link', { name: `${name}, ${program}, 상담 기록하기`, exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/cases/${caseId}/schedule\\?then=record$`));
+  // 화면 이름은 더 이상 제목이 아니다 — 당사자 카드가 머리이고 제목은 사람 이름이다(2026-09-17 Q).
+  await expect(page.getByRole('heading', { name, level: 1, exact: true })).toBeVisible();
+  // 예정 회차가 있으니 안내 팝업 없이 그 회차를 확인하고 기록으로 잇는다(D1).
+  await expect(page.getByRole('dialog', { name: '일시 확인 필요' })).toBeHidden();
+  await page.getByRole('button', { name: '상담 기록하기', exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/cases/${caseId}/record$`));
 
   // ── 걸개와 정렬(2026-09-17 Q) ────────────────────────────────
   await page.goto('/#/participants');
   await page.getByLabel('사업명 걸개', { exact: true }).selectOption(program);
-  await expect(page.getByRole('article')).toHaveCount(1);
-  await expect(page.getByRole('article')).toContainText(name);
+  await expect(page.locator('.participant-card')).toHaveCount(1);
+  await expect(page.locator('.participant-card')).toContainText(name);
   await page.getByLabel('상태 걸개', { exact: true }).selectOption('closed');
-  await expect(page.getByRole('article')).toHaveCount(0);
+  await expect(page.locator('.participant-card')).toHaveCount(0);
   await page.getByLabel('상태 걸개', { exact: true }).selectOption('all');
   await page.getByLabel('사업명 걸개', { exact: true }).selectOption('all');
   // 정렬은 다음 상담이 있는 사람을 앞으로 올린다 — 이 사람은 이틀 뒤 일정이 있다.
   await page.getByLabel('정렬', { exact: true }).selectOption('date_asc');
-  await expect(page.getByRole('article').first()).toContainText('월');
+  await expect(page.locator('.participant-card').first()).toContainText('월');
   await page.getByLabel('정렬', { exact: true }).selectOption('name');
 
   // Revoking membership changes the live list response. A card must not pretend
@@ -112,7 +118,7 @@ test('이름 중심 목록에서 정보를 바로 보고 상세와 기록·일�
   expect((await page.request.post(`${api}/settings/assign`, { data: { case_id: caseId, user_ids: [] } })).ok()).toBe(true);
   await page.goto('/#/participants');
   await page.getByLabel('찾기', { exact: true }).fill(program);
-  const restricted = page.getByRole('article').filter({ hasText: program });
+  const restricted = page.locator('.participant-card').filter({ hasText: program });
   await expect(restricted.getByText('배정 필요', { exact: true })).toBeVisible();
   await expect(restricted.getByText(name, { exact: true })).toHaveCount(0);
   await expect(restricted.getByRole('link')).toHaveCount(0);

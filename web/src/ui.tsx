@@ -247,6 +247,32 @@ export function ParticipantHero({
 }
 
 /**
+ * HERO 정보 격자의 **공용 네 칸**(2026-09-18 Q C1): 당사자 ID · 참여 사업(회차) · 연락처 · 이메일.
+ * 일정 예약·상담 기록하기·당사자 정보가 같은 네 칸을 쓴다 — 화면마다 칸을 따로 짜서
+ * 어떤 화면에는 이메일이 없고 어떤 화면에는 회차가 없던 것을 한 자리로 모은다.
+ * 값이 빈 칸은 `ParticipantHero` 가 스스로 뺀다. 네 칸 배치는 `app.css` L1 구획이 정한다.
+ */
+export const participantHeroDetails = ({
+  pseudonym,
+  program,
+  seqLabel = null,
+  phone = null,
+  email = null,
+}: {
+  pseudonym: string;
+  program: string;
+  /** 사업 뒤에 붙는 회차 꼬리표. `2회차 잡기`·`3회차 수정` 처럼 부르는 화면이 정한다. */
+  seqLabel?: string | null;
+  phone?: string | null;
+  email?: string | null;
+}): ReadonlyArray<[string, ReactNode]> => [
+  ['당사자 ID', pseudonym],
+  ['참여 사업', seqLabel ? `${program}, ${seqLabel}` : program],
+  ['연락처', phone ?? ''],
+  ['이메일', email ?? ''],
+];
+
+/**
  * surface-card wire-card + 제목·구분선·본문. 카드 div 를 손으로 만들지 않는다(DESIGN.md §5).
  */
 export function Card({

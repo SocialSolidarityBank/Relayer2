@@ -129,10 +129,15 @@ test('월간이 기본이고 기간 이동·주간·일간·다시보기가 실�
   // 머리 요약 한 줄: 가명 | 사업명 회차 | 일시(세로선 구분, 2026-09-17 Q).
   await expect(foldOf(nameA).locator('.fold-title-desc'))
     .toHaveText(/달력 보기 검증 1회차 10\. 14\./);
-  await expect(foldOf(nameA).getByText('방식', { exact: true })).toBeHidden();
+  // 접힌 줄에는 상담 조건이 없다. 어느 줄이 펼쳐지는지는 위처럼 헐거우니 단정은 **접힌 줄**에 건다 —
+  // 넷 중 펼쳐진 줄은 많아도 하나라 접힌 줄은 늘 있다(구 단정은 nameA 가 접혀 있다고 못 박아
+  // 첫 일정이 펼쳐진 실행에서 떨어졌다).
+  await expect(detail.locator('details:not([open])').first().getByText('방식', { exact: true })).toBeHidden();
 
   // ── 펼치면 상담 조건이 라벨/값으로 붙는다 ──
-  await foldOf(nameA).locator('summary').click();
+  if (!(await foldOf(nameA).evaluate((el) => (el as HTMLDetailsElement).open))) {
+    await foldOf(nameA).locator('summary').click();
+  }
   await expect(foldOf(nameA).getByText('방식', { exact: true })).toBeVisible();
   // 한 번에 하나만 펼쳐진다 — 다른 줄을 열면 앞 줄은 닫힌다.
   await foldOf(nameB).locator('summary').click();

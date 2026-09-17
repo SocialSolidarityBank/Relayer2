@@ -33,16 +33,34 @@ const openInfo = async (
 };
 
 /**
- * 기록·일정 등록 메뉴는 **늘 누구 것인지 먼저 묻는다**(2026-09-17 Q — 구 '마지막으로 연
- * 사례 기억' 폐지). 메뉴를 누르고 고르는 자리에서 그 사람 카드를 집는 두 걸음이 사람이
- * 쓰는 동선이다.
+ * 사례를 고르는 자리는 **당사자 목록 하나**다(2026-09-18 Q A1 — 구 `#/pick/*` 폐지).
+ * 카드의 `상담 기록하기`는 늘 일정 예약을 지난다(Q 결정 D1): 예정 회차가 있으면 그 회차를
+ * 확인하고 넘어가고, 없으면 일시 확인 안내 뒤 지금 일시를 저장한 다음 기록으로 간다.
  */
-const pickFromMenu = async (page: Page, kind: 'record' | 'schedule', name: string) => {
-  const label = kind === 'record' ? '상담 기록하기' : '상담 일정 등록';
-  await page.locator('.navigation-list').getByRole('link', { name: label }).first().click();
-  // 목록은 한 쪽에 열 장이다(2026-09-17 Q) — 사람도 찾아서 고른다.
+const recordFromList = async (page: Page, name: string, planned: boolean) => {
+  await page.locator('.navigation-list').getByRole('link', { name: '당사자 목록' }).first().click();
   await page.locator('#q').fill(name);
-  await page.getByRole('link', { name: new RegExp(`^${name},.*${label}$`) }).click();
+  await page
+    .locator('.participant-card')
+    .filter({ hasText: name })
+    .getByRole('link', { name: new RegExp(`^${name},.*상담 기록하기$`) })
+    .click();
+  await expect(page).toHaveURL(/\/schedule\?then=record$/);
+  if (!planned) {
+    await page
+      .getByRole('dialog', { name: '일시 확인 필요' })
+      .getByRole('button', { name: '확인', exact: true })
+      .click();
+  }
+  await page
+    .locator('.schedule-savebar')
+    .getByRole('button', { name: planned ? '상담 기록하기' : '일정 저장', exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/record$/);
+  // 기록 화면의 첫 렌더는 `불러오는 중` 이고, 본문은 브리핑·사례가 다 온 뒤에 선다(입력칸을
+  // 그때 초기화한다). 본문을 기다리지 않고 칸을 채우면 초기화가 덮어쓴다 — 일정 예약 화면에도
+  // 같은 이름의 칸(`#memo`·`종결 상담`)이 있어 넘어오는 순간에는 어느 화면인지도 가려진다.
+  await expect(page.locator('.record-main')).toBeVisible();
 };
 
 test('등록부터 회차 기록·이어받기까지 한 바퀴', async ({ page }) => {
@@ -56,16 +74,16 @@ test('등록부터 회차 기록·이어받기까지 한 바퀴', async ({ page 
   // ── 당사자 등록 ─────────────────────────────────────────────
   // 로그인하면 홈(상담 일정)이 연다 — 화면 제목이 아니라 셸의 내 계정 표시로 준비를 본다.
   await expect(page.locator('.app-nav-me')).toBeVisible();
+  // 사이드바 일정 묶음은 보기 하나다(2026-09-18 Q A1) — 등록·기록 메뉴는 목록 카드로 내렸다.
   const scheduleMenu = page.locator('.navigation-group', {
     has: page.locator('.navigation-section-title', { hasText: '일정' }),
   });
   const participantMenu = page.locator('.navigation-group', {
     has: page.locator('.navigation-section-title', { hasText: '당사자' }),
   });
-  await expect(participantMenu.getByRole('link', { name: '상담 기록하기' })).toHaveCount(0);
-  await scheduleMenu.getByRole('link', { name: '상담 기록하기' }).click();
-  // 고르는 화면의 제목은 사이드바 메뉴와 같은 이름이다(2026-09-17 Q).
-  await expect(page.getByRole('heading', { name: '상담 기록하기', level: 1, exact: true })).toBeVisible();
+  await expect(scheduleMenu.getByRole('link')).toHaveText(['상담 일정 보기']);
+  await expect(participantMenu.getByRole('link')).toHaveText(['당사자 목록', '당사자 등록']);
+  await expect(page.locator('.navigation-list').getByRole('link', { name: '상담 기록하기' })).toHaveCount(0);
   await page.goto('/#/participants/new');
   await page.locator('#name').fill(NAME);
   await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
@@ -104,8 +122,7 @@ test('등록부터 회차 기록·이어받기까지 한 바퀴', async ({ page 
   await expect(page.getByRole('heading', { name: '상담 일정', level: 1, exact: true })).toBeVisible();
 
   // ── 2회차 상담 기록하기 ─────────────────────────────────────
-  await pickFromMenu(page, 'record', NAME);
-  await expect(page).toHaveURL(/\/record$/);
+  await recordFromList(page, NAME, true);
 
   // 인테이크에서 만든 질문이 레일에 올라와 있다.
   const rail = page.locator('.record-side');
@@ -124,7 +141,9 @@ test('등록부터 회차 기록·이어받기까지 한 바퀴', async ({ page 
   await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
 
   // ── 3회차 일정 등록 ─────────────────────────────────────────
-  await pickFromMenu(page, 'schedule', NAME);
+  // 기록을 끼지 않는 순수 일정 등록은 사례 주소로 들어간다(2026-09-18 A1 — 메뉴 입구는 없어졌고
+  // 목록 카드의 `상담 기록하기`는 저장 뒤 기록으로 잇는 길이다).
+  await page.goto(`/#/cases/${caseId}/schedule`);
   await pickDateTime(page, 'schedule', '2026-10-08T10:00');
   await page.getByRole('radio', { name: '전화' }).check();
   await page.getByRole('button', { name: '일정 저장', exact: true }).click();
@@ -175,7 +194,8 @@ test('등록부터 회차 기록·이어받기까지 한 바퀴', async ({ page 
 
   // ── 확인할 과제·오늘 물어볼 것은 상담 기록하기의 레일이 보여 준다 ──
   // 같은 자료를 쓰던 15초 다시보기 화면이 없어져, 이 흐름의 유일한 자리다.
-  await pickFromMenu(page, 'record', NAME);
+  // 3회차가 예정돼 있으니 그 회차를 확인하고 기록으로 넘어간다.
+  await recordFromList(page, NAME, true);
   await expect(rail).toContainText(TASK);
   await expect(rail).toContainText(QUESTION);
   // `지난 회차 미확인` 꼬리표는 15초 다시보기 화면에만 있던 표기다(2026-09-17 Q 폐지) —
@@ -190,10 +210,10 @@ test('등록부터 회차 기록·이어받기까지 한 바퀴', async ({ page 
   // URL 을 외우지 않고 목록에서 이 사례로 되돌아올 수 있어야 한다.
   await page.getByRole('link', { name: '당사자 목록', exact: true }).click();
   await page.locator('#q').fill(NAME);
-  const row = page.getByRole('link', { name: new RegExp(NAME) });
-  // 목록 카드는 한 행 요약이다(2026-09-17 Q) — 회차는 사업명 뒤에 붙는다.
+  const row = page.locator('.participant-card').filter({ hasText: NAME });
+  // 접힌 머리는 한 행 요약이다(2026-09-17 Q) — 회차는 사업명 뒤에 붙는다.
   await expect(row.locator('.participant-card-id')).toContainText('2회차');
-  await row.click();
+  await row.getByRole('link', { name: new RegExp(`^${NAME},.*당사자 정보$`) }).click();
   // 당사자 카드가 머리다 — 제목이 사람 이름이다(2026-09-17 Q).
   await expect(page.getByRole('heading', { name: NAME })).toBeVisible();
   await page.getByRole('tab', { name: '회차별 요약' }).click();
@@ -221,7 +241,7 @@ test('예정 회차가 없어도 상담 기록하기에서 일시를 적고 기�
 
   // 일정 등록 화면이 떠도 등록하지 않고 바로 기록하기로 간다
   await expect(page).toHaveURL(/\/schedule$/);
-  await pickFromMenu(page, 'record', name);
+  await recordFromList(page, name, false);
 
   await pickDateTime(page, 'held-at', '2026-09-20T14:00');
   await page.getByRole('radio', { name: '전화' }).check();
@@ -254,7 +274,7 @@ test('상담 종결은 회차를 만들지 않고 미완료 과제를 그대로 
 
   // 예정 없이 2회차를 기록하면서 과제를 하나 남긴다
   await expect(page).toHaveURL(/\/schedule$/);
-  await pickFromMenu(page, 'record', name);
+  await recordFromList(page, name, false);
   await pickDateTime(page, 'held-at', '2026-09-20T14:00');
   await page.locator('#memo').fill('서류를 떼어 오기로 함');
   await page.getByRole('textbox', { name: '수행할 과제' }).fill(task);
@@ -303,7 +323,10 @@ test('상담 종결은 회차를 만들지 않고 미완료 과제를 그대로 
   // 목록에서도 종결로 보인다
   await page.getByRole('link', { name: '당사자 목록', exact: true }).click();
   await page.locator('#q').fill(name);
-  await expect(page.getByRole('link', { name: new RegExp(name) }).getByText('종결', { exact: true })).toBeVisible();
+  // 상태는 배지가 아니라 머리의 컬러 텍스트다(2026-09-18 Q A3).
+  await expect(
+    page.locator('.participant-card').filter({ hasText: name }).locator('.participant-state'),
+  ).toHaveText('종결');
 });
 
 // 요구 5 — 기록 화면에서 `종결 상담`을 고르면 저장 성공 뒤 종결 화면으로 간다.
@@ -332,7 +355,7 @@ test('종결 상담으로 저장하면 종결 화면으로 이어진다', async 
   await expect(page).toHaveURL(/#\/schedule$/);
 
   // 기록 화면이 그 표시를 이어받는다
-  await pickFromMenu(page, 'record', name);
+  await recordFromList(page, name, true);
   await expect(page.getByRole('checkbox', { name: '종결 상담' })).toBeChecked();
   await page.locator('#memo').fill('마지막으로 정리하고 마무리함');
   await page.getByRole('button', { name: '저장하고 종결로' }).click();
@@ -438,7 +461,7 @@ test('회차를 고쳐 쓰고, 적어만 둔 줄도 저장된다', async ({ page
 
   // 2회차를 예정 없이 기록한다. 과제는 진행 전으로.
   await expect(page).toHaveURL(/\/schedule$/);
-  await pickFromMenu(page, 'record', name);
+  await recordFromList(page, name, false);
   const rail = page
     .locator('section.wire-card')
     .filter({ has: page.getByRole('heading', { name: '확인할 과제' }) });
@@ -586,7 +609,7 @@ test('자유 글을 저장하고 다시 열면 그대로 읽힌다', async ({ pa
   await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
 
   await expect(page).toHaveURL(/\/schedule$/);
-  await pickFromMenu(page, 'record', name);
+  await recordFromList(page, name, false);
   await pickDateTime(page, 'held-at', '2026-10-05T10:00');
   await page.locator('#memo').fill(memo);
   await page.getByRole('button', { name: '저장' }).click();
@@ -685,7 +708,7 @@ test('외부 LLM 동의가 없으면 AI 정리를 하지 않는다', async ({ pa
 
   // 예정 없이 2회차를 기록한다
   await expect(page).toHaveURL(/\/schedule$/);
-  await pickFromMenu(page, 'record', name);
+  await recordFromList(page, name, false);
   await pickDateTime(page, 'held-at', '2026-10-05T10:00');
   await page.locator('#memo').fill('연체 2건 확인. 서류는 다음 주에 떼기로 함.');
   await page.getByRole('button', { name: '저장' }).click();

@@ -591,3 +591,13 @@ body { margin: 0; }
 /* 카드 밖 한 줄 안내(L4). 경고는 코랄. */
 .wire-note { margin: 0; font-size: var(--text-sm); color: var(--sub); }
 .wire-note[data-tone='warn'] { color: var(--discrepancy); }
+/* ==== L1 목록·일정 ==== */
+
+/* HERO 정보 격자는 **네 칸**이다(2026-09-18 Q C1 — 당사자 ID·참여 사업 회차·연락처·이메일).
+   이식 `wire.css:283` 은 세 칸이라 네 번째 칸이 둘째 줄로 내려가 한 줄 정렬이 깨졌다.
+   좁아지면 한 칸으로 접는 이식 규칙은 그대로 유지해야 해서 같은 컨테이너 쿼리를 다시 선언한다
+   (app.css 가 뒤 파일이라 조건 없는 선언 하나만 두면 좁은 화면에서도 네 칸이 남는다). */
+.participant-hero-details { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@container (max-width: 760px) {
+  .participant-hero-details { grid-template-columns: minmax(0, 1fr); }
+}

@@ -48,6 +48,8 @@ export type CaseView = {
     method: string | null;
     place: string | null;
     scheduled_at: string | null;
+    /** 예정 회차에 적어 둔 메모. 일정 예약 화면이 그 회차를 다시 보여 줄 때 쓴다. */
+    plan_memo: string | null;
     is_closing: boolean;
   }>;
 };
@@ -463,6 +465,11 @@ export type NewSessionInput = {
   method: ConsultationMethod;
   place?: string;
   plan_memo?: string;
+  /**
+   * 상담 소요 분(2026-09-18 Q 결정 D4 · UI 계획 §4 계약). 종료 시각은 화면이 분으로 바꿔 보낸다.
+   * 서버가 `sessions.duration_min` 으로 받는다(L5).
+   */
+  duration_min?: number;
 };
 
 export const planSession = (caseId: number, body: NewSessionInput) =>

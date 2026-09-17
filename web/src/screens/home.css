@@ -13,11 +13,15 @@
 /* 일간의 꺽쇠 사이 날짜는 달력 모달을 여는 글자 버튼이다. 버튼 껍데기는 지우고 라벨 규칙만 남긴다. */
 .sc-toolbar .schedule-date-inline { border: 0; background: transparent; color: var(--ink); cursor: pointer; }
 .sc-toolbar .schedule-date-inline:hover { text-decoration: underline; text-underline-offset: 3px; }
-.sc-calendar { padding: 0; overflow: hidden; }
+/* 달력 카드의 외곽선은 2px 그라데이션 아웃라인이다(2026-09-18 Q B2 — 오늘 원과 같은
+   `--gradient-action` 토큰). 카드 자체에 걸어 표 바깥에 선을 하나 더 두지 않는다. */
+.sc-calendar { padding: 0; overflow: hidden; border: 2px solid transparent; background: linear-gradient(var(--panel), var(--panel)) padding-box, var(--gradient-action) border-box; }
 .sc-calendar > .wire-card-body { display: block; padding: 0; }
 .sc-month-grid, .sc-time-grid { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; }
 .sc-month-grid thead { background: var(--gradient-action); }
-.sc-month-grid th { padding: var(--space-3); text-align: left; font-size: var(--text-detail); font-weight: 500; color: var(--on-action); border-bottom: 1px solid var(--line); border-right: 1px solid var(--line-on-action); }
+/* 내부 선은 한 톤이다(2026-09-18 Q B1). 요일 머리의 진한 `--line-on-action` 은 요일 사이만
+   더 어두워 격자가 두 겹으로 읽혔다 — 머리도 칸과 같은 `--line` 을 쓴다. */
+.sc-month-grid th { padding: var(--space-3); text-align: left; font-size: var(--text-detail); font-weight: 500; color: var(--on-action); border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); }
 .sc-month-grid td { padding: 0; vertical-align: top; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .sc-month-grid td:last-child { border-right: 0; }
 .sc-month-grid th:last-child { border-right: 0; }
