@@ -223,7 +223,8 @@ export function Routes() {
             <ul className="navigation-list">
               {link('#/participants', '당사자 목록', 'participants')}
               {link('#/participants/new', '당사자 등록', 'participant-add')}
-              {caseId && link(`#/cases/${caseId}/info`, '당사자 정보', 'participants')}
+              {/* `당사자 정보`는 메뉴에 두지 않는다(2026-09-17 Q). 한 사람을 가리키는 자리라
+                  묶음의 다른 두 항목(목록·등록)과 층이 다르고, 목록 카드가 곧 그 입구다. */}
             </ul>
           </div>
 
