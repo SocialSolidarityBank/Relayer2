@@ -49,15 +49,16 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
   await expect(page).toHaveURL(/#\/onboarding$/);
   await expect(page.getByRole('heading', { name: '기관 워크스페이스 설정하기', level: 1 })).toBeVisible();
   await expect(page.getByRole('tab', { name: '1. 기관 워크스페이스', selected: true })).toBeVisible();
-  // 주소 이름은 배포 설정(RELAYER_SLUG)이 기본값으로 들어와 있다 — 관리자가 고칠 수 있다.
-  await expect(page.locator('#ws-slug')).toHaveValue('e2e-slug');
+  // 주소는 배포 설정(RELAYER_SLUG)에서 온 값 표시다 — 입력칸이 아니다(2026-09-18 Q).
+  await expect(page.getByText('e2e-slug', { exact: true })).toBeVisible();
+  await expect(page.locator('#ws-slug')).toHaveCount(0);
   // 마치기 전에 다른 화면으로 가면 마법사로 돌아온다.
   await page.goto(`${base}/#/participants`);
   await expect(page).toHaveURL(/#\/onboarding$/);
   await page.locator('#ws-name').fill(ORG);
   await page.getByRole('button', { name: '기관 워크스페이스 만들기' }).click();
 
-  // 2단계: 기관 정보 — 이름은 1단계에서 들어왔고 주소 이름은 제목 옆 배지다. `다음` 이 저장한다.
+  // 2단계: 기관 정보 — 이름은 1단계에서 들어왔고 주소는 제목 옆 배지다. `다음` 이 저장한다.
   await expect(page.getByRole('tab', { name: '2. 기관 정보', selected: true })).toBeVisible();
   await expect(page.locator('#og-name')).toHaveValue(ORG);
   await expect(page.getByText('e2e-slug', { exact: true })).toBeVisible();
@@ -117,7 +118,7 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
 
   // 가입 문은 영구히 닫혔다. 로그아웃 상태의 가입하기는 계정을 만들지 않고 초대 안내만 낸다.
   const gate = await page.request.get(`${base}/auth/signup`);
-  expect(await gate.json()).toEqual({ open: false, workspace: { name: ORG, slug: 'e2e-slug' } });
+  expect(await gate.json()).toEqual({ open: false, workspace: { name: ORG, slug: 'e2e-slug', public_address: 'e2e-slug' } });
   const stranger = await browser.newPage();
   await stranger.goto(`${base}/#/signup`);
   await expect(stranger.getByRole('heading', { name: '초대 링크로만 가입 가능', level: 1 })).toBeVisible();

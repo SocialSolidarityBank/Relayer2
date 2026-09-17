@@ -18,7 +18,8 @@ export function WorkspaceScreen({ me, justDone }: { me: Me; justDone: boolean })
         <DataRows
           rows={[
             ['기관 이름', ws?.name ?? '없음'],
-            ['주소 이름', ws?.slug ?? '미정'],
+            // 주소는 배포 설정이 있을 때만(읽기 전용). 없으면 행을 숨긴다.
+            ...(ws?.public_address ? ([['주소', ws.public_address]] as Array<[string, string]>) : []),
             ['내 계정', `${me.name}, ${me.role === 'admin' ? '관리자' : '실무자'}`],
             ['준비 상태', me.onboarded ? '준비 완료' : '관리자 준비 중'],
           ]}

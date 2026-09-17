@@ -1037,8 +1037,8 @@ v1 → v2 로 판이 올라, **이미 받은 동의는 전부 `확인 필요`로
 ## 24. 기관 준비 — 첫 가입·마법사·사업 실체·역할 (2026-09-17 Q)
 
 테넌시는 그대로 기관 하나다(PLAN A3). `organizations` 표·`org_id` 를 만들지 않는다. `organization` 단일 행에
-`slug`·`onboarded_at`·`enc_openai_key`·`bootstrap_closed_at` 컬럼만 더한다(`0025`). 주소 이름(slug)은 관리자가 적고 `RELAYER_SLUG` 가
-기본값이다 — 표시·기록용이며 DNS 연결은 배포 절차다. 기관별 서브도메인(기관.relayer.kr)은 DNS·리버스 프록시 절차
+`slug`·`onboarded_at`·`enc_openai_key`·`bootstrap_closed_at` 컬럼만 더한다(`0025`). 주소(slug)는 읽기 전용 — 배포자가 `RELAYER_SLUG`(또는 DB 값)로
+정하고 화면은 값만 보인다(§24-2). 기관별 서브도메인(기관.relayer.kr)은 DNS·리버스 프록시 절차
 (`docs/deploy.md`)이고 **앱은 Host 를 읽지 않는다.** 설계 근거는 ASTRA 검토(2026-09-17, `docs/astra-onboarding-design-2026-09-17.md`)다.
 
 ### 24-1. 랜딩·로그인·가입하기
@@ -1049,7 +1049,7 @@ v1 → v2 로 판이 올라, **이미 받은 동의는 전부 `확인 필요`로
 랜딩 페이지 = 워크스페이스 주소다(배포 하나 = 기관 하나). "로그인은 됐는데 이 기관 계정이 아님"은 없다 — 다른 기관 계정은 이 DB 에 없어 로그인이 실패한다.
 
 - `GET /auth/signup` → `{ open: boolean, workspace: { name, slug } | null }`. 로그인 앞. `open` 은 `bootstrap_closed_at is null` 이고
-  활성 관리자(`role='admin' and deactivated_at is null`)가 0명일 때만 `true`. `workspace` 는 닫힌 문 앞의 사람에게 어느 기관인지 말해 주기 위한 것이다(이름·주소 이름은 비밀이 아니다).
+  활성 관리자(`role='admin' and deactivated_at is null`)가 0명일 때만 `true`. `workspace` 는 닫힌 문 앞의 사람에게 어느 기관인지 말해 주기 위한 것이다(이름·주소는 비밀이 아니다).
 - `POST /auth/signup { email, password, name }` — **계정만** 만든다. 로그인 앞. 한 트랜잭션에서 `organization` 행을 `for update` 로 잠근 뒤
   마감 표식이 없고 활성 관리자가 0명일 때만 관리자 계정을 만들고 **같은 트랜잭션에서 `bootstrap_closed_at` 을 찍어 문을 영구히 닫는다.**
   Argon2 해싱은 트랜잭션 밖이다(초대 수락과 같은 모양). 성공은 초대 수락과 같은 모양 — 로그인 쿠키(`relayer_session`) + `{ ok: true }`.
@@ -1066,7 +1066,7 @@ v1 → v2 로 판이 올라, **이미 받은 동의는 전부 `확인 필요`로
 
 ### 24-2. 마법사 `#/onboarding` — 「기관 워크스페이스 설정하기」
 
-관리자 전용 단계형 화면. 단계는 번호가 붙어 한 줄에 화살표로 선다: **1 기관 워크스페이스(기관명 · 주소 이름 한 줄, 만들기 버튼은 제목 줄
+관리자 전용 단계형 화면. 단계는 번호가 붙어 한 줄에 화살표로 선다: **1 기관 워크스페이스(기관명 입력, 주소는 배포 설정 값 표시만, 만들기 버튼은 제목 줄
 오른쪽) → 2 기관 정보(2행 2열, 필수는 이름만, `다음` 이 저장) → 3 사업(목록 위 한 줄에서 바로 추가, 최신이 위, 사업마다 아코디언 —
 `사업 추가` 를 누르면 이름 칸+`추가하기` 가 펼쳐지고 만든 사업의 아코디언이 열린 채로 온다. 펼치면 참여 당사자·담당 실무자(민트 배지 라벨)·기간(날짜 선택기)·설명·목록 링크·
 `삭제`(= `retired_at`, 복구 가능 — 화면 문구만 삭제/복구다)) → 4 실무자 초대(역할 아래 링크(·QR) 자리, 메모는 큰 칸, 링크 만들기는 제목 줄 오른쪽,
@@ -1074,17 +1074,19 @@ v1 → v2 로 판이 올라, **이미 받은 동의는 전부 `확인 필요`로
 STT·DB 는 `설정 가이드`(랜딩의 가이드를 팝업으로 — 다음 세션)) → `완료`.** 설정의 부품을 그대로 쓴다. 문구는 명사형이고 설명 문장을 두지
 않는다(2026-09-17 Q). 필수 표시는 `*` 하나다. 계정 가입과 기관 만들기를 갈라 둔 자리가 1단계다(ASTRA 검토 B).
 
-- **기관 워크스페이스** = `organization.name` 이 비어 있지 않은 상태. 1단계는 `PUT /settings/org { name, slug }` 로 이름·주소 이름을 적는 것이고
-  새 API·새 표가 없다. 이름이 비어 있던 행에 이름이 적히면 감사는 `org.bootstrap`, 그 뒤 고치면 `org.update`.
-  **주소 이름(`organization.slug`, `^[a-z0-9-]+$`)은 관리자가 적는 표시·기록용 값**이고 배포 설정 `RELAYER_SLUG` 가 기본값이다(2026-09-17 Q — ASTRA 의
-  '배포자 지정·읽기 전용' 권고를 관리자 입력으로 바꿈). 앱은 그 값으로 주소를 만들거나 DNS 를 확인하지 않는다. 워크스페이스가 있으면 1단계는 서지 않는다.
+- **기관 워크스페이스** = `organization.name` 이 비어 있지 않은 상태. 1단계는 `PUT /settings/org { name }` 로 이름을 적는 것이고 새 API·새 표가 없다.
+  이름이 비어 있던 행에 이름이 적히면 감사는 `org.bootstrap`, 그 뒤 고치면 `org.update`.
+  **주소는 읽기 전용이다**(2026-09-18 Q 확정, ASTRA §E). 값 = DB `organization.slug` 가 있으면 그것, 없으면 배포 설정 `RELAYER_SLUG`; 사람이 쓰는 접속 주소가
+  필요하면 `RELAYER_PUBLIC_URL` 이 우선한다(`public_address`). 둘 다 없으면 화면은 행을 숨긴다 — 빈 입력칸을 두지 않는다. 라벨은 `주소`.
+  `PUT /settings/org`·`POST /auth/signup` 은 slug 를 받지 않는다. 변경은 배포 절차(`docs/deploy.md`)로만 하고 "사용 가능한 주소" 류 문구는 쓰지 않는다.
+  워크스페이스가 있으면 1단계는 서지 않는다.
 - `GET /me` 에 `onboarded: boolean` 과 `workspace: { name, slug } | null` 이 실린다. **서버 잠금은 없고 클라이언트 리다이렉트다**:
   관리자는 워크스페이스가 없거나 `onboarded` 가 거짓이면 `#/onboarding` 에, 실무자는 그동안 `#/setup-pending`(`기관을 준비하고 있어요`,
   `다시 확인하기`)에 머문다. 마법사 도중 초대로 먼저 들어온 실무자가 반쯤 열린 화면을 헤매지 않게 하는 안내다.
 - 완료는 `POST /settings/onboarding/complete`(관리자 전용) 로 `onboarded_at` 을 찍는다(두 번 눌러도 처음 시각). 완료 화면은 기관 요약
   `#/workspace?done=1`(`기관 설정을 마쳤어요`) 이고 `상담 일정으로 이동하기` 가 `#/schedule` 로 보낸다. 마친 뒤 `#/onboarding`·`#/setup-pending`·
   루트로 오면 홈으로 보낸다.
-- `#/workspace` 는 로그인한 누구나 **필요할 때 보는** 기관 요약이다(이름·주소 이름·내 계정·준비 상태·관리자에게 `기관 설정 보기`).
+- `#/workspace` 는 로그인한 누구나 **필요할 때 보는** 기관 요약이다(이름·주소·내 계정·준비 상태·관리자에게 `기관 설정 보기`).
   평소 로그인은 `#/schedule` 로 바로 간다 — 매번 거치는 중간 화면이 아니다(ASTRA 검토 C). `대시보드`라는 화면명은 없다(GLOSSARY §15-2).
 - `0025` 는 `update organization set onboarded_at = now() where name <> ''` 로 **기존 배포는 마법사를 건너뛴다.** `PUT /settings/org` 의 `name` 은 `min(1)`.
 

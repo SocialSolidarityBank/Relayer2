@@ -860,7 +860,7 @@ export const orgPayload = (o: Org): Org => ({
   phone: o.phone?.trim() || null,
 });
 
-/** 설정 › 기관 정보. 주소 이름은 제목 옆 배지다 — 아이디처럼 읽는다. */
+/** 설정 › 기관 정보. 접속 주소는 제목 옆 배지다(읽기 전용, 배포 설정) — 없으면 배지도 없다. */
 export function OrgPane() {
   const [org, setOrg] = useState<OrgView | null>(null);
   const [saved, setSaved] = useState(false);
@@ -883,7 +883,7 @@ export function OrgPane() {
   return (
     <Card
       title="기관 정보"
-      badge={org.slug ?? undefined}
+      badge={org.public_address ?? undefined}
       action={
         <Button variant="primary" disabled={!org.name.trim()} onClick={() => void save()}>
           저장하기

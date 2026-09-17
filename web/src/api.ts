@@ -104,8 +104,8 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-/** 기관 워크스페이스 — 기관 이름이 적히면 생긴다. 주소 이름은 배포 설정(RELAYER_SLUG)이라 읽기 전용이다. */
-export type Workspace = { name: string; slug: string | null };
+/** 기관 워크스페이스 — 기관 이름이 적히면 생긴다. `public_address` 는 읽기 전용 접속 주소(배포 설정), 없으면 null → 행 숨김. */
+export type Workspace = { name: string; slug: string | null; public_address: string | null };
 /**
  * `workspace` 가 없거나 `onboarded` 가 거짓이면 관리자는 마법사(#/onboarding)에, 실무자는 기관 준비 중(#/setup-pending)에
  * 머문다. 서버 잠금은 없다 — 안내용 리다이렉트다.
@@ -527,7 +527,7 @@ export type Profile = {
   contact_email: string | null;
 };
 export type Org = { name: string; reg_no: string | null; address: string | null; phone: string | null };
-export type OrgView = Org & { slug: string | null; onboarded: boolean };
+export type OrgView = Org & { slug: string | null; public_address: string | null; onboarded: boolean };
 export type Program = {
   id: number;
   name: string;
@@ -583,8 +583,7 @@ export const saveProfile = (body: { name: string; phone: string | null; contact_
 export const deactivateMe = () => json<{ ok: true }>('/settings/deactivate', { method: 'POST' });
 
 export const getOrg = () => json<OrgView>('/settings/org');
-export const saveOrg = (body: Org & { slug?: string | null }) =>
-  json<OrgView>('/settings/org', { method: 'PUT', body: JSON.stringify(body) });
+export const saveOrg = (body: Org) => json<OrgView>('/settings/org', { method: 'PUT', body: JSON.stringify(body) });
 
 export const listPrograms = (all = false) => json<Program[]>(`/settings/programs${all ? '?all=1' : ''}`);
 export const addProgram = (body: ProgramInput) =>

@@ -746,13 +746,6 @@ app.put('/settings/org', async (c) => {
       reg_no: z.string().trim().nullable().default(null),
       address: z.string().trim().nullable().default(null),
       phone: z.string().trim().nullable().default(null),
-      // 주소 이름. 안 보내면 그대로, 빈 문자열은 지움.
-      slug: z
-        .string()
-        .trim()
-        .transform((v) => v || null)
-        .pipe(z.string().regex(/^[a-z0-9-]+$/, '주소 이름은 영문 소문자·숫자·붙임표만 써요.').nullable())
-        .optional(),
     })
     .parse(await c.req.json());
   return c.json(await settings.updateOrg(c.get('actor').id, body));

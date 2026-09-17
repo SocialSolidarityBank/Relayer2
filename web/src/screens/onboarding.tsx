@@ -10,28 +10,26 @@
  */
 import { Fragment, useEffect, useState } from 'react';
 import { completeOnboarding, getOrg, saveOrg, type Me, type Org, type Program } from '../api.ts';
-import { Button, Card, Empty, ErrorText, Field, FormActions, PageHeader } from '../ui.tsx';
+import { Button, Card, DataRows, Empty, ErrorText, Field, FormActions, PageHeader } from '../ui.tsx';
 import { ConnectionsPane, InvitePane, OrgForm, orgPayload, ProgramsPane } from './settings.tsx';
 
 const STEPS = ['기관 워크스페이스', '기관 정보', '사업', '실무자 초대', '외부 서비스 연결'] as const;
 
-/** 1단계. 기관명 · 주소 이름 한 줄. 만들기 버튼은 제목 줄 오른쪽 끝이다. */
+/** 1단계. 기관명 한 칸. 주소는 배포 설정(읽기 전용) — 있을 때만 값으로 보인다. 만들기 버튼은 제목 줄 오른쪽 끝이다. */
 function WorkspaceStep({ onCreated }: { onCreated: () => void }) {
   const [name, setName] = useState('');
-  const [slug, setSlug] = useState('');
+  const [address, setAddress] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
-    // 배포 설정(RELAYER_SLUG)이 있으면 그 값이 기본이다.
-    void getOrg().then((org) => setSlug(org.slug ?? ''));
+    void getOrg().then((org) => setAddress(org.public_address));
   }, []);
-  const slugOk = slug === '' || /^[a-z0-9-]+$/.test(slug);
   const create = async () => {
-    if (!name.trim() || !slugOk || busy) return;
+    if (!name.trim() || busy) return;
     setBusy(true);
     setErr(null);
     try {
-      await saveOrg({ name: name.trim(), reg_no: null, address: null, phone: null, slug: slug.trim() || null });
+      await saveOrg({ name: name.trim(), reg_no: null, address: null, phone: null });
       onCreated();
     } catch (e) {
       setErr(e instanceof Error ? e.message : '만들기 실패');
@@ -43,7 +41,7 @@ function WorkspaceStep({ onCreated }: { onCreated: () => void }) {
     <Card
       title="기관 정보 입력"
       action={
-        <Button variant="primary" disabled={busy || !name.trim() || !slugOk} onClick={() => void create()}>
+        <Button variant="primary" disabled={busy || !name.trim()} onClick={() => void create()}>
           {busy ? '만드는 중' : '기관 워크스페이스 만들기'}
         </Button>
       }
@@ -62,18 +60,19 @@ function WorkspaceStep({ onCreated }: { onCreated: () => void }) {
             />
           </Field>
         </div>
-        <div className="wire-col-6">
-          <Field label="주소 이름" htmlFor="ws-slug">
-            <input id="ws-slug" value={slug} onChange={(e) => setSlug(e.target.value.trim())} />
-          </Field>
-        </div>
+        {/* 주소는 입력칸이 아니라 값이다(2026-09-18 Q). 배포 설정이 없으면 행 자체를 두지 않는다 — 빈 칸 금지. */}
+        {address && (
+          <div className="wire-col-6">
+            <DataRows rows={[['주소', address]]} />
+          </div>
+        )}
       </div>
     </Card>
   );
 }
 
 /** 2단계. 기관 정보 네 칸(2행 2열). `다음` 이 저장한다. */
-function OrgStep({ slug, onNext }: { slug: string | null; onNext: () => void }) {
+function OrgStep({ address, onNext }: { address: string | null; onNext: () => void }) {
   const [org, setOrg] = useState<Org | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -96,7 +95,7 @@ function OrgStep({ slug, onNext }: { slug: string | null; onNext: () => void }) 
   };
   return (
     <>
-      <Card title="기관 정보" badge={slug ?? undefined}>
+      <Card title="기관 정보" badge={address ?? undefined}>
         {err && <ErrorText>{err}</ErrorText>}
         <OrgForm value={org} onChange={setOrg} />
       </Card>
@@ -187,7 +186,7 @@ export function OnboardingScreen({
           }}
         />
       )}
-      {step === 1 && <OrgStep slug={me.workspace?.slug ?? null} onNext={() => setStep(2)} />}
+      {step === 1 && <OrgStep address={me.workspace?.public_address ?? null} onNext={() => setStep(2)} />}
       {step === 2 && (
         <ProgramsPane onChanged={(rows: Program[]) => setLivePrograms(rows.filter((p) => !p.retired_at).length)} />
       )}

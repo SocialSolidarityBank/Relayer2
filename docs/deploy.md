@@ -35,7 +35,8 @@ docker run -p 8787:8787 --env-file .env relayer:0.1.0
 | `PII_ENC_KEY` | 금고·자유 글 암복호가 실패한다. base64 32바이트 |
 | `SESSION_SECRET` | 로그인이 실패한다 |
 | `PORT` | 8787 |
-| `RELAYER_SLUG` | 마법사 1단계 `주소 이름` 칸의 기본값이 빈다(관리자가 직접 적는다). 기관별 서브도메인의 라벨(아래) |
+| `RELAYER_SLUG` | 화면의 `주소` 행이 숨는다(읽기 전용 값, 화면에서 못 바꾼다). 기관별 서브도메인의 라벨(아래) |
+| `RELAYER_PUBLIC_URL` | 있으면 `주소` 에 slug 대신 이 접속 주소를 보인다(예: `https://yeondae.relayer.kr`) |
 
 **`PII_ENC_KEY` 는 백업과 다른 곳에 둔다.** 잃으면 자유 글과 금고를 영영 못 읽는다(`SPEC.md` §13).
 
@@ -57,7 +58,7 @@ curl -s http://localhost:8787/auth/signup                               # → {"
 ```
 
 1. 브라우저로 `/` 를 열면 로그인 화면이다(= 랜딩). 아래 `가입하기` → `#/signup` 에서 **첫 관리자 계정만** 만든다(아이디·비밀번호·이름).
-2. 가입이 끝나면 로그인된 채 마법사 `#/onboarding`(기관 워크스페이스 설정하기)으로 간다 — **1 기관 워크스페이스 만들기(기관명·주소 이름, 기본값은 RELAYER_SLUG)** →
+2. 가입이 끝나면 로그인된 채 마법사 `#/onboarding`(기관 워크스페이스 설정하기)으로 간다 — **1 기관 워크스페이스 만들기(기관명; 주소는 `RELAYER_SLUG` 값 표시만)** →
    2 기관 정보 → 3 사업 1개 이상 → 4 실무자 초대(건너뛰기 가능) → 5 외부 서비스 연결 → 완료. 마치기 전에는 관리자가 다른 화면으로 가도 마법사로 돌아오고,
    초대로 먼저 들어온 실무자는 `기관을 준비하고 있어요` 를 본다. 완료는 기관 요약(`#/workspace?done=1`)을 보이고 `상담 일정으로 이동하기` 로 홈에 간다.
 3. 그 뒤 `GET /auth/signup` 은 `{"open":false,"workspace":{…}}` 이고 `POST /auth/signup` 은 403 이다. `#/signup` 은 기관 이름과 초대 안내만 낸다.
@@ -71,7 +72,7 @@ STT(Azure)·DB 는 여전히 환경 변수다.
 ## 기관별 서브도메인 (2026-09-17)
 
 기관마다 `기관.relayer.kr` 을 주되 **앱은 하나의 기관만 안다** — 배포 하나가 기관 하나다(PLAN A3, `organization` 단일 행).
-앱 코드는 `Host` 를 읽지 않으므로 서브도메인은 전부 DNS·프록시 층의 일이다. **주소 이름(slug)은 배포자가 `RELAYER_SLUG` 로 정한다** —
+앱 코드는 `Host` 를 읽지 않으므로 서브도메인은 전부 DNS·프록시 층의 일이다. **주소(slug)는 배포자가 `RELAYER_SLUG` 로 정하고 화면은 읽기 전용이다** —
 DB 하나만 보는 앱은 전체 배포에서의 중복도, DNS 가 실제로 붙었는지도 알 수 없어 화면은 읽기 전용으로 보여 주기만 한다(ASTRA 검토 E).
 
 ```
@@ -84,6 +85,7 @@ Tunnel/프록시 ingress        <slug>.relayer.kr → http://localhost:<그 기�
 절차:
 
 1. 기관마다 DB 하나(Supabase 프로젝트 또는 스키마)·`.env` 하나·앱 프로세스 하나를 둔다. 포트를 달리 주고 `RELAYER_SLUG` 를 적는다.
+   **주소를 바꾸는 길은 이것뿐이다** — `.env` 의 `RELAYER_SLUG`(·`RELAYER_PUBLIC_URL`)를 고치고 앱을 다시 시작한다. 화면에는 입력칸이 없다(2026-09-18 Q).
 2. Cloudflare DNS 에 `<slug>` CNAME 을 터널 주소로 더한다(또는 A 레코드). 와일드카드 `*.relayer.kr` 을 터널에 물려 두면 DNS 는 한 번이다.
 3. 터널 `config.yml` 의 `ingress` 에 `hostname: <slug>.relayer.kr → service: http://localhost:<PORT>` 한 줄을 더하고 터널만 재시작한다(`launchctl kickstart -k … or.bss.relayer-tunnel`).
 4. 그 주소로 `/auth/signup` 이 `{"open":true,…}` 인지 확인하고 위 **새 DB 의 첫 가입** 절차를 밟는다.

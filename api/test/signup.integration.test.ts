@@ -71,20 +71,22 @@ describe.skipIf(!enabled)('first signup gate', () => {
     const me = await (await fetch(`${base}/me`, { headers: { cookie } })).json();
     expect(me).toMatchObject({ role: 'admin', onboarded: false, workspace: null });
 
-    // 마법사 0단계 — 기관 워크스페이스 만들기 = 기관 이름을 적는다. 주소 이름은 읽기 전용(배포 설정).
+    // 마법사 1단계 — 기관 워크스페이스 만들기 = 기관 이름을 적는다. 주소는 읽기 전용(배포 설정) — 보내도 무시된다.
     const created = await fetch(`${base}/settings/org`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({ name: '연대은행 상담센터' }),
+      body: JSON.stringify({ name: '연대은행 상담센터', slug: 'hacked' }),
     });
     expect(created.status).toBe(200);
-    expect(await created.json()).toMatchObject({ name: '연대은행 상담센터', slug: 'yeondae', onboarded: false });
+    expect(await created.json()).toMatchObject({ name: '연대은행 상담센터', slug: 'yeondae', public_address: 'yeondae', onboarded: false });
+    const [{ slug: storedSlug }] = await scratch.db<Array<{ slug: string | null }>>`select slug from organization where id = 1`;
+    expect(storedSlug).toBeNull();
     const after = await (await fetch(`${base}/me`, { headers: { cookie } })).json();
-    expect(after.workspace).toEqual({ name: '연대은행 상담센터', slug: 'yeondae' });
+    expect(after.workspace).toEqual({ name: '연대은행 상담센터', slug: 'yeondae', public_address: 'yeondae' });
     // 로그인 앞에서도 어느 기관인지는 보인다 — 닫힌 문 앞의 사람을 로그인으로 보내기 위해.
     expect(await (await fetch(`${base}/auth/signup`)).json()).toEqual({
       open: false,
-      workspace: { name: '연대은행 상담센터', slug: 'yeondae' },
+      workspace: { name: '연대은행 상담센터', slug: 'yeondae', public_address: 'yeondae' },
     });
 
     // 마법사 완료.

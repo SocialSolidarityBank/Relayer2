@@ -86,48 +86,54 @@ export async function deactivate(userId: number): Promise<{ ok: true } | { error
 // ── 기관 정보 ──────────────────────────────────────────────────────────────
 
 /**
- * 주소 이름(slug). 관리자가 워크스페이스 만들기에서 적는다(2026-09-17 Q). 아직 안 적었으면 배포 설정(RELAYER_SLUG)이
- * 기본값이다. DB 하나만 보는 앱은 전체 배포에서의 중복도, DNS 가 붙었는지도 알 수 없다 — 값은 표시·기록용이고 연결은 배포 절차다.
+ * 주소(2026-09-18 Q 확정 — 읽기 전용). 값은 DB `slug` 가 있으면 그것, 없으면 배포 설정 `RELAYER_SLUG`. 둘 다 없으면 null 이고 화면은 행을 숨긴다.
+ * 사람이 쓰는 접속 주소 형태가 필요하면 `RELAYER_PUBLIC_URL` 이 우선한다. 화면에서 바꾸는 길은 없다 — 변경은 배포 절차(docs/deploy.md)다.
+ * DB 하나만 보는 앱은 전체 배포에서의 중복도, DNS 가 붙었는지도 알 수 없다.
  */
 const deploymentSlug = (): string | null => process.env.RELAYER_SLUG?.trim() || null;
+const publicAddress = (slug: string | null): string | null => process.env.RELAYER_PUBLIC_URL?.trim() || slug;
 
 export type Org = { name: string; reg_no: string | null; address: string | null; phone: string | null };
-export type OrgView = Org & { slug: string | null; onboarded: boolean };
+/** `slug` 는 주소 이름 조각, `public_address` 는 사람이 쓰는 접속 주소(URL 설정이 있으면 그것, 없으면 slug). 둘 다 읽기 전용. */
+export type OrgView = Org & { slug: string | null; public_address: string | null; onboarded: boolean };
 
 export async function getOrg(): Promise<OrgView> {
   const [row] = await sql<Array<Org & { slug: string | null; onboarded_at: string | null }>>`
     select name, reg_no, address, phone, slug, onboarded_at from organization where id = 1`;
-  if (!row) return { name: '', reg_no: null, address: null, phone: null, slug: deploymentSlug(), onboarded: false };
-  const { onboarded_at, slug, ...org } = row;
-  return { ...org, slug: slug ?? deploymentSlug(), onboarded: onboarded_at !== null };
+  const slug = row?.slug ?? deploymentSlug();
+  if (!row) return { name: '', reg_no: null, address: null, phone: null, slug, public_address: publicAddress(slug), onboarded: false };
+  const { onboarded_at, slug: _stored, ...org } = row;
+  return { ...org, slug, public_address: publicAddress(slug), onboarded: onboarded_at !== null };
 }
 
 /**
  * 기관 정보 저장. **기관 워크스페이스 만들기(마법사 0단계)도 이 길이다** — 이름이 비어 있던 행에 이름이 적히는 순간
  * 워크스페이스가 생긴다. 새 표·새 API 를 두지 않는다(단일 행 id=1).
  */
-export async function updateOrg(actorId: number, patch: Org & { slug?: string | null }): Promise<OrgView> {
+export async function updateOrg(actorId: number, patch: Org): Promise<OrgView> {
   const [before] = await sql<Array<{ name: string }>>`select name from organization where id = 1`;
+  // slug 는 여기서 받지 않는다(2026-09-18 Q — 읽기 전용). 배포 절차로만 바뀐다.
   await sql`
     update organization
     set name = ${patch.name}, reg_no = ${patch.reg_no}, address = ${patch.address},
-        phone = ${patch.phone}, slug = ${patch.slug === undefined ? sql`slug` : patch.slug},
-        updated_at = now(), updated_by = ${actorId}
+        phone = ${patch.phone}, updated_at = now(), updated_by = ${actorId}
     where id = 1`;
   await audit({
     actorId,
     action: before?.name === '' ? 'org.bootstrap' : 'org.update',
-    fields: ['name', 'reg_no', 'address', 'phone', ...(patch.slug === undefined ? [] : ['slug'])],
+    fields: ['name', 'reg_no', 'address', 'phone'],
   });
   return getOrg();
 }
 
-export type Workspace = { name: string; slug: string | null };
+export type Workspace = { name: string; slug: string | null; public_address: string | null };
 
 /** 기관 워크스페이스 — 기관 이름이 적힌 순간 생긴다. 이름이 비어 있으면 아직 없다(null). 이름·주소 이름은 비밀이 아니다. */
 export async function workspaceInfo(): Promise<Workspace | null> {
   const [row] = await sql<Array<{ name: string; slug: string | null }>>`select name, slug from organization where id = 1`;
-  return row && row.name !== '' ? { name: row.name, slug: row.slug ?? deploymentSlug() } : null;
+  if (!row || row.name === '') return null;
+  const slug = row.slug ?? deploymentSlug();
+  return { name: row.name, slug, public_address: publicAddress(slug) };
 }
 
 /**
