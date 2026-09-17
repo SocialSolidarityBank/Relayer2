@@ -9,9 +9,11 @@ import {
   type ConsentCopy,
   type Program,
 } from '../api.ts';
+import { ConsentLinkCard } from '../consent-link.tsx';
 import {
   Button,
   Card,
+  Chevron,
   Choice,
   DataRows,
   ErrorText,
@@ -96,21 +98,26 @@ export function ParticipantNewScreen() {
       <PageHeader title="당사자 등록" />
 
       <div className="wire-container">
+        {/* 이름·연락처·이메일은 짧은 값이라 한 행 3열이다(2026-09-18 Q — 세로로 쌓으면 자리만 먹는다). */}
         <Card title="당사자">
-          <Field label="이름" htmlFor="name" required>
-            <input id="name" type="text" value={name} onChange={(e) => setName(e.target.value)} />
-          </Field>
-          <Field label="연락처" htmlFor="phone">
-            <input id="phone" type="text" value={phone} onChange={(e) => setPhone(e.target.value)} />
-          </Field>
-          <Field label="이메일" htmlFor="email">
-            <input id="email" type="text" value={email} onChange={(e) => setEmail(e.target.value)} />
-          </Field>
+          <div className="form-row" data-cols="3">
+            <Field label="이름" htmlFor="name" required>
+              <input id="name" type="text" value={name} onChange={(e) => setName(e.target.value)} />
+            </Field>
+            <Field label="연락처" htmlFor="phone">
+              <input id="phone" type="text" value={phone} onChange={(e) => setPhone(e.target.value)} />
+            </Field>
+            <Field label="이메일" htmlFor="email">
+              <input id="email" type="text" value={email} onChange={(e) => setEmail(e.target.value)} />
+            </Field>
+          </div>
         </Card>
 
+        {/* 사업명과 예정 회차 수는 한 행 반반이다(2026-09-18 Q). */}
         <Card title="참여 사업">
+          <div className="form-row" data-cols="2">
           <Field
-            label="사업"
+            label="사업명"
             htmlFor="program"
             required
             control="select"
@@ -122,7 +129,7 @@ export function ParticipantNewScreen() {
             }
           >
             <select id="program" value={program} onChange={(e) => setProgram(e.target.value)}>
-              <option value="">고르기</option>
+              <option value="">선택</option>
               {(programs ?? []).map((p) => (
                 <option key={p.id} value={p.name}>
                   {p.name}
@@ -131,6 +138,7 @@ export function ParticipantNewScreen() {
             </select>
           </Field>
           <Field label="예정 회차 수" htmlFor="planned">
+            {/* 위아래 꺽쇠로 한 회차씩 올리고 내린다(2026-09-18 Q). 직접 쳐도 된다. */}
             <input
               id="planned"
               type="text"
@@ -138,7 +146,29 @@ export function ParticipantNewScreen() {
               value={planned}
               onChange={(e) => setPlanned(e.target.value.replace(/\D/g, ''))}
             />
+            <span className="number-stepper">
+              <button
+                type="button"
+                aria-label="예정 회차 수 하나 올리기"
+                onClick={() => setPlanned(String(Math.min(99, (Number(planned) || 0) + 1)))}
+              >
+                <Chevron dir="up" />
+              </button>
+              <button
+                type="button"
+                aria-label="예정 회차 수 하나 내리기"
+                onClick={() =>
+                  setPlanned((prev) => {
+                    const next = (Number(prev) || 0) - 1;
+                    return next >= 1 ? String(next) : '';
+                  })
+                }
+              >
+                <Chevron dir="down" />
+              </button>
+            </span>
           </Field>
+          </div>
         </Card>
 
         {/* 문안 전체를 보여 주고 받는다. 접어 둔 것을 펴면 무엇을 받고 얼마나 두고
@@ -151,6 +181,24 @@ export function ParticipantNewScreen() {
             </FormActions>
           </Card>
         )}
+
+        {/* 동의 요청 링크는 **동의 항목 위**다(2026-09-18 Q). 당사자 정보 탭과 같은 부품
+            (`ConsentLinkCard`)이며 여기서는 누르면 먼저 등록하고 곧바로 링크를 발급한다 —
+            사례가 없으면 링크를 만들 수 없기 때문이다. */}
+        <ConsentLinkCard
+          link={issued ? `${window.location.origin}/#/access/${issued.token}` : null}
+          code={issued?.code ?? null}
+          busy={saving === 'link'}
+          disabled={!ready}
+          makeLabel="동의 요청 링크 만들기"
+          onMake={() => void save('link')}
+        >
+          <FormActions>
+            <Button onClick={() => (window.location.hash = `#/cases/${issued?.caseId}/intake`)}>
+              인테이크 쓰기
+            </Button>
+          </FormActions>
+        </ConsentLinkCard>
 
         {/* 동의는 **항목마다 상위 접힘 카드 하나**다(2026-09-18 Q). 묶음 카드(`동의`)를 걷고
             이중 접힘(`자세히 보기`)도 걷었다.
@@ -197,46 +245,17 @@ export function ParticipantNewScreen() {
           </Fold>
         ))}
 
-        {/* 동의 링크를 만들었으면 링크와 확인 코드를 여기서 바로 전한다. 코드는 지금 한 번만 보인다. */}
-        {issued && (
-          <Card
-            title="개인정보 및 민감정보 처리 동의 링크"
-            action={
-              <Button onClick={() => (window.location.hash = `#/cases/${issued.caseId}/intake`)}>
-                인테이크 쓰기
-              </Button>
-            }
-          >
-            <DataRows
-              rows={[
-                ['링크', `${window.location.origin}/#/access/${issued.token}`],
-                ['확인 코드', issued.code],
-              ]}
-            />
-            <p className="panel-meta">이 화면을 닫으면 코드는 다시 볼 수 없어요. 지금 전해 주세요.</p>
-          </Card>
-        )}
-
-        {/* 만드는 화면이라 `등록`이다(2026-09-18 Q — `저장`은 이미 있는 것을 고칠 때 쓴다).
-            두 길: 바로 인테이크를 쓰거나, 남은 동의를 당사자에게 링크로 받는다. */}
+        {/* 만드는 화면이라 `등록`이다(2026-09-18 Q — `저장`은 이미 있는 것을 고칠 때 쓴다). */}
         <FormActions>
           {error && <ErrorText>{error}</ErrorText>}
           {!issued && (
-            <>
-              <Button
-                disabled={!ready || saving !== null}
-                onClick={() => void save('link')}
-              >
-                {saving === 'link' ? '등록 중…' : '등록하고 동의 링크 만들기'}
-              </Button>
-              <Button
-                variant="primary"
-                disabled={!ready || saving !== null}
-                onClick={() => void save('intake')}
-              >
-                {saving === 'intake' ? '등록 중…' : '등록하고 인테이크 쓰기'}
-              </Button>
-            </>
+            <Button
+              variant="primary"
+              disabled={!ready || saving !== null}
+              onClick={() => void save('intake')}
+            >
+              {saving === 'intake' ? '등록 중…' : '등록하고 인테이크 쓰기'}
+            </Button>
           )}
         </FormActions>
       </div>
