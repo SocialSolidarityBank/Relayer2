@@ -160,6 +160,10 @@ async function callOpenAi(prompt: string): Promise<Shape> {
     headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
     body: JSON.stringify({
       model: MODEL,
+      // 응답을 OpenAI 쪽에 남기지 않는다(2026-09-17 Q — 민감정보). 결과는 ai_drafts 가 갖고
+      // 다시 가져올 일이 없다. 기본값(생략)은 30일 이상 보관이다. 남용 감시 로그 30일은 이
+      // 옵션과 무관하며, 없애려면 ZDR 계약이 따로 필요하다.
+      store: false,
       // 추론을 길게 돌릴 일이 아니다. 적힌 말을 정리할 뿐이다.
       // gpt-5.4 이상은 'minimal' 을 받지 않는다. 'none' 이 같은 자리다.
       reasoning: { effort: MODEL.startsWith('gpt-5.') ? 'none' : 'minimal' },
@@ -263,6 +267,8 @@ export async function draftSession(sessionId: number, actorId: number): Promise<
       `recipient=${AI_PROVIDERS[PROVIDER].legalRecipient}`,
       `country=${AI_PROVIDERS[PROVIDER].country}`,
       `model=${MODEL}`,
+      // 제공자 쪽 보관 설정. OpenAI 만 옵션이 있다 — Gemini 는 계정 정책이 정한다.
+      `store=${PROVIDER === 'openai' ? 'false' : 'n/a'}`,
       ...Object.entries(hits).map(([kind, n]) => `masked:${kind}=${n}`),
     ],
   });
