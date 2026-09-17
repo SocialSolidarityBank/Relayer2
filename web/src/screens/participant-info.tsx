@@ -69,51 +69,27 @@ const AI_OFF_LABEL: Record<string, string> = {
  * 비어도 빠지지 않고 상태를 쓴다. 화면에서 유일한 위험색 테두리이고 접히지 않는다.
  * 확정된 위험 카드만 싣는다(`kind='judgment'` + `risk_type`) — 그 판정은 서버가 한다.
  */
-function RiskBanner({ caseId }: { caseId: number }) {
+/**
+ * 회차별 요약 — **한 회차가 한 접힘 카드**다(2026-09-17 Q). 상단 `위험 신호` 배너는 걷었다:
+ * 본문 중심으로 가고, 위험 신호는 그 신호가 나온 회차 카드가 스스로 말한다(`is-crisis`).
+ *
+ * 접힌 머리는 `N회차`(16/600) + 날짜·종류(13/400, 세로선 없이 여백) + 배지(`AI`·`위험 신호`)
+ * + 행동(`AI 정리 검토`/`AI 정리 보기`·`수정`)이다. 펼친 본문은 **테두리 없는 텍스트 구역**들이고
+ * 카드 안 카드를 만들지 않는다: 핵심 요약 · 지난 회차와 불일치 · 위험 신호 · 상태.
+ */
+function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
   const [risk, setRisk] = useState<Briefing['risk_signals'] | null>(null);
   useEffect(() => {
     void getBriefing(caseId).then((b) => setRisk(b.risk_signals));
   }, [caseId]);
 
-  return (
-    <section className="risk-banner">
-      <div className="risk-banner-head">
-        <h2 className="risk-banner-title">위험 신호</h2>
-      </div>
-      {risk === null ? (
-        <p className="empty">불러오는 중이에요.</p>
-      ) : risk.items.length === 0 ? (
-        <p className="empty">위험 신호 없음</p>
-      ) : (
-        <ul className="risk-banner-list">
-          {risk.items.map((r) => (
-            <li key={r.card_id}>
-              <Item
-                title={r.text}
-                desc={`${r.source_session_seq}회차${r.last_result === 'unchecked' ? ', 지난 회차 미확인' : ''}`}
-              />
-            </li>
-          ))}
-        </ul>
-      )}
-      {risk !== null && (
-        <p className="panel-meta">{AI_OFF_LABEL[risk.status.reason ?? 'ai_disabled']}</p>
-      )}
-    </section>
-  );
-}
-
-function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
   const done = detail.sessions.filter((s) => s.status === 'done');
 
   // 아직 아무 기록이 없으면 **여기서 바로 시작할 수 있어야 한다.**
   // 빈 화면만 보여 주고 어디로 가라는 말이 없으면 위 메뉴를 뒤지게 된다.
-  // 위험 신호는 기록이 없어도 선다 — 인테이크에서 이미 확정될 수 있다.
   if (done.length === 0) {
     const hasIntake = detail.sessions.some((s) => s.kind === 'intake');
     return (
-      <>
-      <RiskBanner caseId={caseId} />
       <Card title="회차별 요약">
         <Empty>아직 기록한 상담이 없어요.</Empty>
         <FormActions>
@@ -133,79 +109,109 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
           </Button>
         </FormActions>
       </Card>
-      </>
     );
   }
 
   return (
     <>
-      {/* 이 탭은 **이 사례의 지금 상태와 회차 기록**이다(2026-09-17 Q — 15초 다시보기 폐지로
-          다시 정의). 맨 위가 위험 신호, 그 아래가 회차 목록이다. 목표는 `목표` 탭, 전문은
-          `회차별 원본 보기` 탭, 확인할 과제·오늘 물어볼 것은 상담 기록하기의 레일이 갖는다. */}
-      <RiskBanner caseId={caseId} />
-      <Card title="회차별 요약" hint="회차 줄은 기록 상태예요. 승인한 AI 정리는 아래 접힌 카드에 있어요.">
-        {done.map((s) => {
-          // 수기·음성 상태는 회차 줄의 설명에 붙는다(2026-09-16 인계).
+      <Card title="회차별 요약">
+        {/* 최신순이다(2026-09-17 Q) — 회차 정보 표와 같은 순서다. */}
+        {[...done].reverse().map((s) => {
+          const risks = (risk?.items ?? []).filter((r) => r.source_session_seq === s.seq);
           const transcriptLabel =
             s.voice.recordings > 0 ? TRANSCRIPT_LABEL[s.voice.transcript] : undefined;
+          const state = [
+            s.line,
+            s.written === false ? '수기 미작성' : null,
+            s.voice.recordings > 0 ? `녹음 ${s.voice.recordings}` : null,
+            transcriptLabel ?? null,
+          ]
+            .filter(Boolean)
+            .join(' | ');
           return (
-            <div className="wire-repeat-card" key={s.id}>
-              <Item
-                title={`${s.seq}회차 | ${dateLabel(s.held_at)}${s.kind === 'intake' ? ' | 인테이크' : ''}`}
-                desc={
-                  <>
-                    {s.ai_summary ? `AI 정리 승인함 | ${s.line}` : s.line}
-                    {s.written === false && <> <Badge tone="lavender">수기 미작성</Badge></>}
-                    {s.voice.recordings > 0 && ` | 녹음 ${s.voice.recordings}`}
-                    {transcriptLabel && ` | ${transcriptLabel}`}
-                  </>
-                }
-                action={
+            <Fold
+              key={s.id}
+              group="sessions"
+              crisis={risks.length > 0}
+              title={
                 <>
-                  {/* 원문은 `회차별 원본 보기` 탭이 유일한 입구다(2026-09-17 Q). 요약 줄에서
-                      수기 본문을 펼치던 `원문 보기`는 그 탭의 부분집합이라 걷었다 —
-                      요약은 상태와 AI 정리, 전문은 원문이다(§4 탭별 성격). */}
-                  <Button
-                    onClick={() => (window.location.hash = `#/cases/${caseId}/sessions/${s.id}/review`)}
-                  >
-                    AI 정리
-                  </Button>
-                  {s.kind === 'intake' ? (
-                    <Button onClick={() => (window.location.hash = `#/cases/${caseId}/intake`)}>
-                      수정
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={() => (window.location.hash = `#/cases/${caseId}/sessions/${s.id}/edit`)}
-                    >
-                      수정
-                    </Button>
-                  )}
+                  <span className="seq-head-no">{s.seq}회차</span>
+                  <span className="seq-head-meta">{dateLabel(s.held_at)}</span>
+                  {s.kind === 'intake' && <span className="seq-head-meta">인테이크</span>}
+                  {s.ai_summary && <Badge tone="blue">AI</Badge>}
+                  {risks.length > 0 && <Badge>위험 신호 {risks.length}</Badge>}
                 </>
               }
-            />
-            {s.ai_summary && (
-              <div className="info-ai-summary">
-                <Fold title="AI 요약" desc={s.ai_summary.summary}>
-                  <p className="wire-item-desc">{s.ai_summary.summary}</p>
-                  {s.ai_summary.changes.length > 0 && (
-                    <p className="wire-item-desc">달라진 것: {s.ai_summary.changes.join(', ')}</p>
-                  )}
-                </Fold>
-                <Fold
-                  title="내용 불일치"
-                  desc={
-                    s.ai_summary.fact_changes.length > 0
-                      ? `지난 회차와 어긋나는 사실 ${s.ai_summary.fact_changes.length}건`
-                      : '지난 회차와 어긋나는 사실 없음'
-                  }
-                >
-                  <FactChanges items={s.ai_summary.fact_changes} />
-                </Fold>
+              action={
+                <>
+                  {/* 이름이 상태를 말한다(2026-09-17 Q): 승인 전에는 검토, 승인 뒤에는 보기. */}
+                  <Button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      window.location.hash = `#/cases/${caseId}/sessions/${s.id}/review`;
+                    }}
+                  >
+                    {s.ai_summary ? 'AI 정리 보기' : 'AI 정리 검토'}
+                  </Button>
+                  <Button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      window.location.hash =
+                        s.kind === 'intake'
+                          ? `#/cases/${caseId}/intake`
+                          : `#/cases/${caseId}/sessions/${s.id}/edit`;
+                    }}
+                  >
+                    수정
+                  </Button>
+                </>
+              }
+            >
+              <div className="seq-sections">
+                {risks.length > 0 && (
+                  <section className="seq-section">
+                    <h3 className="seq-section-title is-risk">위험 신호</h3>
+                    {risks.map((r) => (
+                      <p className="wire-item-title" key={r.card_id}>
+                        {r.text}
+                        {r.last_result === 'unchecked' && <span className="seq-section-note">지난 회차 미확인</span>}
+                      </p>
+                    ))}
+                    <p className="seq-section-note">
+                      {risk ? (AI_OFF_LABEL[risk.status.reason ?? 'ai_disabled'] ?? risk.status.state) : '확인 중'}
+                    </p>
+                  </section>
+                )}
+                {s.ai_summary ? (
+                  <section className="seq-section">
+                    <h3 className="seq-section-title">
+                      핵심 요약 <Badge tone="blue">AI</Badge>
+                    </h3>
+                    <p className="seq-section-note">원본에서 핵심 문장만 AI가 정리한 요약본</p>
+                    <p className="wire-item-desc">{s.ai_summary.summary}</p>
+                    {s.ai_summary.changes.length > 0 && (
+                      <p className="wire-item-desc">달라진 것: {s.ai_summary.changes.join(', ')}</p>
+                    )}
+                  </section>
+                ) : null}
+                {s.ai_summary && (
+                  <section className="seq-section">
+                    <h3 className="seq-section-title">지난 회차와 불일치</h3>
+                    {s.ai_summary.fact_changes.length === 0 ? (
+                      <p className="seq-section-note">어긋나는 사실 없음</p>
+                    ) : (
+                      <FactChanges items={s.ai_summary.fact_changes} />
+                    )}
+                  </section>
+                )}
+                {state && (
+                  <section className="seq-section">
+                    <h3 className="seq-section-title">기록 상태</h3>
+                    <p className="wire-item-desc">{state}</p>
+                  </section>
+                )}
               </div>
-            )}
-
-          </div>
+            </Fold>
           );
         })}
       </Card>
@@ -265,15 +271,17 @@ function Goals({ detail, reload }: { detail: CaseDetail; reload: () => Promise<v
         </Field>
         <FormActions>
           <Dialog id="goal-history" title="지난 목표" trigger="지난 목표 보기">
+            {/* 최신순이다(2026-09-17 Q — 회차 정보 표·회차별 요약과 같은 순서).
+                `승인`/`수정` 라벨은 원래 순서의 첫 줄(처음 적은 목표)에만 `승인`이 붙는다. */}
             <Card title="전체 상담 목표 이력">
               {history.length === 0 ? (
                 <Empty>아직 이력이 없어요.</Empty>
               ) : (
-                history.map((r, i) => (
+                [...history].reverse().map((r, j) => (
                   <Item
-                    key={`${r.created_at}-${i}`}
+                    key={`${r.created_at}-${j}`}
                     title={r.text ?? '(비움)'}
-                    desc={`${dateLabel(r.created_at)}, ${i === 0 ? '승인' : '수정'}`}
+                    desc={`${dateLabel(r.created_at)}, ${j === history.length - 1 ? '승인' : '수정'}`}
                   />
                 ))
               )}
@@ -282,8 +290,17 @@ function Goals({ detail, reload }: { detail: CaseDetail; reload: () => Promise<v
               {withGoal.length === 0 ? (
                 <Empty>이어받은 목표가 아직 없어요.</Empty>
               ) : (
-                withGoal.map((s) => (
-                  <Item key={s.id} title={s.today_goal_text ?? ''} desc={`${s.seq}회차 | ${dateLabel(s.held_at)}`} />
+                [...withGoal].reverse().map((s) => (
+                  <Item
+                    key={s.id}
+                    title={s.today_goal_text ?? ''}
+                    desc={
+                      <>
+                        <span className="seq-head-no">{s.seq}회차</span>
+                        <span className="seq-head-meta">{dateLabel(s.held_at)}</span>
+                      </>
+                    }
+                  />
                 ))
               )}
             </Card>
@@ -617,17 +634,30 @@ function Fulls({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
     );
   }
   return (
-    <Card title="회차별 원본 보기" hint="회차를 고르면 그 회차의 수기·음성 전문을 읽어요.">
-      {done.map((s) => (
+    <Card title="회차별 원본 보기">
+      {/* 최신순이다(2026-09-17 Q). 머리 타이포는 회차별 요약과 같다: 회차 크게, 날짜·종류는
+          작고 볼드 아님, 세로선 없이 여백으로 가른다. AI 가 만든 전사문이 있으면 `AI` 배지. */}
+      {[...done].reverse().map((s) => (
         <div className="wire-repeat-card" key={s.id}>
           <Item
-            title={`${s.seq}회차 | ${dateLabel(s.held_at)}${s.kind === 'intake' ? ' | 인테이크' : ''}`}
-            desc={
+            title={
               <>
-                {s.written ? '수기 있음' : '수기 미작성'}
-                {s.voice.recordings > 0 && ` | 녹음 ${s.voice.recordings}`}
-                {s.voice.recordings > 0 && ` | ${TRANSCRIPT_LABEL[s.voice.transcript]}`}
+                <span className="seq-head-no">{s.seq}회차</span>
+                <span className="seq-head-meta">{dateLabel(s.held_at)}</span>
+                {s.kind === 'intake' && <span className="seq-head-meta">인테이크</span>}
+                {s.voice.transcript !== 'none' && s.voice.transcript !== 'skipped' && (
+                  <Badge tone="blue">AI</Badge>
+                )}
               </>
+            }
+            desc={
+              [
+                s.written ? '수기 있음' : '수기 미작성',
+                s.voice.recordings > 0 ? `녹음 ${s.voice.recordings}` : null,
+                s.voice.recordings > 0 ? TRANSCRIPT_LABEL[s.voice.transcript] : null,
+              ]
+                .filter(Boolean)
+                .join(' | ')
             }
             action={
               <Button

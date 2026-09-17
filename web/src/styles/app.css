@@ -232,3 +232,37 @@ body { margin: 0; }
 .wire-card-details[open] > .wire-card-summary .wire-chevron-button {
   border-color: var(--line-on-action);
 }
+
+/* 회차 줄 머리(2026-09-17 Q): `N회차` 를 크게, 날짜·종류는 작고 볼드 아님, **세로선 없이 여백**으로
+   가른다. 요약 탭의 접힘 카드와 전문 보기 탭의 줄이 같은 타이포를 쓴다. */
+.seq-head-no { font-size: var(--text-md); font-weight: 600; color: var(--ink); }
+.seq-head-meta { font-size: var(--text-detail); font-weight: 400; color: var(--sub); }
+/* `Fold` 는 제목을 `.fold-title-text` 로 감싸므로 그 조각을 flex 로 풀어야 여백이 생긴다
+   (선택자를 바깥 제목에만 걸면 `2회차2026. 9. 10.` 처럼 붙는다 — 실측). */
+.fold-title-text:has(.seq-head-no),
+.wire-item-title:has(.seq-head-no) {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  min-width: 0;
+  overflow: visible;
+  white-space: normal;
+}
+
+/* 펼친 회차 본문은 **테두리 없는 텍스트 구역**들이다 — 카드 안 카드를 만들지 않는다. */
+.seq-sections { display: grid; gap: var(--space-5); min-width: 0; }
+.seq-section { display: grid; gap: var(--space-1); min-width: 0; }
+.seq-section > p { margin: 0; }
+.seq-section-title { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: var(--text-sm); font-weight: 600; color: var(--mint-deep); }
+.seq-section-title.is-risk { color: var(--risk); }
+.seq-section-note { margin: 0; font-size: var(--text-detail); color: var(--sub); }
+
+@media (max-width: 767px) {
+  /* 좁은 화면에서는 회차 머리를 두 줄로 푼다(390 실측 148px → 버튼이 배지 위로 끼어들었다):
+     위는 회차·날짜·배지, 아래는 행동과 꺽쇠다. */
+  .wire-card-details:has(.seq-head-no) > .wire-card-summary { flex-wrap: wrap; row-gap: var(--space-2); }
+  .wire-card-details:has(.seq-head-no) > .wire-card-summary > .wire-card-title { flex: 1 1 100%; }
+  .wire-card-details:has(.seq-head-no) > .wire-card-summary > .wire-card-summary-right { margin-left: auto; }
+  .wire-item-title:has(.seq-head-no) { flex: 1 1 100%; }
+}
