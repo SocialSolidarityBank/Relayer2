@@ -59,13 +59,10 @@ export function Routes() {
   }, []);
 
   /**
-   * 기록·일정 등록 메뉴는 **늘 당사자를 고르는 자리**로 간다(2026-09-17 Q).
-   *
-   * 구 규칙(955896e)은 마지막으로 연 사례를 기억해 메뉴가 그 사례를 가리키게 했다.
-   * 사례로 돌아갈 길을 만들려던 것인데, 그 길은 `당사자 정보` 메뉴였고 그 항목은 오늘
-   * 빠졌다(당사자 목록 카드가 그 입구다). 남은 것은 **메뉴를 눌렀을 때 누구 것인지 묻지
-   * 않고 직전 사람의 기록 화면이 열리는 일**뿐이었다 — 새로 고치면 기억이 지워져 같은
-   * 메뉴가 어떤 날은 고르는 자리로, 어떤 날은 남의 기록으로 갔다.
+   * 사이드바는 **목록·등록만** 가리킨다(2026-09-18 Q A1). 구 `상담 일정 등록`·`상담 기록하기`
+   * 메뉴와 그 뒤의 고르는 화면(`#/pick/*`)은 걷었다 — 한 사람을 가리키는 행동이라 메뉴와 층이
+   * 다르고, 당사자 목록 카드가 그 입구다. 카드의 `상담 기록하기`는 늘 일정 예약 화면을 지난다
+   * (Q 결정 D1 — 일시를 확인하지 않은 기록을 막는다).
    */
 
   // 당사자 열람은 로그인 앞에 선다. 링크와 코드로만 열리고, 실무자 화면과 섞이지 않는다.
@@ -165,9 +162,7 @@ export function Routes() {
       const programId = Number(query.get('program'));
       return <ParticipantsScreen initialProgramId={Number.isInteger(programId) && programId > 0 ? programId : null} />;
     }
-    // 사례를 안 고른 채 상담 기록하기·상담 일정 등록을 누르면 여기로 온다.
-    if (path === '#/pick/record') return <ParticipantsScreen pickFor="record" />;
-    if (path === '#/pick/schedule') return <ParticipantsScreen pickFor="schedule" />;
+    // 사례를 고르는 자리는 당사자 목록 하나다(2026-09-18 Q A1 — 구 `#/pick/*` 폐지).
     // 설정은 묶음 단위다. 낡은 항목 주소로 들어오면 그 항목이 든 묶음으로 보낸다.
     if (path === '#/settings') { window.location.hash = '#/settings/me'; return null; }
     const inSettings = path.match(/^#\/settings\/([a-z-]+)$/);
@@ -201,7 +196,8 @@ export function Routes() {
       if (byCase[2] === 'intake') return <IntakeScreen caseId={caseId} />;
       if (byCase[2] === 'info') return <ParticipantInfoScreen caseId={caseId} />;
       if (byCase[2] === 'close') return <CloseScreen caseId={caseId} />;
-      return <ScheduleNewScreen caseId={caseId} />;
+      // 카드에서 온 예약은 저장하고 기록으로 잇는다(D1). 그 밖(당사자 정보 · 인테이크)은 일정 목록으로 돌아간다.
+      return <ScheduleNewScreen caseId={caseId} thenRecord={query.get('then') === 'record'} />;
     }
 
     window.location.hash = HOME;
@@ -216,12 +212,10 @@ export function Routes() {
    * 정본(CCC preview)의 `.app-shell` 3부 — 머리줄·사이드바·본문 — 을 그대로 쓴다.
    * 묶음 라벨과 항목 이름은 Q 가 준 것이다.
    *
-   * 일정 묶음의 기록·일정 등록은 사례가 없으면 당사자 선택 화면으로 보낸다.
-   * 당사자 정보는 열어 둔 사례가 있을 때만 당사자 묶음에 따라붙는다.
+   * 일정 묶음은 보기 하나다(2026-09-18 Q A1). 등록·기록은 당사자 목록 카드가 맡는다.
    *
    * 아이콘은 CCC 글리프를 그대로 쓴다(2026-09-17 Q). 같은 대상의 보기와 등록은 더하기
-   * 유무로 가른다 — 당사자 목록(사람)·당사자 등록(사람+더하기), 일정 보기(시계)·일정
-   * 등록(달력+더하기). 기록은 쓰는 행동이라 펜이다.
+   * 유무로 가른다 — 당사자 목록(사람)·당사자 등록(사람+더하기). 일정은 보기 하나라 시계다.
    */
   const link = (href: string, label: string, icon: ShellIconName) => (
     <li key={href}>
@@ -271,12 +265,9 @@ export function Routes() {
           <div className="navigation-group">
             <p className="navigation-section-title">일정</p>
             <ul className="navigation-list">
-              {/* 보기가 묶음 맨 위다(2026-09-17 Q) — 로그인 도착지이자 하루를 여는 자리다. */}
+              {/* 보기가 이 묶음의 유일한 항목이다(2026-09-18 Q A1) — 로그인 도착지이자 하루를 여는 자리다.
+                  등록·기록은 당사자 목록 카드의 행동으로 내렸다. */}
               {link(HOME, '상담 일정 보기', 'upcoming')}
-              {link('#/pick/schedule', '상담 일정 등록', 'calendar-plus')}
-              {/* 둘 다 누구 것인지 먼저 묻는다 — 메뉴가 직전에 열었던 사람의 화면을
-                  바로 열면 남의 기록에 쓰게 된다. */}
-              {link('#/pick/record', '상담 기록하기', 'record')}
             </ul>
           </div>
 

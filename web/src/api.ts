@@ -463,6 +463,11 @@ export type NewSessionInput = {
   method: ConsultationMethod;
   place?: string;
   plan_memo?: string;
+  /**
+   * 상담 소요 분(2026-09-18 Q 결정 D4 · UI 계획 §4 계약). 서버가 컬럼·스키마를 받기 전에는
+   * 요청 스키마가 걸러 내고 저장은 그대로 된다 — 화면은 계약 형태대로 실어 보낸다.
+   */
+  duration_min?: number;
 };
 
 export const planSession = (caseId: number, body: NewSessionInput) =>

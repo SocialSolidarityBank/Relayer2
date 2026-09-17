@@ -24,16 +24,17 @@ export function DateTimeInput({ idPrefix, value, onChange, disabled = false, req
         <select id={`${idPrefix}-hour`} required={required} value={value.hour}
           onChange={e => onChange({ ...value, hour: e.target.value })}>
           <option value="">선택</option>
-          {Array.from({ length: 12 }, (_, i) => <option key={i} value={String(i + 1)}>{i + 1}시</option>)}
+          {Array.from({ length: 12 }, (_, i) => <option key={i} value={String(i + 1)}>{i + 1}</option>)}
         </select>
       </Field>
       <Field label="분" htmlFor={`${idPrefix}-minute`} control="select">
         <select id={`${idPrefix}-minute`} value={value.minute}
           onChange={e => onChange({ ...value, minute: e.target.value })}>
-          {Array.from({ length: 60 }, (_, i) => <option key={i} value={String(i).padStart(2, '0')}>{String(i).padStart(2, '0')}분</option>)}
+          {Array.from({ length: 60 }, (_, i) => <option key={i} value={String(i).padStart(2, '0')}>{String(i).padStart(2, '0')}</option>)}
         </select>
       </Field>
     </div>
-    <p className="date-time-zone panel-meta">한국 시간 기준</p>
+    {/* `한국 시간 기준` 한 줄은 걷었다(2026-09-18 Q C2) — 선택창 안 단위(`시`·`분`)도 라벨이
+        이미 말한다. 숫자만 남기면 두 자리 선택창이 짧아져 한 행에 종료 시각까지 든다. */}
   </fieldset>;
 }

@@ -11,13 +11,23 @@
 .schedule-inputs .wire-input-box :is(input, select, textarea) { font-size: var(--text-md); }
 .schedule-inputs .wire-choice-group { flex-wrap: wrap; }
 .schedule-inputs .wire-choice { min-height: 44px; }
-.schedule-savebar { position: sticky; bottom: var(--space-4); z-index: 3; display: flex; justify-content: space-between; align-items: center; gap: var(--space-5); padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--panel); }
+/* 첫 행(C3): 왼쪽은 날짜·오전오후·시·분·종료 시각, 오른쪽은 상담 방식 라디오다.
+   **세로 가운데**로 맞춘다 — 라벨 있는 입력칸과 라벨 없는 라디오 묶음의 높이가 달라
+   위쪽 정렬이면 라디오가 날짜칸 라벨 줄에 붙었다(§3 AC-C3 가 실측한다). */
+.schedule-when-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, auto); gap: var(--space-4) var(--space-6); align-items: center; min-width: 0; }
+.schedule-when-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 150px); gap: var(--space-4) var(--space-5); align-items: end; min-width: 0; }
+/* 그 아래: 왼쪽 장소·종결 체크, 오른쪽 메모. 두 칸은 위쪽 정렬이다(메모가 더 길다). */
+.schedule-detail-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4) var(--space-6); align-items: start; min-width: 0; }
+.schedule-detail-left { display: grid; gap: var(--space-5); align-content: start; min-width: 0; }
+.schedule-savebar { position: sticky; bottom: var(--space-4); z-index: 3; display: flex; justify-content: space-between; align-items: center; gap: var(--space-6); padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--panel); }
 .schedule-save-summary { min-width: 0; }
-.schedule-save-summary strong { display: block; font-size: var(--text-md); }
-.schedule-save-summary .panel-meta { margin: var(--space-1) 0 0; }
+.schedule-save-summary .wire-meta-row { color: var(--sub); font-size: var(--text-sm); }
 .schedule-savebar .wire-button { flex-shrink: 0; min-height: 44px; padding-inline: var(--space-6); }
 .schedule-form :is(button, a, input, select, textarea) { scroll-margin-block: calc(var(--header-height) + var(--space-6)) 160px; }
 @media (max-width: 767px) {
+  .schedule-when-row,
+  .schedule-when-fields,
+  .schedule-detail-row { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
   .schedule-savebar { flex-direction: column; align-items: stretch; gap: var(--space-3); padding: var(--space-4); }
   .schedule-savebar .wire-button { width: 100%; }
 }

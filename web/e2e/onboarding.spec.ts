@@ -167,7 +167,7 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
   await page.goto(`${base}/#/participants?program=${programId}`);
   // 걸개가 그 사업으로 걸린 채 열린다.
   await expect(page.locator('#filter-program')).toHaveValue(programId);
-  await expect(page.getByRole('link', { name: new RegExp(`^${PARTICIPANT},`) })).toBeVisible();
+  await expect(page.getByRole('link', { name: new RegExp(`^${PARTICIPANT},.*당사자 정보$`) })).toBeVisible();
   await page.goto(`${base}/#/settings/staff?program=${programId}`);
   await expect(page).toHaveURL(new RegExp(`#/settings/staff\\?program=${programId}$`));
   await expect(page.locator('#wk-program')).toHaveValue(programId);
