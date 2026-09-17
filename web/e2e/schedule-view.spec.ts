@@ -115,21 +115,35 @@ test('월간이 기본이고 기간 이동·주간·일간·다시보기가 실�
   await expect(month.locator('[data-day="2026-10-14"]')).toBeVisible();
 
   // ── 날짜를 고르면 월간 칸에서 생략된 일정까지 모두 확인할 수 있다 ──
+  // 줄은 접힌 카드다(2026-09-17 Q). 접힌 머리에 이름·가명·사업명·회차·일시와 `당사자 정보`가
+  // 서고, 방식·장소·메모 같은 상담 조건은 펼쳐야 보인다.
   await month.locator('[data-day="2026-10-14"]').click();
   for (const name of [nameA, nameB, nameC, nameD]) {
     await expect(detail.getByText(name)).toBeVisible();
   }
+  // 다른 spec 의 합성 자료도 같은 날짜에 쌓이므로 건수는 못 박지 않는다 — 접힘 상태만 본다.
+  await expect(detail.locator('details[open]')).toHaveCount(0);
+  const foldOf = (name: string) => detail.locator('details', { has: page.getByText(name) });
+  // 머리 요약 한 줄: 가명 · 사업명 회차 · 일시.
+  await expect(foldOf(nameA).locator('.fold-title-desc'))
+    .toHaveText(/달력 보기 검증 1회차 · 10\. 14\./);
+  await expect(foldOf(nameA).getByText('방식', { exact: true })).toBeHidden();
 
-  // ── 당사자 정보: 행마다 링크가 있고 사례의 당사자 정보로 간다(15초 다시보기 폐지, PR #17) ──
-  const review = detail.getByRole('link', { name: '당사자 정보' });
-  await expect.poll(async () => (await review.all()).length).toBeGreaterThanOrEqual(4);
-  const hrefs = await review.evaluateAll((els) => els.map((el) => el.getAttribute('href')));
-  expect(hrefs.some((h) => h?.includes(`cases/${caseA}/info`))).toBe(true);
-  expect(hrefs.some((h) => h?.includes(`cases/${caseB}/info`))).toBe(true);
-  await detail
-    .locator(`a[href*="cases/${caseA}/info"]`, { hasText: '당사자 정보' })
-    .first()
-    .click();
+  // ── 펼치면 상담 조건이 라벨/값으로 붙는다 ──
+  await foldOf(nameA).locator('summary').click();
+  await expect(foldOf(nameA).getByText('방식', { exact: true })).toBeVisible();
+  // 한 번에 하나만 펼쳐진다 — 다른 줄을 열면 앞 줄은 닫힌다.
+  await foldOf(nameB).locator('summary').click();
+  await expect(detail.locator('details[open]')).toHaveCount(1);
+
+  // ── 당사자 정보는 접힌 머리에서도 바로 누를 수 있고, 눌러도 카드가 열리지 않는다 ──
+  const review = foldOf(nameA).getByRole('link', { name: '당사자 정보' });
+  await expect(review).toBeVisible();
+  await expect(review).toHaveAttribute('href', new RegExp(`cases/${caseA}/info$`));
+  // 그 옆 `상담 기록하기`는 같은 사례의 기록 화면으로 간다.
+  await expect(foldOf(nameA).getByRole('link', { name: '상담 기록하기' }))
+    .toHaveAttribute('href', new RegExp(`cases/${caseA}/record$`));
+  await review.click();
   await expect(page).toHaveURL(new RegExp(`/cases/${caseA}/info`));
   await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
 
@@ -243,4 +257,36 @@ test('모바일에서도 날짜의 전체 일정을 열고 주간표 안에서�
   await expect(dayRegion).toBeVisible();
   await expect(dayRegion.locator('thead tr')).toHaveCount(1);
   expect(await dayRegion.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+});
+
+// 달력 아래 카드의 기본은 '다가오는 일정'이다(2026-09-17 Q): 오늘 이후 가까운 순 다섯 건,
+// 넘치면 `날짜 더보기`. 다른 spec 의 합성 자료가 같은 DB 에 쌓이므로 '내가 만든 먼 일정이
+// 처음에는 없다가 더보기 뒤에 뜬다'로 자른다 — 건수 상한과 순서를 함께 본다.
+test('다가오는 일정은 가까운 다섯 건만 보여 주고 나머지는 날짜 더보기로 펼친다', async ({ page }) => {
+  await page.clock.install({ time: NOW });
+  await login(page);
+  const stamp = Date.now();
+  const near = `다가옴 가까운${stamp}`;
+  const far = `다가옴 먼${stamp}`;
+  const nearCase = await makeCase(page, near);
+  const farCase = await makeCase(page, far);
+  for (const day of ['2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-06']) {
+    await plan(page, nearCase, KST(day, '10:00'));
+  }
+  await plan(page, farCase, KST('2027-02-20', '10:00'));
+  await page.goto('/#/participants');
+  await page.goto('/#/schedule');
+
+  const upcoming = page.getByRole('region', { name: '다가오는 상담 일정', exact: true });
+  await expect(upcoming.getByRole('heading', { name: '다가오는 일정', exact: true })).toBeVisible();
+  await expect(upcoming.locator('details')).toHaveCount(5);
+  await expect(upcoming.getByText(far)).toHaveCount(0);
+  // 더보기는 다섯 건씩 더 붙인다 — 한 번에 전부 쏟지 않는다.
+  const more = upcoming.getByRole('button', { name: '날짜 더보기', exact: true });
+  await more.click();
+  await expect(upcoming.locator('details')).toHaveCount(10);
+  while (await more.count()) {
+    await more.click();
+  }
+  await expect(upcoming.getByText(far)).toBeVisible();
 });
