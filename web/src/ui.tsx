@@ -487,6 +487,7 @@ export function LineList({
   draft,
   onDraft,
   onChange,
+  readOnly,
 }: {
   /** id 는 공백 없는 슬러그다. 라벨을 그대로 쓰면 유효하지 않은 id 가 된다. */
   id: string;
@@ -498,7 +499,22 @@ export function LineList({
   draft: Line;
   onDraft: (next: Line) => void;
   onChange: (next: Line[]) => void;
+  /** 원본 보기(2026-09-18 UI-3): 적힌 줄만 보이고 입력칸·추가·삭제는 없다. */
+  readOnly?: boolean;
 }) {
+  if (readOnly) {
+    return lines.length === 0 ? (
+      <Empty>없음</Empty>
+    ) : (
+      <>
+        {lines.map((line, i) => (
+          <div className="wire-repeat-card" key={`${line.text}-${i}`}>
+            <Item title={`${withArea ? `${LIFE_AREAS.find((a) => a.key === line.area)?.label} · ` : ''}${line.text}`} />
+          </div>
+        ))}
+      </>
+    );
+  }
   const area = draft.area ?? LIFE_AREAS[0].key;
   const setArea = (key: string) => onDraft({ ...draft, area: key });
   const setDraft = (text: string) => onDraft({ ...draft, text });

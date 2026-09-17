@@ -13,6 +13,7 @@ import {
 import { Badge, Button, Empty, ErrorText, Fold, Item, ParticipantHero } from '../ui.tsx';
 import { METHOD_LABEL } from '../vocab.ts';
 import { fmtBytes, fmtMs } from './session-audio.tsx';
+import { IntakeScreen } from './intake.tsx';
 
 const dateLabel = (iso: string | null): string => {
   if (!iso) return '날짜 없음';
@@ -106,27 +107,46 @@ export function SessionFullScreen({ caseId, sessionId }: { caseId: number; sessi
         }
       />
       <div className="wire-container">
-        {/* 한 화면에서 **하나만 펼친다**(2026-09-17 Q). 펼친 제목 줄은 활성 면(파스텔)을
-            받으므로, 둘 다 펼치면 그 신호가 가리킬 대조군이 없다.
-            어느 쪽을 펼치는지는 회차가 정한다 — 수기가 있으면 수기가 보러 온 것이고,
-            수기 미작성 회차(녹음만 있는 회차)에서는 볼 것이 음성 쪽에 있다. */}
-        <Fold title="수기 기록" open={written}>
-          {!written ? (
-            <Empty>수기 미작성</Empty>
-          ) : (
-            <>
-              {rec.memo?.trim() && <p className="info-original">{rec.memo}</p>}
-              {rec.next_goal_text?.trim() && (
-                <Item title="다음 상담 목표" desc={rec.next_goal_text} />
-              )}
-              {rec.cards.map((c, i) => (
-                <div className="wire-repeat-card" key={i}>
-                  <Item title={c.text} desc={KIND_LABEL[c.kind] ?? c.kind} />
-                </div>
-              ))}
-            </>
-          )}
-        </Fold>
+        {/* 인테이크 회차는 작성 화면을 그대로 잠가서 보여 준다(2026-09-18 UI-3 Q) — 구획·순서·라벨이
+            작성할 때와 같아야 "처음에 입력한 내용"으로 읽힌다. 수정 버튼은 그 화면 안에 있다. */}
+        {rec.kind === 'intake' ? (
+          <IntakeScreen caseId={caseId} readOnly />
+        ) : (
+          /* 한 화면에서 **하나만 펼친다**(2026-09-17 Q). 펼친 제목 줄은 활성 면(파스텔)을
+             받으므로, 둘 다 펼치면 그 신호가 가리킬 대조군이 없다.
+             어느 쪽을 펼치는지는 회차가 정한다 — 수기가 있으면 수기가 보러 온 것이고,
+             수기 미작성 회차(녹음만 있는 회차)에서는 볼 것이 음성 쪽에 있다. */
+          <Fold
+            title="상담 내용"
+            open={written}
+            action={
+              <Button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.location.hash = `#/cases/${caseId}/sessions/${sessionId}/edit`;
+                }}
+              >
+                수정
+              </Button>
+            }
+          >
+            {!written ? (
+              <Empty>수기 미작성</Empty>
+            ) : (
+              <>
+                {rec.memo?.trim() && <p className="info-original">{rec.memo}</p>}
+                {rec.next_goal_text?.trim() && (
+                  <Item title="다음 상담 목표" desc={rec.next_goal_text} />
+                )}
+                {rec.cards.map((c, i) => (
+                  <div className="wire-repeat-card" key={i}>
+                    <Item title={c.text} desc={KIND_LABEL[c.kind] ?? c.kind} />
+                  </div>
+                ))}
+              </>
+            )}
+          </Fold>
+        )}
 
         <Fold title="음성 기록" open={!written}>
           {voiceError && <ErrorText>{voiceError}</ErrorText>}

@@ -168,7 +168,7 @@ test('등록부터 회차 기록·이어받기까지 한 바퀴', async ({ page 
     .getByRole('button', { name: '원본 보기' })
     .click();
   await expect(page).toHaveURL(/\/full$/);
-  await expect(page.locator('details', { hasText: '수기 기록' }).first()).toContainText(NEXT_GOAL);
+  await expect(page.locator('details', { hasText: '상담 내용' }).first()).toContainText(NEXT_GOAL);
   // 원문 보기의 되돌이 버튼은 `당사자 정보`다(2026-09-17 Q — 당사자 카드가 머리로 올라갔다).
   await page.getByRole('button', { name: '당사자 정보' }).click();
   await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
@@ -599,7 +599,7 @@ test('자유 글을 저장하고 다시 열면 그대로 읽힌다', async ({ pa
     .getByRole('button', { name: '원본 보기' })
     .click();
   await expect(page).toHaveURL(/\/full$/);
-  await expect(page.locator('details', { hasText: '수기 기록' }).first()).toContainText(memo);
+  await expect(page.locator('details', { hasText: '상담 내용' }).first()).toContainText(memo);
 });
 
 // P2 당사자 열람. 당사자는 로그인하지 않고 링크+코드로 자기 정보와 일정만 본다.
