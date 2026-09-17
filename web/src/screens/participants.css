@@ -11,9 +11,35 @@
 .participant-toolbar-actions > .wire-input-box { flex: 0 0 150px; min-height: var(--pill-height); min-width: 0; }
 .participant-toolbar-actions > .wire-input-box:has(#filter-program) { flex-basis: 210px; }
 
-/* 행 카드는 한 행이다: 이름 + 12px 요약 + 배지. 정보 격자(`participant-card-fields`)는
-   걷었으므로 카드 높이는 머리 한 줄이다. */
-.participant-row-list .participant-card { gap: 0; padding: var(--space-4) var(--space-5); }
+/* 현황판(2026-09-17 Q): 걸개 아래 한 줄. 라벨 12px `--sub` + 값 18/600 이고 폭이 모자라면
+   접힌다. 종결은 세지 않는다. */
+.participant-stats { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-6); }
+.participant-stat { display: grid; gap: 2px; min-width: 0; }
+.participant-stat-label { font-size: var(--text-badge); color: var(--sub); }
+.participant-stat-value { font-size: var(--text-lg); font-weight: 600; color: var(--ink); line-height: var(--leading-tight); }
+
+/* 목록은 **두 열**로 못 박는다(2026-09-17 Q). 이식 기본은 `auto-fit` 이라 넓은 화면에서
+   세 열이 됐다 — 카드가 두 줄을 담으므로 열을 늘리면 줄이 잘린다. */
+.participant-row-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 767px) { .participant-row-list { grid-template-columns: minmax(0, 1fr); } }
+
+/* 행 카드는 두 줄이다: `이름 + 아이디·사업 회차 + 배지` / `연락처 · 이메일 · 다음 상담`.
+   정보 격자(`participant-card-fields`)는 걷었다. */
+.participant-row-list .participant-card { gap: var(--space-1); padding: var(--space-4) var(--space-5); }
+.participant-card-reach {
+  margin: 0;
+  min-width: 0;
+  font-size: var(--text-badge);
+  color: var(--sub);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 쪽 넘기기는 가운데다. 꺽쇠 버튼 둘과 `N / M 쪽` 한 줄. */
+.participant-pager { display: flex; align-items: center; justify-content: center; gap: var(--space-4); }
+.participant-pager .wire-button { min-width: 32px; min-height: 32px; padding-inline: 0; }
+.participant-pager-label { margin: 0; font-size: var(--text-sm); color: var(--sub); }
 .participant-row-list .participant-card-header { align-items: center; gap: var(--space-4); }
 .participant-row-list .participant-card-identity {
   grid-template-columns: minmax(0, max-content) minmax(0, 1fr);

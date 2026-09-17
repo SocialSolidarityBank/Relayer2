@@ -40,6 +40,8 @@ const openInfo = async (
 const pickFromMenu = async (page: Page, kind: 'record' | 'schedule', name: string) => {
   const label = kind === 'record' ? '상담 기록하기' : '상담 일정 등록';
   await page.locator('.navigation-list').getByRole('link', { name: label }).first().click();
+  // 목록은 한 쪽에 열 장이다(2026-09-17 Q) — 사람도 찾아서 고른다.
+  await page.locator('#q').fill(name);
   await page.getByRole('link', { name: new RegExp(`^${name},.*${label}$`) }).click();
 };
 
