@@ -36,6 +36,8 @@ import { METHODS } from '../vocab.ts';
 import { dateTimeFromIso, dateTimeToIso } from '../date-time.ts';
 import { DateTimeInput } from '../date-time-input.tsx';
 import { RecordingPanel, SessionAudio } from './session-audio.tsx';
+import { TaskOwnerToggle } from '../task-owner.tsx';
+import { OWNER_LABEL } from '../api.ts';
 
 /** 지금 시각을 한국 시간의 날짜·시·분으로 표시하는 상담 일시 초깃값. */
 const nowDateTime = () => dateTimeFromIso(new Date().toISOString());
@@ -47,14 +49,19 @@ const TASK_RESULTS: ReadonlyArray<{ label: string; value: OutcomeInput }> = [
   { label: '완료', value: { card_id: 0, result: 'done' } },
 ];
 
+/** 상태 어휘는 명사형이다(2026-09-18 Q): 진행 전 · 진행 중 · 완료 · 중단. 행동 체크박스 `그만두기`만 동사형. */
 const taskResultLabel = (o: OutcomeInput | undefined): string | null => {
   if (!o) return null;
-  if (o.follow === 'stop') return '그만둠';
+  if (o.follow === 'stop') return '중단';
   if (o.result === 'done') return '완료';
   if (o.result === 'in_progress') return '진행 중';
   if (o.result === 'not_done') return '진행 전';
   return null;
 };
+
+/** 닫힌 카드 한 줄의 꼬리. 과제는 완료·중단, 질문은 확인함. */
+const closedLabel = (result: string | null, follow: string | null | undefined): string =>
+  result === 'confirmed' ? '확인함' : follow === 'stop' ? '중단' : '완료';
 
 export function RecordScreen({
   caseId,
@@ -82,7 +89,7 @@ export function RecordScreen({
   // 종결 상담(요구 5). 일정에서 미리 골랐으면 이어받고, 여기서 바꿀 수도 있다.
   const [isClosing, setIsClosing] = useState(startClosing);
   const [outcomes, setOutcomes] = useState<Record<number, OutcomeInput>>({});
-  const [taskDraft, setTaskDraft] = useState<Line>({ text: '' });
+  const [taskDraft, setTaskDraft] = useState<Line>({ text: '', owner: 'participant' });
   const [questionDraft, setQuestionDraft] = useState<Line>({ text: '' });
   // 저장해 둔 회차를 고쳐 쓰는 중이면 그 회차. 새로 쓰는 중이면 null.
   const [editing, setEditing] = useState<SessionRecord | null>(null);
@@ -100,7 +107,7 @@ export function RecordScreen({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // 늦게 온 응답이 새 화면을 덮지 않게 한다(2026-09-16 검수). 고쳐 쓰기 요청이 날아간 뒤
+    // 늦게 온 응답이 새 화면을 덮지 않게 한다(2026-09-16 검수). 수정 요청이 날아간 뒤
     // `상담 기록하기` 로 넘어가면, 먼저 끝난 새 화면 위에 이전 응답이 내려앉아
     // `editing` 을 지난 회차로 되돌린다 — 그대로 저장하면 그 회차를 덮어쓴다.
     let live = true;
@@ -124,10 +131,10 @@ export function RecordScreen({
         setMethod((rec.method as NewSessionInput['method']) ?? 'in_person');
         setIsClosing(startClosing || rec.is_closing);
         setNextGoal(rec.next_goal_text ?? '');
-        setTasks(rec.cards.filter((c) => c.kind === 'promise').map((c) => ({ text: c.text })));
+        setTasks(rec.cards.filter((c) => c.kind === 'promise').map((c) => ({ text: c.text, owner: c.owner })));
         setQuestions(rec.cards.filter((c) => c.kind === 'question').map((c) => ({ text: c.text })));
         setOpinion(rec.cards.find((c) => c.kind === 'judgment')?.text ?? '');
-        // 지난번에 매긴 결과를 그대로 다시 세운다. 안 그러면 고쳐 쓰기가 전부 미확인으로 덮는다.
+        // 지난번에 매긴 결과를 그대로 다시 세운다. 안 그러면 수정이 전부 미확인으로 덮는다.
         const prior: Record<number, OutcomeInput> = {};
         for (const c of rec.open_cards) {
           if (!c.result || c.result === 'unchecked') continue;
@@ -142,8 +149,8 @@ export function RecordScreen({
         return;
       }
 
-      // **고쳐 쓰던 회차를 반드시 놓는다**(2026-09-16 검수). 이 화면은 고쳐 쓰기와 새 기록이
-      // 같은 부품이라, 고쳐 쓰기를 열어 둔 채 `상담 기록하기` 로 넘어오면 `editing` 이 남는다.
+      // **고쳐 쓰던 회차를 반드시 놓는다**(2026-09-16 검수). 이 화면은 수정과 새 기록이
+      // 같은 부품이라, 수정을 열어 둔 채 `상담 기록하기` 로 넘어오면 `editing` 이 남는다.
       // 그러면 새로 쓴 글이 PATCH 로 **지난 회차를 덮어쓴다** — 지운 기록은 돌아오지 않는다.
       setEditing(null);
 
@@ -157,7 +164,7 @@ export function RecordScreen({
       setQuestions([]);
       setOpinion('');
       setOutcomes({});
-      setTaskDraft({ text: '' });
+      setTaskDraft({ text: '', owner: 'participant' });
       setQuestionDraft({ text: '' });
       setPlace(planned?.place ?? '');
       // 당사자 카드에서 종결로 들어온 경우가 예정 회차의 표시보다 세다(2026-09-17 Q).
@@ -168,7 +175,7 @@ export function RecordScreen({
       if (!live) return;
       setBriefing(null);
       setView(null);
-      setError(failure instanceof Error ? failure.message : '상담 기록을 불러오지 못했어요.');
+      setError(failure instanceof Error ? failure.message : '상담 기록 불러오기 실패');
     });
     return () => {
       live = false;
@@ -177,8 +184,8 @@ export function RecordScreen({
 
   if ((!briefing || !view) && error) return <ErrorText>{error}</ErrorText>;
 
-  if (!briefing || !view) return <p className="empty">불러오는 중이에요.</p>;
-  if (editingId && !editing) return <p className="empty">불러오는 중이에요.</p>;
+  if (!briefing || !view) return <p className="empty">불러오는 중</p>;
+  if (editingId && !editing) return <p className="empty">불러오는 중</p>;
 
   // 예정 회차가 있으면 그것을 기록한다. 없으면 여기서 일시·상담 방식을 적고 회차를 만든다.
   // 일정을 미리 잡지 않고 만난 상담(갑작스러운 방문·전화)이 기록되지 못하면 안 된다.
@@ -198,7 +205,7 @@ export function RecordScreen({
     });
   /**
    * 회차 id 를 돌려준다. 없으면 sessions/start 로 만든다 — 수기 첫 입력·녹음 시작·
-   * 파일 올리기가 모두 이 한 길을 지난다. 두 번 부르지 않는다(계약).
+   * 파일 업로드가 모두 이 한 길을 지난다. 두 번 부르지 않는다(계약).
    */
   const ensureSession = (): Promise<number> => {
     if (editing) return Promise.resolve(editing.session_id);
@@ -225,13 +232,13 @@ export function RecordScreen({
   const accessLost = () => {
     setBriefing(null);
     setView(null);
-    setError('담당 배정이 해제되어 상담 기록을 열 수 없어요.');
+    setError('담당 배정 해제, 상담 기록 열기 불가');
   };
 
   const save = async () => {
     // 일시가 덜 골라진 채 저장하면 회차를 열거나 PATCH 하기 전에 막는다.
     if (!heldAtIso) {
-      setError('상담 일시를 모두 골라 주세요.');
+      setError('상담 일시 선택 필요');
       return;
     }
     setSaving(true);
@@ -252,7 +259,7 @@ export function RecordScreen({
         next_goal_text: nextGoal.trim() || null,
         cards: [
           // `추가`를 누르지 않고 적어만 둔 줄도 함께 저장한다.
-          ...withDraft(tasks, taskDraft).map((t) => ({ kind: 'promise', text: t.text, section: 'promise' })),
+          ...withDraft(tasks, taskDraft).map((t) => ({ kind: 'promise', text: t.text, section: 'promise', owner: t.owner })),
           ...withDraft(questions, questionDraft).map((q) => ({ kind: 'question', text: q.text, section: 'question' })),
           ...(opinion.trim() ? [{ kind: 'judgment', text: opinion.trim(), section: 'judgment' }] : []),
         ],
@@ -260,7 +267,7 @@ export function RecordScreen({
       });
       window.location.hash = isClosing ? `#/cases/${caseId}/close` : `#/cases/${caseId}/info`;
     } catch (e) {
-      setError(e instanceof Error ? e.message : '저장하지 못했어요.');
+      setError(e instanceof Error ? e.message : '저장 실패');
     } finally {
       setSaving(false);
     }
@@ -284,7 +291,7 @@ export function RecordScreen({
         pseudonym={briefing.participant_card.pseudonym}
         details={[
           ['당사자 ID', briefing.participant_card.pseudonym],
-          ['참여 사업', `${briefing.participant_card.program_name}, ${seq}회차${editing ? ' 고쳐 쓰기' : ''}`],
+          ['참여 사업', `${briefing.participant_card.program_name}, ${seq}회차${editing ? ' 수정' : ''}`],
           ['연락처', detail?.participant.phone ?? ''],
           ['이메일', detail?.participant.email ?? ''],
         ]}        actions={
@@ -307,21 +314,21 @@ export function RecordScreen({
           <Card title="종결 상담">
             <Choice
               type="checkbox"
-              label="이번이 마지막 상담이에요"
-              hint="저장하면 상담 종결 화면으로 이어져요. 저장에 실패하면 사례를 닫지 않아요."
+              label="마지막 상담"
+              hint="저장 시 상담 종결 화면으로 이동"
               checked={isClosing}
               onChange={() => setIsClosing((v) => !v)}
             />
           </Card>
-          <Card title="확인할 과제" hint="누르지 않으면 이번에 확인 안 함으로 남고, 다음에 다시 올라와요.">
+          <Card title="확인할 과제">
             {openTasks.length === 0 ? (
-              <Empty>아직 없어요.</Empty>
+              <Empty>없음</Empty>
             ) : (
               openTasks.map((t) => (
                 <div className="wire-repeat-card" key={t.card_id}>
                   <Item
                     title={t.text}
-                    desc={`${t.source_session_seq}회차${t.last_result === 'unchecked' ? ', 지난 회차 미확인' : ''}`}
+                    desc={`${t.source_session_seq}회차, ${OWNER_LABEL[t.owner]}${t.last_result === 'unchecked' ? ', 지난 회차 미확인' : ''}`}
                   />
                   {/* 결과는 셋이다(2026-09-15 Q). 그만두는 것은 상태가 아니라 과제를 접는 일이라 따로 둔다. */}
                   <ChoiceGroup legend="결과">
@@ -339,14 +346,13 @@ export function RecordScreen({
                   <Choice
                     type="checkbox"
                     label="이 과제 그만두기"
-                    hint="더 안 하기로 했을 때만. 다음 상담에 올라오지 않아요."
                     checked={outcomes[t.card_id]?.follow === 'stop'}
                     onChange={() => {
                       if (outcomes[t.card_id]?.follow === 'stop') {
                         setOutcome(t.card_id, null);
                         return;
                       }
-                      const reason = window.prompt('그만두는 이유를 적어 주세요.');
+                      const reason = window.prompt('그만두는 이유');
                       if (reason?.trim())
                         setOutcome(t.card_id, {
                           card_id: t.card_id,
@@ -363,7 +369,7 @@ export function RecordScreen({
 
           <Card title="오늘 물어볼 것">
             {openQuestions.length === 0 ? (
-              <Empty>아직 없어요.</Empty>
+              <Empty>없음</Empty>
             ) : (
               openQuestions.map((q) => (
                 <div className="wire-repeat-card" key={q.card_id}>
@@ -386,9 +392,54 @@ export function RecordScreen({
               ))
             )}
           </Card>
+          {/* 닫힌 카드는 다시 볼 일이 드물어 접어 둔다(2026-09-18 Q). 펼쳐도 읽기만이고,
+              다시 열려면 그 회차를 수정한다. 비어 있으면 카드를 아예 안 그린다. */}
+          {briefing.closed_tasks.length > 0 && (
+            <Fold title={`완료한 과제 ${briefing.closed_tasks.length}`}>
+              {briefing.closed_tasks.map((t) => (
+                <Item
+                  key={t.card_id}
+                  title={t.text}
+                  desc={`${t.source_session_seq}회차, ${OWNER_LABEL[t.owner]}, ${t.closed_session_seq}회차 ${closedLabel(t.last_result, t.last_follow)}`}
+                />
+              ))}
+            </Fold>
+          )}
+          {briefing.closed_questions.length > 0 && (
+            <Fold title={`확인한 질문 ${briefing.closed_questions.length}`}>
+              {briefing.closed_questions.map((q) => (
+                <Item
+                  key={q.card_id}
+                  title={q.text}
+                  desc={`${q.source_session_seq}회차, ${q.closed_session_seq}회차 확인함`}
+                />
+              ))}
+            </Fold>
+          )}
         </aside>
 
         <main className="record-main">
+          {/* 목표는 기록하면서 봐야 한다(2026-09-18 UI-9). 전체 상담 목표 + 이 회차가 이어받은 오늘 상담 목표.
+              둘 다 없으면 카드를 안 그린다. 고치는 자리는 목표 탭이다(SPEC §4-2) — 여기선 보내기만. */}
+          {briefing.goals && (
+            <Card title="목표">
+              <Item
+                title={briefing.goals.overall ?? '전체 상담 목표 없음'}
+                desc="전체 상담 목표"
+              />
+              <Item
+                title={briefing.goals.today?.text ?? '오늘 상담 목표 없음'}
+                desc={
+                  briefing.goals.today?.from_session_seq
+                    ? `오늘 상담 목표, ${briefing.goals.today.from_session_seq}회차에서 이어받음`
+                    : '오늘 상담 목표'
+                }
+                action={
+                  <Button onClick={() => (window.location.hash = `#/cases/${caseId}/info/goals`)}>수정</Button>
+                }
+              />
+            </Card>
+          )}
 
           {/* 일시·방식·장소는 한 묶음이다. 장소는 대면일 때만 나오고 방식 바로 아래에 붙는다(요구 14). */}
           <Card title="1. 오늘 상담 내용">
@@ -421,10 +472,10 @@ export function RecordScreen({
                   setMemo(e.target.value);
                   // 수기 첫 입력도 상담의 시작이다 — 회차가 없으면 여기서 만든다.
                   void ensureSession().catch((err: unknown) =>
-                    setError(err instanceof Error ? err.message : '회차를 열지 못했어요.'),
+                    setError(err instanceof Error ? err.message : '회차 열기 실패'),
                   );
                 }}
-                placeholder="오늘 나눈 이야기를 적어 주세요."
+                placeholder="오늘 나눈 이야기"
               />
             </Field>
           </Card>
@@ -438,6 +489,13 @@ export function RecordScreen({
               draft={taskDraft}
               onDraft={setTaskDraft}
               onChange={setTasks}
+              ownerToggle={
+                <TaskOwnerToggle
+                  id="task"
+                  value={taskDraft.owner ?? 'participant'}
+                  onChange={(owner) => setTaskDraft({ ...taskDraft, owner })}
+                />
+              }
             />
             {/*
               `진행 전`·`진행 중`은 그 자체로 "계속 간다"는 뜻이다. 그런데 같은 약속을 또 적는 사람이 있다
@@ -446,7 +504,7 @@ export function RecordScreen({
             */}
             {duplicateTasks.length > 0 && (
               <p className="panel-meta">
-                왼쪽 확인할 과제에 이미 있어요: {duplicateTasks.join(', ')}. 결과만 매기면 다음에도 올라와요.
+                왼쪽 확인할 과제와 중복: {duplicateTasks.join(', ')}, 결과만 매기면 다음에도 올라옴
               </p>
             )}
           </Card>
@@ -465,7 +523,7 @@ export function RecordScreen({
 
 
           <Card title="4. 실무자 의견">
-            <Field label="실무자 의견" htmlFor="opinion" control="textarea">
+            <Field label="실무자 의견" htmlFor="opinion" control="textarea" hideLabel>
               <textarea
                 id="opinion"
                 rows={3}
@@ -477,11 +535,14 @@ export function RecordScreen({
           </Card>
 
           <Card title="5. 다음 상담 목표">
-            <Field
-              label="다음 상담 목표"
-              htmlFor="next-goal"
-            >
-              <input id="next-goal" type="text" value={nextGoal} onChange={(e) => setNextGoal(e.target.value)} />
+            <Field label="다음 상담 목표" htmlFor="next-goal" hideLabel>
+              <input
+                id="next-goal"
+                type="text"
+                aria-label="다음 상담 목표"
+                value={nextGoal}
+                onChange={(e) => setNextGoal(e.target.value)}
+              />
             </Field>
           </Card>
 
@@ -495,7 +556,7 @@ export function RecordScreen({
             />
           ) : (
             <Fold title="음성·수기 기록 불일치">
-              <Empty>녹음을 시작하거나 상담 내용을 적으면 회차가 생겨요.</Empty>
+              <Empty>녹음 시작 또는 상담 내용 입력 시 회차 생성</Empty>
             </Fold>
           )}
 
@@ -506,8 +567,8 @@ export function RecordScreen({
               disabled={(!memo.trim() && !startedId && !editing) || !heldAtIso || saving}
               onClick={() => void save()}
             >
-              {/* 고쳐 쓰기 화면에서도 저장 버튼은 `저장`이다. 들어올 때 누른 버튼과 이름이 같으면
-                  같은 일을 또 하는 줄 안다(2026-09-15 예행연습). 화면 제목이 이미 고쳐 쓰기라고 말한다. */}
+              {/* 수정 화면에서도 저장 버튼은 `저장`이다. 들어올 때 누른 버튼과 이름이 같으면
+                  같은 일을 또 하는 줄 안다(2026-09-15 예행연습). 화면 제목이 이미 수정이라고 말한다. */}
               {saving ? '저장 중…' : isClosing ? '저장하고 종결로' : '저장'}
             </Button>
           </FormActions>

@@ -1,6 +1,6 @@
 // CCC wire 계약을 쓰는 최소 부품. 클래스 이름과 구조는 정본 그대로이며 새 이름을 만들지 않는다.
 // 근거: web/src/styles/wire.css(=CCC wire-styles.ts), web/src/styles/shell.css(=CCC layout.tsx).
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { LIFE_AREAS } from './areas.ts';
 import { API_FAILED } from './api.ts';
 
@@ -121,7 +121,7 @@ export function ConsentDetail({
     <Fold title="자세히 보기">
       <DataRows
         rows={[
-          ['무엇을 받나', copy.items.join(' · ')],
+          ['무엇을 받나', copy.items.join(', ')],
           ['왜 받나', copy.purpose_text],
           ['얼마나 두나', copy.retention_text],
           ...(copy.recipient ? ([['어디로 가나', copy.recipient]] as Array<[string, ReactNode]>) : []),
@@ -139,7 +139,7 @@ export function ConsentDetail({
  * 검토 화면과 회차별 요약이 같은 부품을 쓴다.
  */
 export function FactChanges({ items }: { items: Array<{ topic: string; before: { seq: number; quote: string }; after: { seq: number; quote: string }; note: string }> }) {
-  if (items.length === 0) return <Empty>지난 회차와 어긋나는 사실이 없어요.</Empty>;
+  if (items.length === 0) return <Empty>지난 회차와 어긋나는 사실 없음</Empty>;
   return (
     <>
       {items.map((f, i) => (
@@ -248,21 +248,24 @@ export function ParticipantHero({
 
 /**
  * surface-card wire-card + 제목·구분선·본문. 카드 div 를 손으로 만들지 않는다(DESIGN.md §5).
- * `badge` 는 제목 옆에 붙는 식별자(주소 이름 따위), `actions` 는 제목 줄 오른쪽 끝에 서는 버튼이다 —
- * 이식 CSS 의 `.wire-card-head` 문법(첫 아이 뒤는 auto 마진, 배지는 제외)을 그대로 쓴다(2026-09-17 Q).
  */
 export function Card({
   title,
   badge,
-  actions,
   hint,
+  action,
+  tone,
   children,
   className,
 }: {
   title?: string;
+  /** 제목 옆에 붙는 식별자 배지(주소 이름 따위). 이식 `.wire-card-head` 는 배지를 auto 마진에서 뺀다. */
   badge?: ReactNode;
-  actions?: ReactNode;
   hint?: ReactNode;
+  /** 제목과 같은 행 오른쪽 끝에 서는 행동 하나(이식 `.wire-card-head`). */
+  action?: ReactNode;
+  /** 제목 색. `ai` = AI 산출(라벤더), `warn` = 주목·경고(코랄). 없으면 기본 --ink(DESIGN.md §6). */
+  tone?: 'ai' | 'warn';
   children: ReactNode;
   className?: string;
 }) {
@@ -270,16 +273,16 @@ export function Card({
     <section className={className ? `surface-card wire-card ${className}` : 'surface-card wire-card'}>
       {title && (
         <>
-          {badge || actions ? (
-            <div className="wire-card-title">
+          {badge || action ? (
+            <div className="wire-card-title" data-tone={tone}>
               <div className="wire-card-head">
                 <h2>{title}</h2>
                 {badge && <span className="wire-badge"><span className="wire-badge-label">{badge}</span></span>}
-                {actions}
+                {action}
               </div>
             </div>
           ) : (
-            <h2 className="wire-card-title">{title}</h2>
+            <h2 className="wire-card-title" data-tone={tone}>{title}</h2>
           )}
           <div className="wire-card-divider" />
         </>
@@ -310,10 +313,11 @@ export function Fold({
   group,
   action,
   onOpen,
-  chevron = 'plain',
+  crisis = false,
   children,
 }: {
-  title: string;
+  /** 문자열이 기본이다. 배지를 제목 줄에 함께 세울 때만 노드를 준다. */
+  title: ReactNode;
   /** 접힌 채로도 보이는 한 줄. 펼치지 않고 고를 수 있어야 한다. */
   desc?: ReactNode;
   open?: boolean;
@@ -326,13 +330,13 @@ export function Fold({
   action?: ReactNode;
   /** 펼치는 순간 한 번 부른다 — 펼쳐야 필요한 값을 그때 불러오는 자리다. */
   onOpen?: () => void;
-  /** 꺽쇠 모양. `button` 은 CCC 의 32px 원형 토글(`.wire-chevron-button`), 펼치면 위로 돈다(2026-09-17 Q). */
-  chevron?: 'plain' | 'button';
+  /** 위험 신호가 붙은 카드. 이식 CSS 의 `is-crisis`(risk 테두리·틴트)를 그대로 쓴다. */
+  crisis?: boolean;
   children: ReactNode;
 }) {
   return (
     <details
-      className="surface-card wire-card wire-card-details"
+      className={`surface-card wire-card wire-card-details${crisis ? ' is-crisis' : ''}`}
       name={group}
       open={open}
       onToggle={event => {
@@ -346,13 +350,11 @@ export function Fold({
         </span>
         <span className="wire-card-summary-right">
           {action}
-          {chevron === 'button' ? (
-            <span className="wire-chevron-button wire-disclosure-chevron" aria-hidden="true">
-              <Chevron dir="down" />
-            </span>
-          ) : (
+          {/* 꺽쇠는 그라데이션 테두리 원 안에 든다(이식 `.wire-chevron-button`, CCC·릴레이어1과 같다).
+              펼치면 이식 CSS 가 180도 돌리고, 면은 `app.css` 가 반전시킨다. */}
+          <span className="wire-chevron-button wire-disclosure-chevron" aria-hidden="true">
             <Chevron dir="down" />
-          )}
+          </span>
         </span>
       </summary>
       <div className="wire-card-body">{children}</div>
@@ -378,6 +380,8 @@ export function Field({
   hint,
   control = 'input',
   required,
+  hideLabel,
+  tone,
   children,
 }: {
   label: string;
@@ -385,19 +389,20 @@ export function Field({
   hint?: ReactNode;
   control?: 'input' | 'textarea' | 'select';
   required?: boolean;
+  /** 카드 제목이 이미 같은 말을 하면 라벨 행을 빼고 입력의 `aria-label` 로만 남긴다(2026-09-18 UI-8). */
+  hideLabel?: boolean;
+  /** 라벨 색. 기본 민트, `ai` = 라벤더, `warn` = 코랄(DESIGN.md §6). */
+  tone?: 'ai' | 'warn';
   children: ReactNode;
 }) {
   return (
     <div className="wire-form-field">
-      <label className="wire-form-label" htmlFor={htmlFor}>
-        {label}
-        {/* 필수 표시는 `*` 하나다(2026-09-17 Q — 구 `필수` 배지 대체). 읽는 이에게는 `필수`로 읽힌다. */}
-        {required && (
-          <span className="wire-required-marker" role="img" aria-label="필수">
-            *
-          </span>
-        )}
-      </label>
+      {!hideLabel && (
+        <label className="wire-form-label" htmlFor={htmlFor} data-tone={tone}>
+          {label}
+          {required && <span className="wire-badge wire-required-marker"><span className="wire-badge-label">필수</span></span>}
+        </label>
+      )}
       <div className="wire-input-box" data-control={control}>
         {children}
         {/* select 는 네이티브 화살표를 끈다(wire.css). 꺽쇠가 없으면 입력칸으로 보인다. */}
@@ -482,7 +487,7 @@ export function Choice({
   );
 }
 
-export type Line = { text: string; area?: string };
+export type Line = { text: string; area?: string; owner?: 'participant' | 'worker' };
 
 /** 적어만 두고 `추가`를 누르지 않은 줄도 저장에 포함한다(2026-09-15 Q: 추가는 저장이 아니다). */
 export const withDraft = (lines: Line[], draft: Line): Line[] =>
@@ -498,6 +503,8 @@ export function LineList({
   draft,
   onDraft,
   onChange,
+  readOnly,
+  ownerToggle,
 }: {
   /** id 는 공백 없는 슬러그다. 라벨을 그대로 쓰면 유효하지 않은 id 가 된다. */
   id: string;
@@ -509,14 +516,38 @@ export function LineList({
   draft: Line;
   onDraft: (next: Line) => void;
   onChange: (next: Line[]) => void;
+  /** 원본 보기(2026-09-18 UI-3): 적힌 줄만 보이고 입력칸·추가·삭제는 없다. */
+  readOnly?: boolean;
+  /** 입력칸과 추가 버튼 사이에 서는 수행 주체 토글(2026-09-18 UI-2). 과제 목록만 준다. */
+  ownerToggle?: ReactNode;
 }) {
+  if (readOnly) {
+    return lines.length === 0 ? (
+      <Empty>없음</Empty>
+    ) : (
+      <>
+        {lines.map((line, i) => (
+          <div className="wire-repeat-card" key={`${line.text}-${i}`}>
+            <Item
+              title={`${withArea ? `${LIFE_AREAS.find((a) => a.key === line.area)?.label} · ` : ''}${line.text}`}
+              desc={line.owner ? (line.owner === 'worker' ? '담당 실무자' : '당사자') : undefined}
+            />
+          </div>
+        ))}
+      </>
+    );
+  }
   const area = draft.area ?? LIFE_AREAS[0].key;
   const setArea = (key: string) => onDraft({ ...draft, area: key });
   const setDraft = (text: string) => onDraft({ ...draft, text });
   const add = () => {
     if (!draft.text.trim()) return;
-    onChange([...lines, withArea ? { text: draft.text.trim(), area } : { text: draft.text.trim() }]);
-    onDraft({ text: '', area });
+    const line: Line = { text: draft.text.trim() };
+    if (withArea) line.area = area;
+    if (draft.owner) line.owner = draft.owner;
+    onChange([...lines, line]);
+    // 주체는 다음 줄에도 유지된다 — 실무자 일을 연달아 적을 때 매번 고르지 않게(2026-09-18 Q).
+    onDraft({ text: '', area, owner: draft.owner });
   };
   return (
     <>
@@ -552,13 +583,15 @@ export function LineList({
             />
           </div>
         </div>
+        {ownerToggle}
         <Button onClick={add}>추가</Button>
       </div>
       {lines.map((line, i) => (
         <div className="wire-repeat-card" key={`${line.text}-${i}`}>
           <Item
-            title={`${withArea ? `${LIFE_AREAS.find((a) => a.key === line.area)?.label} | ` : ''}${line.text}`}
-            action={<Button onClick={() => onChange(lines.filter((_, j) => j !== i))}>지우기</Button>}
+            title={withArea ? <Meta parts={[LIFE_AREAS.find((a) => a.key === line.area)?.label, line.text]} /> : line.text}
+            desc={line.owner ? (line.owner === 'worker' ? '담당 실무자' : '당사자') : undefined}
+            action={<Button onClick={() => onChange(lines.filter((_, j) => j !== i))}>삭제</Button>}
           />
         </div>
       ))}
@@ -568,15 +601,16 @@ export function LineList({
 
 /**
  * 한 항목. 행동이 있으면 **글 왼쪽 · 행동 오른쪽, 세로 가운데**로 선다(2026-09-17 Q).
- * 글 묶음은 이식한 `.wire-row-text`(행 안 글 묶음) 계약을 그대로 쓴다 — 남는 폭을 먹고
- * 안에서 줄바꿈한다. 배치는 `app.css` 가 정하고 여기서는 묶음만 만든다.
+ * 글 묶음은 이식한 `.wire-row-text`(행 안 글 묶음) 계약을 그대로 쓴다 — 남는 폭을 먹는다.
+ * 제목·설명은 **한 줄**이고 넘치면 말줄임한다(2026-09-18 Q, `app.css`) — 문자열이면 전체를
+ * `title` 로 남겨 마우스를 올리면 읽힌다. 배치는 `app.css` 가 정하고 여기서는 묶음만 만든다.
  */
 export function Item({ title, desc, action }: { title: ReactNode; desc?: ReactNode; action?: ReactNode }) {
   return (
     <div className="wire-item">
       <div className="wire-row-text">
-        <p className="wire-item-title">{title}</p>
-        {desc && <p className="wire-item-desc">{desc}</p>}
+        <p className="wire-item-title" title={typeof title === 'string' ? title : undefined}>{title}</p>
+        {desc && <p className="wire-item-desc" title={typeof desc === 'string' ? desc : undefined}>{desc}</p>}
       </div>
       {action && <div className="wire-item-action">{action}</div>}
     </div>
@@ -588,6 +622,26 @@ export const Badge = ({ tone, children }: { tone?: 'mint' | 'lavender' | 'blue' 
     <span className="wire-badge-label">{children}</span>
   </span>
 );
+
+/**
+ * 성격이 다른 정보 조각을 한 줄에 잇는다(2026-09-18 Q). 부호(`·`, `|`) 없이 **간격**으로만
+ * 가른다 — 조각 사이 공백 한 칸(글자 폭, 복사·낭독에서 낱말이 붙지 않게) 에 `app.css` 의
+ * `.wire-meta-row` 보정이 12 를 더해 약 16 이 된다. 빈 조각은 그리지 않는다.
+ * 부모의 말줄임(`text-overflow`)이 그대로 먹도록 인라인이다. 전체 문구는 `title` 로 보존한다.
+ */
+export const Meta = ({ parts }: { parts: ReadonlyArray<ReactNode> }) => {
+  const shown = parts.filter((p) => p !== null && p !== undefined && p !== false && p !== '');
+  return (
+    <span className="wire-meta-row" title={shown.every((p) => typeof p === 'string') ? shown.join(' ') : undefined}>
+      {shown.map((p, i) => (
+        <Fragment key={i}>
+          {i > 0 && ' '}
+          <span>{p}</span>
+        </Fragment>
+      ))}
+    </span>
+  );
+};
 
 /** 이름·값 표. 이식 CSS 의 CCC-81 표 부품을 그대로 쓴다. */
 export const DataRows = ({ rows }: { rows: ReadonlyArray<[ReactNode, ReactNode]> }) => (
@@ -623,7 +677,7 @@ export const ErrorText = ({ children }: { children: ReactNode }) => (
 export function ApiFailureBanner() {
   const [message, setMessage] = useState<string | null>(null);
   useEffect(() => {
-    const on = (e: Event) => setMessage(e instanceof CustomEvent ? String(e.detail) : '요청이 실패했어요.');
+    const on = (e: Event) => setMessage(e instanceof CustomEvent ? String(e.detail) : '요청 실패');
     window.addEventListener(API_FAILED, on);
     return () => window.removeEventListener(API_FAILED, on);
   }, []);

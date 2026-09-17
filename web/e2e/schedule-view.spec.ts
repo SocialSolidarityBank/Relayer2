@@ -128,7 +128,7 @@ test('월간이 기본이고 기간 이동·주간·일간·다시보기가 실�
   const foldOf = (name: string) => detail.locator('details', { has: page.getByText(name) });
   // 머리 요약 한 줄: 가명 | 사업명 회차 | 일시(세로선 구분, 2026-09-17 Q).
   await expect(foldOf(nameA).locator('.fold-title-desc'))
-    .toHaveText(/달력 보기 검증 1회차 \| 10\. 14\./);
+    .toHaveText(/달력 보기 검증 1회차 10\. 14\./);
   await expect(foldOf(nameA).getByText('방식', { exact: true })).toBeHidden();
 
   // ── 펼치면 상담 조건이 라벨/값으로 붙는다 ──

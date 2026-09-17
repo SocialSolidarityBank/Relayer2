@@ -33,11 +33,11 @@ export async function issueAccess(
     const [scope] = await tx<Array<{ case_id: number; participant_id: number }>>`
       select id as case_id, participant_id from support_cases
       where id = ${caseId} for update`;
-    if (!scope) throw new AccessDenied('맡은 당사자가 아니에요.');
+    if (!scope) throw new AccessDenied('배정되지 않은 당사자');
     // 잠금을 기다리는 동안 배정이 바뀌었으면 새 문장으로 현재 배정을 다시 읽는다.
     const [member] = await tx<Array<{ user_id: number }>>`
       select user_id from case_assignments where case_id = ${scope.case_id} and user_id = ${actorId}`;
-    if (!member) throw new AccessDenied('맡은 당사자가 아니에요.');
+    if (!member) throw new AccessDenied('배정되지 않은 당사자');
 
     await tx`
       update participant_access set revoked_at = now()

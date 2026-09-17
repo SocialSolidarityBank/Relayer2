@@ -218,7 +218,7 @@ describe.skipIf(!enabled)('intake feedback persistence', () => {
       cards: Array<{ kind: string; text: string }>;
     };
     expect(record.overall_goal).toBe('지워지면 안 되는 전체 목표');
-    expect(record.cards).toEqual([{ kind: 'fact', text: '예전 달라진 것', area: null, locked: false }]);
+    expect(record.cards).toEqual([{ kind: 'fact', text: '예전 달라진 것', area: null, owner: 'participant', locked: false }]);
     const [{ id: survivingFactId }] = await sql<Array<{ id: number }>>`
       select id from cards where source_session_id = ${sessionId} and kind = 'fact'`;
     expect(survivingFactId).toBe(factId);

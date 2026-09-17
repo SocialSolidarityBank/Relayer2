@@ -40,6 +40,8 @@ export type NewCardInput = {
   area?: Card['area'];
   risk_type?: string | null;
   quote?: string | null;
+  /** 과제 수행 주체. 안 주면 당사자(2026-09-18). */
+  owner?: Card['owner'];
 };
 
 /**
@@ -109,7 +111,7 @@ export type IntakeView = {
   detail: Record<string, unknown>;
   overall_goal: string | null;
   /** 이미 다른 회차에서 결과가 찍힌 카드. 고칠 때 지우지 않는다. */
-  cards: Array<{ kind: string; text: string; locked: boolean }>;
+  cards: Array<{ kind: string; text: string; owner: Card['owner']; locked: boolean }>;
 };
 
 /** 저장해 둔 인테이크를 다시 연다. 아직 없으면 빈 것을 낸다. */
@@ -138,8 +140,8 @@ export async function getIntake(caseId: number): Promise<IntakeView | null> {
       cards: [],
     };
   }
-  const cards = await sql<Array<{ kind: string; text: string; locked: boolean }>>`
-    select c.kind, c.text, exists (select 1 from card_outcomes o where o.card_id = c.id) as locked
+  const cards = await sql<Array<{ kind: string; text: string; owner: Card['owner']; locked: boolean }>>`
+    select c.kind, c.text, c.owner, exists (select 1 from card_outcomes o where o.card_id = c.id) as locked
     from cards c where c.source_session_id = ${session.id} order by c.id`;
   return {
     session_id: session.id,
@@ -213,7 +215,7 @@ export async function saveIntake(
     } else {
       const [other] = await tx<{ id: number }[]>`
         select id from sessions where case_id = ${caseId} limit 1`;
-      if (other) throw new Error('이미 다른 회차가 있어요. 인테이크는 첫 회차예요.');
+      if (other) throw new Error('이미 다른 회차 있음, 인테이크는 첫 회차');
       const [created] = await tx<{ id: number }[]>`
         insert into sessions (case_id, seq, kind, status, held_at, method, place, memo, detail)
         values (${caseId}, 1, 'intake', 'done', ${input.held_at ?? new Date().toISOString()},
@@ -298,8 +300,8 @@ export async function startSession(
     if (input.session_id !== undefined) {
       const [target] = await tx<Session[]>`
         select * from sessions where id = ${input.session_id} and case_id = ${caseId} for update`;
-      if (!target) throw new NotFound('회차를 찾지 못했어요.');
-      if (target.status === 'done') throw new SessionAlreadyStarted('이미 시작한 회차예요.');
+      if (!target) throw new NotFound('회차 없음');
+      if (target.status === 'done') throw new SessionAlreadyStarted('이미 시작한 회차');
       await tx`update sessions set status = 'done', held_at = ${now},
         method = ${input.method ?? target.method}, is_closing = ${input.is_closing ?? target.is_closing}
         where id = ${target.id}`;
@@ -317,6 +319,8 @@ export async function startSession(
 
 /** 이미 기록됨인 회차를 다시 시작하려 했다. 라우트는 409 로 답한다. */
 export class SessionAlreadyStarted extends Error {}
+/** 이미 다음 회차가 이어받은 목표를 고치려 했다. 라우트는 409 로 답한다. */
+export class GoalLocked extends Error {}
 
 /**
  * 상담 기록하기. 한 트랜잭션에서
@@ -360,7 +364,7 @@ export async function recordSession(
     // 저장하면서 남의 사례 B 카드에 결과를 붙이는 우회가 열린다.
     const caseCardIds = new Set(cards.map((card) => card.id));
     if ((input.outcomes ?? []).some((outcome) => !caseCardIds.has(outcome.card_id))) {
-      throw new NotFound('카드를 찾지 못했어요.');
+      throw new NotFound('카드 없음');
     }
 
     // 이미 저장한 회차를 고쳐 쓰는 경우, 이 회차가 남긴 결과는 빼고 "이 회차 전에 열려 있던 카드"를
@@ -453,12 +457,13 @@ export type SessionRecord = {
   overall_goal: string | null;
   is_closing: boolean;
   /** 이 회차가 만든 카드. 결과가 붙은 것은 지울 수 없다. */
-  cards: Array<{ kind: string; text: string; area: string | null; locked: boolean }>;
+  cards: Array<{ kind: string; text: string; area: string | null; owner: Card['owner']; locked: boolean }>;
   /** 이 회차에 올라와 있던 카드와 이 회차가 매긴 결과(고쳐 쓸 때 그대로 다시 보여 준다). */
   open_cards: Array<{
     card_id: number;
     kind: string;
     text: string;
+    owner: Card['owner'];
     source_session_seq: number | null;
     result: string | null;
     follow: string | null;
@@ -504,6 +509,7 @@ export async function getSessionRecord(sessionId: number): Promise<SessionRecord
         kind: c.kind,
         text: c.text,
         area: c.area,
+        owner: c.owner,
         locked: outcomes.some((o) => o.card_id === c.id),
       })),
     open_cards: before.map((c) => {
@@ -512,6 +518,7 @@ export async function getSessionRecord(sessionId: number): Promise<SessionRecord
         card_id: c.id,
         kind: c.kind,
         text: c.text,
+        owner: c.owner,
         source_session_seq: seqById.get(c.source_session_id) ?? null,
         result: got?.result ?? null,
         follow: got?.follow ?? null,
@@ -534,6 +541,27 @@ async function setOverallGoal(tx: typeof sql, caseId: number, text: string | nul
   await tx`insert into goal_revisions (case_id, text) values (${caseId}, ${encryptText(text)})`;
 }
 
+/** 목표 탭에서 전체 상담 목표만 고친다(2026-09-18 Q). 이력은 setOverallGoal 이 남긴다. */
+export async function updateOverallGoal(caseId: number, text: string | null): Promise<void> {
+  await assertCaseOpen(caseId);
+  await sql.begin(async (tx) => {
+    await setOverallGoal(tx as unknown as typeof sql, caseId, text);
+  });
+}
+
+/**
+ * 목표 탭에서 다음 상담 목표만 고친다(2026-09-18 Q). 회차 저장(PATCH /sessions/:id)을 쓰면
+ * 열린 카드가 전부 unchecked 로 덮이므로 전용 경로다. **이미 다음 회차가 이어받았으면 거절한다** —
+ * 그때는 그 회차의 오늘 상담 목표이지 여기가 아니다(SPEC §4-2).
+ */
+export async function updateNextGoal(sessionId: number, text: string | null): Promise<void> {
+  const [s] = await sql<Session[]>`select * from sessions where id = ${sessionId}`;
+  if (!s) throw new NotFound('회차 없음');
+  if (s.status !== 'done') throw new GoalLocked('아직 기록하지 않은 회차');
+  if (s.next_goal_consumed_by_session_id) throw new GoalLocked('다음 회차가 이미 이어받은 목표');
+  await sql`update sessions set next_goal_text = ${encryptText(text)} where id = ${sessionId}`;
+}
+
 async function insertCards(
   tx: typeof sql,
   caseId: number,
@@ -543,9 +571,9 @@ async function insertCards(
 ): Promise<void> {
   for (const card of cards) {
     // 카드 본문은 사람이 쓴 문장이다. 평문으로 앉히지 않는다(P1).
-    await tx`insert into cards (case_id, kind, text, area, risk_type, quote, source_session_id, source_section, source_type)
+    await tx`insert into cards (case_id, kind, text, area, risk_type, quote, source_session_id, source_section, source_type, owner)
       values (${caseId}, ${card.kind}, ${encryptText(card.text)}, ${card.area ?? null}, ${card.risk_type ?? null},
-              ${encryptText(card.quote)}, ${sessionId}, ${card.section}, ${sourceType})`;
+              ${encryptText(card.quote)}, ${sessionId}, ${card.section}, ${sourceType}, ${card.owner ?? 'participant'})`;
   }
 }
 
@@ -670,7 +698,7 @@ export async function recordConsent(
   input: { domain: ConsentDomain; decision: ConsentDecision; actorId?: number },
 ): Promise<ConsentView> {
   const [supportCase] = await sql<SupportCase[]>`select participant_id from support_cases where id = ${caseId}`;
-  if (!supportCase) throw new Error('사례를 찾지 못했어요.');
+  if (!supportCase) throw new Error('사례 없음');
   await sql`
     insert into consent_events
       (participant_id, case_id, domain, decision, purpose, copy_version, copy_hash, effective_at, recorded_by)
@@ -686,7 +714,7 @@ export async function assertConsent(caseId: number, domain: ConsentDomain): Prom
   const found = consents?.find((c) => c.domain === domain);
   if (found?.status === 'granted') return;
   throw new ConsentRequired(
-    `${CONSENT_COPY[domain].label} 동의가 없어요. 당사자 정보에서 동의를 받아야 저장할 수 있어요.`,
+    `${CONSENT_COPY[domain].label} 동의 없음, 당사자 정보에서 동의 후 저장`,
   );
 }
 
@@ -714,6 +742,11 @@ export type CaseDetail = {
     ai_summary: ApprovedSummary | null;
   }>;
   goal_revisions: Array<{ text: string | null; created_at: string }>;
+  /**
+   * 아직 어느 회차도 이어받지 않은 다음 상담 목표(목표 탭에서 고칠 수 있는 유일한 회차 목표, 2026-09-18 Q).
+   * 마지막 기록 회차가 쓴 값이며, 다음 회차를 기록하는 순간 그 회차의 오늘 상담 목표가 되어 잠긴다.
+   */
+  pending_next_goal: { session_id: number; session_seq: number; text: string | null } | null;
   open_cards: Array<ReturnType<typeof openCards>[number] & { source_session_seq: number | null }>;
   closure: {
     closed_at: string;
@@ -800,6 +833,11 @@ export async function getCaseDetail(caseId: number): Promise<CaseDetail | null> 
       };
     }),
     goal_revisions: revisions,
+    pending_next_goal: (() => {
+      const last = sessions.filter((s) => s.status === 'done').sort((a, b) => b.seq - a.seq)[0];
+      if (!last || last.next_goal_consumed_by_session_id) return null;
+      return { session_id: last.id, session_seq: last.seq, text: decryptText(last.next_goal_text) };
+    })(),
     open_cards: openCards(cards, outcomes, sessions).map((c) => ({
       ...c,
       source_session_seq: sessions.find((s) => s.id === c.source_session_id)?.seq ?? null,

@@ -22,7 +22,7 @@ export function LoginScreen({ onDone }: { onDone: () => void }) {
       await login(email.trim(), password);
       onDone();
     } catch (e) {
-      setError(e instanceof Error ? e.message : '들어가지 못했어요.');
+      setError(e instanceof Error ? e.message : '로그인 실패');
     } finally {
       setBusy(false);
     }
@@ -32,7 +32,7 @@ export function LoginScreen({ onDone }: { onDone: () => void }) {
     <main className="page-content preview-gate">
       <div className="preview-gate-head">
         <h1>릴레이어</h1>
-        <p>기관에 등록된 아이디와 비밀번호로 로그인해요.</p>
+        <p>기관에 등록된 아이디와 비밀번호</p>
       </div>
 
       {error && (
@@ -66,10 +66,10 @@ export function LoginScreen({ onDone }: { onDone: () => void }) {
           data-variant="primary"
           disabled={!email.trim() || !password || busy}
         >
-          <span className="wire-button-text">{busy ? '확인 중…' : '로그인'}</span>
+          <span className="wire-button-text">{busy ? '확인 중' : '로그인'}</span>
         </button>
         <p className="note-inline">
-          계정이 없으면 기관 관리자에게 초대 링크를 요청해요. 새 기관을 시작하나요? <a href="#/signup">가입하기</a>
+          계정 없음 → 기관 관리자에게 초대 링크 요청 · 새 기관 시작 → <a href="#/signup">가입하기</a>
         </p>
       </form>
     </main>

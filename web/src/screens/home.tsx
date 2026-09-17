@@ -5,7 +5,7 @@ import type { ScheduleRow } from '../api.ts';
 import { calendarPeriod, calendarTime, koreanDay, shiftPeriod } from '../calendar.ts';
 import type { CalendarTime, CalendarView } from '../calendar.ts';
 import { DatePicker } from '../date-picker.tsx';
-import { Button, Card, Chevron, Empty, ErrorText, Fold, FormActions, PageHeader, Select } from '../ui.tsx';
+import { Button, Card, Chevron, Empty, ErrorText, Fold, FormActions, Meta, PageHeader, Select } from '../ui.tsx';
 import { METHOD_LABEL } from '../vocab.ts';
 import '../date-time-input.css';
 import './home.css';
@@ -19,12 +19,6 @@ type CalendarEvent = { row: ScheduleRow; time: CalendarTime };
 const EMPTY_EVENTS: CalendarEvent[] = [];
 /** 다가오는 일정은 다섯 건까지 보여 주고 나머지는 `날짜 더보기`가 펼친다(2026-09-17 Q). */
 const UPCOMING_LIMIT = 5;
-/** 접힌 줄의 12px 한 줄. 잘리면 전체는 `title` 로 남는다(이식 규칙: 말줄임 + title). */
-const metaLine = (parts: Array<string | null>) => {
-  const text = parts.filter(Boolean).join(' | ');
-  return <span title={text}>{text}</span>;
-};
-
 /**
  * `focusCaseId` 가 오면 그 당사자의 일정만 본다(2026-09-17 Q — 당사자 카드의 `상담 일정 보기`).
  * 주소(`#/schedule?case=12`)가 상태를 들고 있어 링크를 공유하거나 뒤로 가도 그대로 산다.
@@ -75,7 +69,7 @@ export function HomeScreen({ focusCaseId = null }: { focusCaseId?: number | null
     void listSchedules(period.start, period.end).then(data => {
       if (live) setLoaded({ key: requestKey, rows: data, error: null });
     }).catch(failure => {
-      if (live) setLoaded({ key: requestKey, rows: null, error: failure instanceof Error ? failure.message : '일정을 불러오지 못했어요.' });
+      if (live) setLoaded({ key: requestKey, rows: null, error: failure instanceof Error ? failure.message : '일정 불러오기 실패' });
     });
     return () => { live = false; };
   }, [period.start, period.end, requestKey, retry]);
@@ -192,15 +186,15 @@ export function HomeScreen({ focusCaseId = null }: { focusCaseId?: number | null
           <div className="schedule-nav-period">
             <Button aria-label="이전 기간" onClick={() => jumpTo(shiftPeriod(view, anchor, -1))}><Chevron dir="left" /></Button>
             <DatePicker id="calendar-focus-date" inline label={period.title} value={period.days.includes(selectedDay) ? selectedDay : anchor} onChange={jumpTo}
-              hint="고른 날짜가 든 기간으로 이동해요. 일정을 저장하거나 바꾸지는 않아요." />
+              hint="고른 날짜가 든 기간으로 이동, 일정은 바뀌지 않음" />
             <Button aria-label="다음 기간" onClick={() => jumpTo(shiftPeriod(view, anchor, 1))}><Chevron dir="right" /></Button>
           </div>
         </div>
         <Button variant="primary" onClick={() => jumpTo(today)}>오늘</Button>
       </div>
       {error ? <Card><ErrorText>{error}</ErrorText><Button onClick={() => setRetry(n => n + 1)}>다시 불러오기</Button></Card> : <>
-        {!rows && <p role="status" className="panel-meta">일정을 불러오는 중이에요.</p>}
-        {rows?.length === 0 && <Empty>표시된 기간에 예정된 상담이 없어요.</Empty>}
+        {!rows && <p role="status" className="panel-meta">일정 불러오는 중</p>}
+        {rows?.length === 0 && <Empty>표시된 기간에 예정된 상담 없음</Empty>}
         <div aria-busy={rows === null}>
           <Card className="sc-calendar">
             {view === 'month' ? <table className="sc-month-grid" aria-label="월간 상담 일정">
@@ -260,9 +254,9 @@ export function HomeScreen({ focusCaseId = null }: { focusCaseId?: number | null
             hint={dayPicked ? (rows ? `${selectedEvents.length}건` : undefined) : upcomingHint}
           >
             {listed === null ? (
-              <Empty>일정을 불러오는 중이에요.</Empty>
+              <Empty>일정 불러오는 중</Empty>
             ) : listed.length === 0 ? (
-              <Empty>{dayPicked ? '선택한 날짜에 상담 일정이 없어요.' : '앞으로 잡힌 상담이 없어요.'}</Empty>
+              <Empty>{dayPicked ? '선택한 날짜에 상담 일정 없음' : '예정된 상담 없음'}</Empty>
             ) : (
               <>
                 {listed.map(({ row, time }) => {
@@ -274,13 +268,17 @@ export function HomeScreen({ focusCaseId = null }: { focusCaseId?: number | null
                       open={row.session_id === selectedSession}
                       onOpen={() => openContact(row.case_id)}
                       title={row.name ?? row.pseudonym}
-                      // 접힌 줄은 한 행이다(2026-09-17 Q): 이름 · 아이디 · 참여 사업 · 일시.
-                      // 잘리는 쪽은 뒤라 사업명을 마지막 앞에 두고, 전체는 `title` 로 남긴다.
-                      desc={metaLine([
-                        row.name ? row.pseudonym : null,
-                        `${row.program_name} ${row.seq}회차`,
-                        `${shortDayFormatter.format(new Date(`${time.day}T00:00:00Z`))} ${time.label}`,
-                      ])}
+                      // 접힌 줄은 한 행이다(2026-09-17 Q): 이름  아이디  참여 사업  일시.
+                      // 잘리는 쪽은 뒤라 사업명을 마지막 앞에 두고, 전체는 `Meta` 의 `title` 로 남긴다.
+                      desc={
+                        <Meta
+                          parts={[
+                            row.name ? row.pseudonym : null,
+                            `${row.program_name} ${row.seq}회차`,
+                            `${shortDayFormatter.format(new Date(`${time.day}T00:00:00Z`))} ${time.label}`,
+                          ]}
+                        />
+                      }
                       action={
                         <>
                           <a
@@ -309,7 +307,7 @@ export function HomeScreen({ focusCaseId = null }: { focusCaseId?: number | null
                           이 줄을 펼칠 때 그 사례만 따로 부른다. */}
                       <div className="participant-card-fields">
                         {([
-                          ['연락처', contact === 'loading' ? '불러오는 중' : contact === 'error' ? '불러오지 못했어요' : (contact?.phone ?? '')],
+                          ['연락처', contact === 'loading' ? '불러오는 중' : contact === 'error' ? '불러오기 실패' : (contact?.phone ?? '')],
                           ['이메일', contact === 'loading' ? '불러오는 중' : contact === 'error' ? '' : (contact?.email ?? '')],
                           ['방식', row.method ? (METHOD_LABEL[row.method] ?? row.method) : '정하지 않음'],
                           ...(row.place ? [['장소', row.place]] : []),

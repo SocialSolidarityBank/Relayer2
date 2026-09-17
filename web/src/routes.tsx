@@ -18,7 +18,6 @@ import { ParticipantsScreen } from './screens/participants.tsx';
 import { RecordScreen } from './screens/record.tsx';
 import { ReviewScreen } from './screens/review.tsx';
 import { ScheduleNewScreen } from './screens/schedule-new.tsx';
-import { SessionFullScreen } from './screens/session-full.tsx';
 import { SignupScreen } from './screens/signup.tsx';
 import { OnboardingScreen } from './screens/onboarding.tsx';
 import { SetupPendingScreen, WorkspaceScreen } from './screens/workspace.tsx';
@@ -91,7 +90,7 @@ export function Routes() {
       </div>
     );
 
-  if (me === 'loading') return <p className="empty">불러오는 중이에요.</p>;
+  if (me === 'loading') return <p className="empty">불러오는 중</p>;
 
   /**
    * 로그아웃 상태(2026-09-17 Q·ASTRA). 문은 하나 — **로그인 화면이 곧 랜딩**이다(`/`·`#/login`·홈·깊은 주소 모두).
@@ -173,7 +172,7 @@ export function Routes() {
     if (inSettings) return <SettingsScreen module={inSettings[1]} me={me} />;
     if (path === '#/participants/new') return <ParticipantNewScreen />;
 
-    // 저장해 둔 회차 고쳐 쓰기. 기록 화면을 그대로 쓰되 대상 회차를 준다.
+    // 저장해 둔 회차 수정. 기록 화면을 그대로 쓰되 대상 회차를 준다.
     const editing = path.match(/^#\/cases\/(\d+)\/sessions\/(\d+)\/edit$/);
     if (editing)
       return (
@@ -187,14 +186,14 @@ export function Routes() {
     const reviewing = path.match(/^#\/cases\/(\d+)\/sessions\/(\d+)\/review$/);
     if (reviewing) return <ReviewScreen caseId={Number(reviewing[1])} sessionId={Number(reviewing[2])} />;
 
-    // 수기·음성 전문 보기(2026-09-16 인계). 읽기 전용 — 편집·승인은 기록 화면이 담당한다.
-    const full = path.match(/^#\/cases\/(\d+)\/sessions\/(\d+)\/full$/);
-    if (full) return <SessionFullScreen caseId={Number(full[1])} sessionId={Number(full[2])} />;
+    // 목표 탭 직행(2026-09-18 UI-9). 기록 화면의 목표 카드 `수정`이 여기로 온다.
+    const goals = path.match(/^#\/cases\/(\d+)\/info\/goals$/);
+    if (goals) return <ParticipantInfoScreen caseId={Number(goals[1])} initialTab="목표" />;
 
     const byCase = path.match(/^#\/cases\/(\d+)\/(record|schedule|intake|info|close)$/);
     if (byCase) {
       const caseId = Number(byCase[1]);
-            // `key` 로 갈아 끼운다. 고쳐 쓰기와 새 기록이 같은 부품이라 상태가 새면 남의 회차를 덮는다.
+            // `key` 로 갈아 끼운다. 수정과 새 기록이 같은 부품이라 상태가 새면 남의 회차를 덮는다.
       if (byCase[2] === 'record')
         return <RecordScreen key={`new-${caseId}`} caseId={caseId} startClosing={query.get('closing') === '1'} />;
       if (byCase[2] === 'intake') return <IntakeScreen caseId={caseId} />;

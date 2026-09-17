@@ -23,9 +23,10 @@
 .participant-row-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 @media (max-width: 767px) { .participant-row-list { grid-template-columns: minmax(0, 1fr); } }
 
-/* 행 카드는 두 줄이다: `이름 + 아이디·사업 회차 + 배지` / `연락처 · 이메일 · 다음 상담`.
-   정보 격자(`participant-card-fields`)는 걷었다. */
-.participant-row-list .participant-card { gap: var(--space-1); padding: var(--space-4) var(--space-5); }
+/* 행 카드는 두 줄이다: `이름 + 아이디  사업 회차 + 배지` / `연락처  이메일  다음 상담`.
+   정보 격자(`participant-card-fields`)는 걷었다. 여백은 사방 **한 값**(2026-09-18 Q "카드는
+   상하좌우 같은 여백") — 구 16/20 은 위아래가 좁아 카드가 띠로 읽혔다. */
+.participant-row-list .participant-card { gap: var(--space-1); padding: var(--space-5); }
 .participant-card-reach {
   margin: 0;
   min-width: 0;

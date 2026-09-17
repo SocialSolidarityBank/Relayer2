@@ -1,15 +1,15 @@
-// 0024 의 백필 규칙. 공유 시험 DB 는 이미 0024 가 지나갔으니 새 DB 를 0023 까지 올린 뒤
-// 옛 모양(program_name 문자열)의 사례를 심고 0024 를 적용해 결과를 본다.
+// 0025 의 백필 규칙. 공유 시험 DB 는 이미 0024 가 지나갔으니 새 DB 를 0024 까지 올린 뒤
+// 옛 모양(program_name 문자열)의 사례를 심고 0025 를 적용해 결과를 본다.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { enabled } from './voice-fixture.ts';
 import { scratchDb, type Scratch } from './scratch-db.ts';
 
 let scratch: Scratch;
 
-describe.skipIf(!enabled)('migration 0024', () => {
+describe.skipIf(!enabled)('migration 0025', () => {
   beforeAll(async () => {
     scratch = await scratchDb();
-    await scratch.migrate('0024');
+    await scratch.migrate('0025');
   }, 60_000);
   afterAll(async () => {
     await scratch?.drop();
@@ -30,7 +30,7 @@ describe.skipIf(!enabled)('migration 0024', () => {
     await db`update organization set name = '기존 기관' where id = 1`;
     await db`insert into users (email, name, role) values ('old-admin', '기존 관리자', 'admin')`;
 
-    expect(await scratch.migrate()).toEqual(['0024_onboarding_programs.sql']);
+    expect(await scratch.migrate()).toEqual(['0025_onboarding_programs.sql']);
 
     const caseCols = await db<Array<{ column_name: string; is_nullable: string }>>`
       select column_name, is_nullable from information_schema.columns
@@ -62,7 +62,7 @@ describe.skipIf(!enabled)('migration 0024', () => {
     ).rejects.toThrow(/programs_period_check/);
 
     const [applied] = await db<Array<{ n: number }>>`
-      select count(*)::int as n from schema_migrations where version = '0024_onboarding_programs.sql'`;
+      select count(*)::int as n from schema_migrations where version = '0025_onboarding_programs.sql'`;
     expect(applied.n).toBe(1);
   });
 });

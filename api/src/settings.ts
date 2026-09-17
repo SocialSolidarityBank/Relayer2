@@ -64,16 +64,16 @@ export async function deactivate(userId: number): Promise<{ ok: true } | { error
   const result = await sql.begin(async (tx) => {
     await lockOrg(tx as unknown as typeof sql);
     const [me] = await tx<Array<{ role: string }>>`select role from users where id = ${userId}`;
-    if (!me) return { error: '계정을 찾지 못했어요.' } as const;
+    if (!me) return { error: '계정 없음' } as const;
     if (me.role === 'admin' && (await activeAdmins(tx as unknown as typeof sql)) <= 1) {
-      return { error: '마지막 관리자예요. 다른 사람을 관리자로 세운 뒤에 나갈 수 있어요.' } as const;
+      return { error: '마지막 관리자, 다른 관리자 지정 후 탈퇴 가능' } as const;
     }
     const [{ count: mine }] = await tx<Array<{ count: string }>>`
       select count(*) from case_assignments a
       join support_cases c on c.id = a.case_id
       where a.user_id = ${userId} and c.status = 'open'`;
     if (Number(mine) > 0) {
-      return { error: `아직 맡고 있는 당사자가 ${mine}명 있어요. 다른 실무자에게 넘긴 뒤에 나갈 수 있어요.` } as const;
+      return { error: `맡고 있는 당사자 ${mine}명, 다른 실무자에게 이관 후 탈퇴 가능` } as const;
     }
     await tx`update users set deactivated_at = now() where id = ${userId}`;
     return { ok: true } as const;
@@ -440,13 +440,13 @@ export async function assign(
   const result = await sql.begin(async (tx) => {
     const [target] = await tx<Array<{ id: number }>>`
       select id from support_cases where id = ${caseId} for update`;
-    if (!target) return { error: '없는 사례예요.' } as const;
+    if (!target) return { error: '사례 없음' } as const;
 
     if (ids.length > 0) {
       const users = await tx<Array<{ id: number }>>`
         select id from users
         where id = any(${ids}) and role in ('worker', 'admin') and deactivated_at is null`;
-      if (users.length !== ids.length) return { error: '활성 실무자만 배정할 수 있어요.' } as const;
+      if (users.length !== ids.length) return { error: '활성 실무자만 배정 가능' } as const;
     }
 
     await tx`delete from case_assignments where case_id = ${caseId}`;
@@ -530,10 +530,12 @@ export async function revokeInvite(actorId: number, id: number): Promise<Invite[
 }
 
 /** 초대장 확인 — 로그인 앞에서 부른다. 살아 있는지만 답하고 누가 만들었는지는 말하지 않는다. */
-export async function peekInvite(token: string): Promise<{ role: string } | null> {
-  const [row] = await sql<Array<{ role: string }>>`
-    select role from invites
-    where token_hash = ${hashToken(token)} and accepted_at is null and revoked_at is null and expires_at > now()`;
+export async function peekInvite(token: string): Promise<{ role: string; org_name: string } | null> {
+  const [row] = await sql<Array<{ role: string; org_name: string }>>`
+    select i.role, o.name as org_name from invites i
+    cross join organization o
+    where o.id = 1 and i.token_hash = ${hashToken(token)}
+      and i.accepted_at is null and i.revoked_at is null and i.expires_at > now()`;
   return row ?? null;
 }
 
@@ -550,7 +552,7 @@ export async function signUpWithInvite(input: {
   name: string;
 }): Promise<{ userId: number } | { error: string }> {
   const [dup] = await sql<Array<{ id: number }>>`select id from users where email = ${input.email}`;
-  if (dup) return { error: '이미 쓰는 아이디예요.' };
+  if (dup) return { error: '사용 중인 아이디' };
 
   // 해싱은 트랜잭션 밖에서. Argon2 는 수백 밀리초가 걸리고, 그동안 초대 행을 잡고 있으면
   // 같은 링크를 연 다른 사람이 그만큼 기다린다.
@@ -575,7 +577,7 @@ export async function signUpWithInvite(input: {
         where token_hash = ${hashToken(input.token)}
           and accepted_at is null and revoked_at is null and expires_at > now()
         for update`;
-      if (!invite) return { error: '쓸 수 없는 초대예요. 기한이 지났거나 이미 쓰였어요.' };
+      if (!invite) return { error: '쓸 수 없는 초대, 기한 만료 또는 이미 사용됨' };
 
       const [user] = await tx<Array<{ id: number }>>`
         insert into users (email, password_hash, name, role)
@@ -587,7 +589,7 @@ export async function signUpWithInvite(input: {
     });
   } catch {
     // 같은 아이디를 동시에 만들면 유일 제약에 걸린다. 초대는 롤백되어 다시 쓸 수 있다.
-    return { error: '이미 쓰는 아이디예요.' };
+    return { error: '사용 중인 아이디' };
   }
   if ('error' in result) return result;
   // 감사는 커밋 뒤에(2026-09-17 수정). 트랜잭션 안에서 쓰면 actor_id FK 가 아직 없는 사람을 가리켜 조용히 버려졌다.
@@ -641,10 +643,10 @@ export async function requestAssignment(
       // 이미 담당인 사람의 대기 요청이 남고, 제거 뒤 옛 요청으로 되살아나는 틈을 닫는다.
       const [c] = await tx<Array<{ id: number }>>`
         select id from support_cases where id = ${caseId} for update`;
-      if (!c) return { error: '없는 사례예요.' } as const;
+      if (!c) return { error: '사례 없음' } as const;
       const [member] = await tx<Array<{ user_id: number }>>`
         select user_id from case_assignments where case_id = ${caseId} and user_id = ${userId}`;
-      if (member) return { error: '이미 맡고 있는 당사자예요.' } as const;
+      if (member) return { error: '이미 맡고 있는 당사자' } as const;
       await tx`
         insert into assignment_requests (case_id, requested_by, reason)
         values (${caseId}, ${userId}, ${reason})`;
@@ -653,7 +655,7 @@ export async function requestAssignment(
     if ('error' in result) return result;
   } catch {
     // 대기 요청 유일 제약은 (사례, 요청자)다. 다른 사람은 같은 사례에 따로 요청할 수 있다.
-    return { error: '이미 요청이 올라가 있어요.' };
+    return { error: '이미 올라온 요청 있음' };
   }
   await audit({ actorId: userId, action: 'assignment.request', caseId, fields: [] });
   return { ok: true };
@@ -672,20 +674,20 @@ export async function decideRequest(
   const result = await sql.begin(async (tx) => {
     const [preview] = await tx<Array<{ case_id: number }>>`
       select case_id from assignment_requests where id = ${id}`;
-    if (!preview) return { error: '이미 결정했거나 없는 요청이에요.' } as const;
+    if (!preview) return { error: '이미 결정됐거나 없는 요청' } as const;
 
     // 배정 교체와 같은 순서(사례 → 요청)로 잠근다. 반대 순서면 둘이 서로 기다린다.
     await tx`select id from support_cases where id = ${preview.case_id} for update`;
     const [row] = await tx<Array<{ case_id: number; requested_by: number }>>`
       select case_id, requested_by from assignment_requests
       where id = ${id} and decided_at is null for update`;
-    if (!row) return { error: '이미 결정했거나 없는 요청이에요.' } as const;
+    if (!row) return { error: '이미 결정됐거나 없는 요청' } as const;
     if (decision === 'approved') {
       const [active] = await tx<Array<{ id: number }>>`
         select id from users
         where id = ${row.requested_by}
           and role in ('worker', 'admin') and deactivated_at is null`;
-      if (!active) return { error: '활성 실무자만 배정할 수 있어요.' } as const;
+      if (!active) return { error: '활성 실무자만 배정 가능' } as const;
       await tx`
         insert into case_assignments (case_id, user_id, assigned_by)
         values (${row.case_id}, ${row.requested_by}, ${actorId})

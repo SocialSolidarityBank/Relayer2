@@ -1,7 +1,7 @@
 /**
  * 기관 워크스페이스 설정하기(2026-09-17 Q). 관리자 전용, 단계형.
  *
- *   1 기관 워크스페이스 → 2 기관 정보 → 3 사업 → 4 실무자 초대 → 5 AI/STT/DB 연결
+ *   1 기관 워크스페이스 → 2 기관 정보 → 3 사업 → 4 실무자 초대 → 5 외부 서비스 연결
  *
  * 1단계는 워크스페이스(기관 이름)가 아직 없을 때만 선다 — 계정 가입과 기관 만들기를 갈라 둔 자리다(ASTRA 검토 B).
  * 설정 화면의 부품(기관 정보 칸·사업 목록·초대·연결)을 그대로 쓴다. 문구는 명사형이고 설명 문장은 두지 않는다.
@@ -13,7 +13,7 @@ import { completeOnboarding, getOrg, saveOrg, type Me, type Org, type Program } 
 import { Button, Card, Empty, ErrorText, Field, FormActions, PageHeader } from '../ui.tsx';
 import { ConnectionsPane, InvitePane, OrgForm, orgPayload, ProgramsPane } from './settings.tsx';
 
-const STEPS = ['기관 워크스페이스', '기관 정보', '사업', '실무자 초대', 'AI/STT/DB 연결'] as const;
+const STEPS = ['기관 워크스페이스', '기관 정보', '사업', '실무자 초대', '외부 서비스 연결'] as const;
 
 /** 1단계. 기관명 · 주소 이름 한 줄. 만들기 버튼은 제목 줄 오른쪽 끝이다. */
 function WorkspaceStep({ onCreated }: { onCreated: () => void }) {
@@ -34,7 +34,7 @@ function WorkspaceStep({ onCreated }: { onCreated: () => void }) {
       await saveOrg({ name: name.trim(), reg_no: null, address: null, phone: null, slug: slug.trim() || null });
       onCreated();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : '만들지 못했어요.');
+      setErr(e instanceof Error ? e.message : '만들기 실패');
     } finally {
       setBusy(false);
     }
@@ -42,9 +42,9 @@ function WorkspaceStep({ onCreated }: { onCreated: () => void }) {
   return (
     <Card
       title="기관 정보 입력"
-      actions={
+      action={
         <Button variant="primary" disabled={busy || !name.trim() || !slugOk} onClick={() => void create()}>
-          {busy ? '만드는 중…' : '기관 워크스페이스 만들기'}
+          {busy ? '만드는 중' : '기관 워크스페이스 만들기'}
         </Button>
       }
     >
@@ -80,7 +80,7 @@ function OrgStep({ slug, onNext }: { slug: string | null; onNext: () => void }) 
   useEffect(() => {
     void getOrg().then(setOrg);
   }, []);
-  if (!org) return <Empty>불러오는 중이에요.</Empty>;
+  if (!org) return <Empty>불러오는 중</Empty>;
   const next = async () => {
     if (!org.name.trim() || busy) return;
     setBusy(true);
@@ -89,7 +89,7 @@ function OrgStep({ slug, onNext }: { slug: string | null; onNext: () => void }) 
       await saveOrg(orgPayload(org));
       onNext();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : '저장하지 못했어요.');
+      setErr(e instanceof Error ? e.message : '저장 실패');
     } finally {
       setBusy(false);
     }
@@ -102,7 +102,7 @@ function OrgStep({ slug, onNext }: { slug: string | null; onNext: () => void }) 
       </Card>
       <FormActions>
         <Button variant="primary" disabled={busy || !org.name.trim()} onClick={() => void next()}>
-          {busy ? '저장 중…' : '다음'}
+          {busy ? '저장 중' : '다음'}
         </Button>
       </FormActions>
     </>
@@ -129,7 +129,7 @@ export function OnboardingScreen({
       <>
         <PageHeader title="기관 워크스페이스 설정하기" />
         <Card title="관리자가 설정 중">
-          <Empty>설정이 끝나면 상담 일정부터 쓸 수 있어요.</Empty>
+          <Empty>설정 완료 후 상담 일정부터 이용 가능</Empty>
         </Card>
       </>
     );
@@ -141,7 +141,7 @@ export function OnboardingScreen({
       await completeOnboarding();
       onDone();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : '마치지 못했어요.');
+      setErr(e instanceof Error ? e.message : '완료 실패');
     } finally {
       setBusy(false);
     }
@@ -199,7 +199,7 @@ export function OnboardingScreen({
           {err && <ErrorText>{err}</ErrorText>}
           <Button onClick={() => setStep(step - 1)}>이전</Button>
           <Button variant="primary" disabled={busy || !canNext} onClick={() => (last ? void finish() : setStep(step + 1))}>
-            {busy ? '완료 중…' : last ? '완료' : '다음'}
+            {busy ? '완료 중' : last ? '완료' : '다음'}
           </Button>
         </FormActions>
       )}

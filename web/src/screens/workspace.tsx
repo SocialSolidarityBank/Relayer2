@@ -11,16 +11,16 @@ export function WorkspaceScreen({ me, justDone }: { me: Me; justDone: boolean })
   return (
     <>
       <PageHeader
-        title={justDone ? '기관 설정을 마쳤어요' : `${ws?.name ?? '기관'}의 기관 정보를 확인해요`}
-        meta={justDone ? '이제 상담 일정과 당사자 등록부터 쓸 수 있어요' : undefined}
+        title={justDone ? '기관 설정 완료' : `${ws?.name ?? '기관'} 기관 정보`}
+        meta={justDone ? '상담 일정·당사자 등록 이용 가능' : undefined}
       />
       <Card title="기관 워크스페이스">
         <DataRows
           rows={[
-            ['기관 이름', ws?.name ?? '아직 없어요'],
-            ['주소 이름', ws?.slug ?? '배포 설정에 정해지지 않았어요'],
+            ['기관 이름', ws?.name ?? '없음'],
+            ['주소 이름', ws?.slug ?? '미정'],
             ['내 계정', `${me.name}, ${me.role === 'admin' ? '관리자' : '실무자'}`],
-            ['준비 상태', me.onboarded ? '준비를 마쳤어요' : '관리자가 준비하는 중이에요'],
+            ['준비 상태', me.onboarded ? '준비 완료' : '관리자 준비 중'],
           ]}
         />
         <FormActions>
@@ -45,9 +45,9 @@ export function WorkspaceScreen({ me, justDone }: { me: Me; justDone: boolean })
 export function SetupPendingScreen({ me, onRefresh }: { me: Me; onRefresh: () => void }) {
   return (
     <>
-      <PageHeader title="기관을 준비하고 있어요" meta={me.workspace?.name ?? undefined} />
-      <Card title="관리자가 초기 설정을 마치면 상담 일정과 기록을 이용할 수 있어요">
-        <p className="panel-meta">사업 목록과 연결 설정이 끝나는 대로 열려요. 조금 뒤 다시 확인해 주세요.</p>
+      <PageHeader title="기관 준비 중" meta={me.workspace?.name ?? undefined} />
+      <Card title="관리자 초기 설정 완료 후 이용 가능">
+        <p className="panel-meta">사업 목록·연결 설정 완료 시 열림 — 잠시 후 다시 확인</p>
         <FormActions>
           <Button variant="primary" onClick={onRefresh}>
             다시 확인하기

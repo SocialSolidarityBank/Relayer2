@@ -138,7 +138,7 @@ case_closures(id, case_id UNIQUE, last_session_id, closed_at, close_reason,
 - `long_term_goal` → **`overall_goal`(전체 상담 목표)**. `단기목표`라는 개념 자체를 두지 않는다.
 - `sessions.today_goal_*` / `next_goal_*` 추가 — 목표 이어받기를 회차에 결속한다. 조회·예약 취소로 소비되지 않도록 **수신 회차 id**를 기록한다(`SPEC.md` §4).
 - `sessions.crisis_level` **제거**(요구 18), `plan_note` → `plan_memo`(요구 4), `place` 추가(대면일 때만, 요구 14).
-- `cards.owner`·`due_on` **제거**(요구 15·16). 기한과 수행 주체를 입력받지 않으므로 묵시적 완료가 생기지 않는다.
+- `cards.owner`·`due_on` **제거**(요구 15·16). 기한과 수행 주체를 입력받지 않으므로 묵시적 완료가 생기지 않는다. → **`owner` 는 2026-09-18 에 2택(participant/worker)으로 복원**(`0024`). 묵시적 완료의 원인은 기한이었다.
 
 2026-09-14 Q 확정으로 바뀐 것:
 - `overall_goal`은 **NULL 허용**. 인테이크에서 목표를 안 세워도 저장된다.

@@ -125,7 +125,7 @@ const SCHEMA = {
 
 async function callGemini(prompt: string): Promise<Shape> {
   const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new AiUnavailable('GEMINI_API_KEY 가 없어 AI 정리를 할 수 없어요.');
+  if (!key) throw new AiUnavailable('AI 정리 불가, GEMINI_API_KEY 없음');
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,
     {
@@ -144,10 +144,10 @@ async function callGemini(prompt: string): Promise<Shape> {
       }),
     },
   );
-  if (!res.ok) throw new AiUnavailable(`AI 응답이 오지 않았어요 (${res.status}).`);
+  if (!res.ok) throw new AiUnavailable(`AI 응답 실패 (${res.status})`);
   const payload = (await res.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
   const text = payload.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new AiUnavailable('AI 응답을 읽지 못했어요.');
+  if (!text) throw new AiUnavailable('AI 응답 해석 실패');
   return JSON.parse(text) as Shape;
 }
 
@@ -164,9 +164,15 @@ export async function openAiKey(): Promise<{ key: string; source: 'db' | 'env' }
   return env ? { key: env, source: 'env' } : null;
 }
 
+/**
+ * OpenAI 에 응답 보관을 맡기지 않는다 — 동의 문안이 그렇게 약속한다(2026-09-17 Q).
+ * 요청 본문과 감사 기록이 같은 값을 읽는다. 둘이 어긋나면 감사가 거짓이 된다.
+ */
+const OPENAI_STORE = false;
+
 async function callOpenAi(prompt: string): Promise<Shape> {
   const found = await openAiKey();
-  if (!found) throw new AiUnavailable('OpenAI API 키가 없어 AI 정리를 할 수 없어요. 설정 › 시스템 연결에서 키를 넣어 주세요.');
+  if (!found) throw new AiUnavailable('AI 정리 불가, OpenAI API 키 없음');
   const { key } = found;
 
   const res = await fetch('https://api.openai.com/v1/responses', {
@@ -177,6 +183,8 @@ async function callOpenAi(prompt: string): Promise<Shape> {
       // 추론을 길게 돌릴 일이 아니다. 적힌 말을 정리할 뿐이다.
       // gpt-5.4 이상은 'minimal' 을 받지 않는다. 'none' 이 같은 자리다.
       reasoning: { effort: MODEL.startsWith('gpt-5.') ? 'none' : 'minimal' },
+      // 응답 재사용용 보관을 끈다. 남용 감시 30일은 별건이다.
+      store: OPENAI_STORE,
       input: [
         { role: 'system', content: SYSTEM },
         { role: 'user', content: prompt },
@@ -185,7 +193,7 @@ async function callOpenAi(prompt: string): Promise<Shape> {
     }),
   });
 
-  if (!res.ok) throw new AiUnavailable(`AI 응답이 오지 않았어요 (${res.status}).`);
+  if (!res.ok) throw new AiUnavailable(`AI 응답 실패 (${res.status})`);
   const payload = (await res.json()) as {
     output?: Array<{ type?: string; content?: Array<{ type?: string; text?: string }> }>;
     output_text?: string;
@@ -196,7 +204,7 @@ async function callOpenAi(prompt: string): Promise<Shape> {
     payload.output
       ?.find((o) => o.type === 'message')
       ?.content?.find((c) => c.type === 'output_text')?.text;
-  if (!text) throw new AiUnavailable('AI 응답을 읽지 못했어요.');
+  if (!text) throw new AiUnavailable('AI 응답 해석 실패');
   return JSON.parse(text) as Shape;
 }
 
@@ -220,7 +228,7 @@ async function sessionParts(session: Session): Promise<Array<{ label: string; te
  */
 export async function draftSession(sessionId: number, actorId: number): Promise<Draft> {
   const [session] = await sql<Session[]>`select * from sessions where id = ${sessionId}`;
-  if (!session) throw new Error('회차를 찾지 못했어요.');
+  if (!session) throw new Error('회차 없음');
   await assertConsent(session.case_id, 'external_llm_cross_border_processing');
 
   const [participant] = await sql<Array<{ pseudonym: string; enc_name: string | null; enc_phone: string | null; enc_email: string | null }>>`
@@ -238,7 +246,7 @@ export async function draftSession(sessionId: number, actorId: number): Promise<
   };
 
   const parts = await sessionParts(session);
-  if (parts.length === 0) throw new AiUnavailable('정리할 내용이 없어요. 상담 내용을 먼저 적어 주세요.');
+  if (parts.length === 0) throw new AiUnavailable('정리할 내용 없음, 상담 내용 먼저 입력');
   const { parts: masked, hits } = maskAll(parts, subject);
 
   // 지난 회차는 기록된 것만, 회차 순으로. 마스킹 건수는 이번 회차 것만 센다 — 감사에 남는 값이다.
@@ -277,6 +285,8 @@ export async function draftSession(sessionId: number, actorId: number): Promise<
       `recipient=${AI_PROVIDERS[PROVIDER].legalRecipient}`,
       `country=${AI_PROVIDERS[PROVIDER].country}`,
       `model=${MODEL}`,
+      // 어떤 보관 설정으로 보냈는지가 증거다. Gemini 경로에는 그 설정이 없어 남기지 않는다.
+      ...(PROVIDER === 'openai' ? [`store=${OPENAI_STORE}`] : []),
       ...Object.entries(hits).map(([kind, n]) => `masked:${kind}=${n}`),
     ],
   });
@@ -328,9 +338,9 @@ export async function approveDraft(
   edited?: { summary?: string; changes?: string[]; tasks?: string[]; questions?: string[] },
 ): Promise<Draft> {
   const [session] = await sql<Session[]>`select case_id from sessions where id = ${sessionId}`;
-  if (!session) throw new Error('회차가 없어요.');
+  if (!session) throw new Error('회차 없음');
   const current = await latestDraft(sessionId);
-  if (!current) throw new Error('승인할 초안이 없어요.');
+  if (!current) throw new Error('승인할 초안 없음');
 
   const summary = edited?.summary ?? current.summary;
   const changes = edited?.changes ?? current.changes;

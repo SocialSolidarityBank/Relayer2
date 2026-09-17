@@ -23,6 +23,7 @@ import {
 import { METHODS } from '../vocab.ts';
 import { EMPTY_DATE_TIME, dateTimeFromIso, dateTimeToIso } from '../date-time.ts';
 import { DateTimeInput } from '../date-time-input.tsx';
+import { TaskOwnerToggle } from '../task-owner.tsx';
 import {
   Button,
   Card,
@@ -170,7 +171,11 @@ function Question({
   );
 }
 
-export function IntakeScreen({ caseId }: { caseId: number }) {
+/**
+ * 인테이크 작성하기. `readOnly` 면 **같은 화면을 잠근 채** 그린다(2026-09-18 UI-3 — 원본 보기가
+ * 이 화면을 그대로 쓴다). 그때는 당사자 카드를 안 그리고(바깥 화면이 그린다) 저장 대신 `수정`이다.
+ */
+export function IntakeScreen({ caseId, readOnly = false }: { caseId: number; readOnly?: boolean }) {
   const [view, setView] = useState<CaseView | null>(null);
   // 당사자 카드의 이름은 사례 상세가 준다(2026-09-17 Q 시안). 이 화면은 이름을 안 받고 있었다.
   const [detail, setDetail] = useState<CaseDetail | null>(null);
@@ -179,7 +184,7 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
   const [questions, setQuestions] = useState<Line[]>([]);
   // 첫 상담에서도 약속은 나온다("다음까지 서류 떼어 오기"). 2026-09-15 예행연습에서 드러난 빈자리.
   const [tasks, setTasks] = useState<Line[]>([]);
-  const [taskDraft, setTaskDraft] = useState<Line>({ text: '' });
+  const [taskDraft, setTaskDraft] = useState<Line>({ text: '', owner: 'participant' });
   const [questionDraft, setQuestionDraft] = useState<Line>({ text: '' });
   // 실제로 진행한 상담의 일시·방식·장소. 선호 상담 방식(detail)과 다른 값이다.
   const [heldAt, setHeldAt] = useState(nowDateTime);
@@ -200,7 +205,7 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
     setOverallGoal('');
     setTasks([]);
     setQuestions([]);
-    setTaskDraft({ text: '' });
+    setTaskDraft({ text: '', owner: 'participant' });
     setQuestionDraft({ text: '' });
     setHeldAt(nowDateTime());
     setMethod('');
@@ -214,13 +219,13 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
       setOverallGoal(intake.overall_goal ?? v.case.overall_goal ?? '');
       setWritten(intake.session_id !== null);
       setAnswers(withLegacyMapping(intake.detail ?? {}, intake.memo));
-      setTasks(intake.cards.filter((c) => c.kind === 'promise').map((c) => ({ text: c.text })));
+      setTasks(intake.cards.filter((c) => c.kind === 'promise').map((c) => ({ text: c.text, owner: c.owner })));
       setQuestions(intake.cards.filter((c) => c.kind === 'question').map((c) => ({ text: c.text })));
       setHeldAt(intake.held_at ? dateTimeFromIso(intake.held_at) : nowDateTime());
       setMethod(intake.method ?? '');
       setPlace(intake.place ?? '');
     })().catch((failure: unknown) => {
-      if (live) setError(failure instanceof Error ? failure.message : '불러오지 못했어요.');
+      if (live) setError(failure instanceof Error ? failure.message : '불러오기 실패');
     });
     return () => {
       live = false;
@@ -228,14 +233,14 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
   }, [caseId]);
 
   if (!view) {
-    return error ? <ErrorText>{error}</ErrorText> : <p className="empty">불러오는 중이에요.</p>;
+    return error ? <ErrorText>{error}</ErrorText> : <p className="empty">불러오는 중</p>;
   }
   // 인테이크를 건너뛰고 다른 회차부터 기록한 사례는 여기서 새로 쓰지 못한다.
   if (!written && view.sessions.length > 0)
     return (
       <p className="empty">
-        이 사례에는 이미 다른 회차가 있어요. 인테이크는 첫 회차예요.{' '}
-        <a href={`#/cases/${caseId}/info`}>당사자 정보</a>로 가세요.
+        이미 다른 회차가 있어 인테이크 작성 불가,{' '}
+        <a href={`#/cases/${caseId}/info`}>당사자 정보</a>로 이동
       </p>
     );
 
@@ -267,7 +272,7 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
       heldAt.minute !== EMPTY_DATE_TIME.minute;
     const heldAtIso = dateTimeToIso(heldAt);
     if (heldAtTouched && !heldAtIso) {
-      setError('상담 일시를 모두 골라 주세요.');
+      setError('상담 일시 선택 필요');
       return;
     }
     setSaving(true);
@@ -281,11 +286,11 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
         // 다음에 물어볼 것은 상담 기록하기와 같은 입력이며 확인할 것 카드가 된다.
         cards: [
           ...withDraft(questions, questionDraft).map((q) => ({ kind: 'question', text: q.text, section: 'intake' })),
-          ...withDraft(tasks, taskDraft).map((t) => ({ kind: 'promise', text: t.text, section: 'promise' })),
+          ...withDraft(tasks, taskDraft).map((t) => ({ kind: 'promise', text: t.text, section: 'promise', owner: t.owner })),
         ],
       };
       if (heldAtIso) body.held_at = heldAtIso;
-      // 방식을 고르지 않았으면 보내지 않는다 — 고쳐 쓰기에서 예전 값을 지우지 않는다.
+      // 방식을 고르지 않았으면 보내지 않는다 — 수정에서 예전 값을 지우지 않는다.
       if (method && INTAKE_METHODS.some((m) => m.key === method)) {
         body.method = method;
         body.place = method === 'in_person' ? place.trim() || null : null;
@@ -294,11 +299,104 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
       // 처음 쓴 것이면 일정 잡기로, 고쳐 쓴 것이면 보던 자리(당사자 정보)로 돌아간다.
       window.location.hash = written ? `#/cases/${caseId}/info` : `#/cases/${caseId}/schedule`;
     } catch (e) {
-      setError(e instanceof Error ? e.message : '저장하지 못했어요.');
+      setError(e instanceof Error ? e.message : '저장 실패');
     } finally {
       setSaving(false);
     }
   };
+
+  const body = (
+    <>
+      {/* 1. 실제로 진행한 상담의 일시·방식·장소. 장소는 대면일 때만 나온다(요청 2). */}
+      <Card title="상담 일시와 상담 방식">
+        <DateTimeInput idPrefix="held-at" value={heldAt} onChange={setHeldAt} disabled={saving || readOnly} required={false} />
+        <ChoiceGroup legend="상담 방식">
+          {INTAKE_METHODS.map((m) => (
+            <Choice
+              key={m.key}
+              type="radio"
+              name="method"
+              label={m.label}
+              checked={method === m.key}
+              onChange={() => setMethod(method === m.key ? '' : m.key)}
+            />
+          ))}
+        </ChoiceGroup>
+        {method === 'in_person' && (
+          <FormField label="상담 장소" htmlFor="place">
+            <input id="place" type="text" value={place} onChange={(e) => setPlace(e.target.value)} />
+          </FormField>
+        )}
+      </Card>
+
+      {/* 2~9 구획. 두 열로 나란히 놓되 DOM 순서는 구획 순서 그대로다. */}
+      <div className="card-grid two-col">
+        {INTAKE_GROUPS.map(renderGroup)}
+
+        <Card title="전체 상담 목표">
+          <FormField label="전체 상담 목표" htmlFor="overall-goal" hideLabel>
+            <input
+              id="overall-goal"
+              type="text"
+              aria-label="전체 상담 목표"
+              value={overallGoal}
+              onChange={(e) => setOverallGoal(e.target.value)}
+            />
+          </FormField>
+        </Card>
+
+        <Card title="수행할 과제">
+          <LineList
+            id="intake-task"
+            label="수행할 과제"
+            placeholder="예: 채무 내역서 떼어 오기"
+            lines={tasks}
+            draft={taskDraft}
+            onDraft={setTaskDraft}
+            onChange={setTasks}
+            readOnly={readOnly}
+            ownerToggle={
+              <TaskOwnerToggle
+                id="intake-task"
+                value={taskDraft.owner ?? 'participant'}
+                onChange={(owner) => setTaskDraft({ ...taskDraft, owner })}
+              />
+            }
+          />
+        </Card>
+
+        <Card title="다음에 물어볼 것">
+          <LineList
+            id="intake-question"
+            label="다음에 물어볼 것"
+            placeholder="예: 통원 주기가 어떻게 되는지"
+            lines={questions}
+            draft={questionDraft}
+            onDraft={setQuestionDraft}
+            onChange={setQuestions}
+            readOnly={readOnly}
+          />
+        </Card>
+      </div>
+    </>
+  );
+
+  if (readOnly) {
+    return (
+      <>
+        {/* 네이티브 fieldset disabled 가 안의 input·select·textarea·radio 를 한 번에 잠근다.
+            display:contents 라 격자 배치는 그대로다. */}
+        <fieldset disabled style={{ display: 'contents', border: 0, margin: 0, padding: 0, minWidth: 0 }}>
+          {body}
+        </fieldset>
+        <FormActions>
+          <Button variant="primary" onClick={() => (window.location.hash = `#/cases/${caseId}/intake`)}>
+            수정
+          </Button>
+        </FormActions>
+      </>
+    );
+  }
 
   return (
     <>
@@ -319,76 +417,13 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
       />
 
       <div className="wire-container">
-        {/* 1. 실제로 진행한 상담의 일시·방식·장소. 장소는 대면일 때만 나온다(요청 2). */}
-        <Card title="상담 일시와 상담 방식">
-          <DateTimeInput idPrefix="held-at" value={heldAt} onChange={setHeldAt} disabled={saving} required={false} />
-          <ChoiceGroup legend="상담 방식">
-            {INTAKE_METHODS.map((m) => (
-              <Choice
-                key={m.key}
-                type="radio"
-                name="method"
-                label={m.label}
-                checked={method === m.key}
-                onChange={() => setMethod(method === m.key ? '' : m.key)}
-              />
-            ))}
-          </ChoiceGroup>
-          {method === 'in_person' && (
-            <FormField label="상담 장소" htmlFor="place">
-              <input id="place" type="text" value={place} onChange={(e) => setPlace(e.target.value)} />
-            </FormField>
-          )}
-        </Card>
-
-        {/* 2~9 구획. 두 열로 나란히 놓되 DOM 순서는 구획 순서 그대로다. */}
-        <div className="card-grid two-col">
-          {INTAKE_GROUPS.map(renderGroup)}
-
-          <Card title="전체 상담 목표">
-            <FormField
-              label="전체 상담 목표"
-              htmlFor="overall-goal"
-            >
-              <input
-                id="overall-goal"
-                type="text"
-                value={overallGoal}
-                onChange={(e) => setOverallGoal(e.target.value)}
-              />
-            </FormField>
-          </Card>
-
-          <Card title="수행할 과제">
-            <LineList
-              id="intake-task"
-              label="수행할 과제"
-              placeholder="예: 채무 내역서 떼어 오기"
-              lines={tasks}
-              draft={taskDraft}
-              onDraft={setTaskDraft}
-              onChange={setTasks}
-            />
-          </Card>
-
-          <Card title="다음에 물어볼 것">
-            <LineList
-              id="intake-question"
-              label="다음에 물어볼 것"
-              placeholder="예: 통원 주기가 어떻게 되는지"
-              lines={questions}
-              draft={questionDraft}
-              onDraft={setQuestionDraft}
-              onChange={setQuestions}
-            />
-          </Card>
-        </div>
+        {body}
 
         <FormActions>
           {error && <ErrorText>{error}</ErrorText>}
           <Button variant="primary" disabled={saving} onClick={() => void save()}>
             {/* 이미 쓴 인테이크를 다시 열었을 때도 버튼은 `저장`이다.
-                들어올 때 누른 버튼(`고쳐 쓰기`)과 이름이 같으면 같은 일을 또 하는 줄 안다. */}
+                들어올 때 누른 버튼(`수정`)과 이름이 같으면 같은 일을 또 하는 줄 안다. */}
             {saving ? '저장 중…' : written ? '저장' : '저장하고 상담 일정 잡기'}
           </Button>
         </FormActions>

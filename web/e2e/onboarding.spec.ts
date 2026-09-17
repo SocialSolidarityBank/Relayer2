@@ -39,7 +39,7 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
   await page.getByRole('link', { name: '가입하기' }).click();
   await expect(page).toHaveURL(/#\/signup$/);
   // 새 DB: 첫 가입 문이 열려 있다. 계정만 만든다.
-  await expect(page.getByRole('heading', { name: '먼저 관리자 계정을 만들어요', level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '관리자 계정 만들기', level: 1 })).toBeVisible();
   await page.locator('#su-email').fill('e2e-admin');
   await page.locator('#su-pw').fill('e2e-admin');
   await page.locator('#su-name').fill('E2E 관리자');
@@ -93,19 +93,19 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
   await worker.locator('#iv-name').fill('E2E 실무자');
   await worker.getByRole('button', { name: '들어가기' }).click();
   await expect(worker).toHaveURL(/#\/setup-pending$/);
-  await expect(worker.getByRole('heading', { name: '기관을 준비하고 있어요', level: 1 })).toBeVisible();
+  await expect(worker.getByRole('heading', { name: '기관 준비 중', level: 1 })).toBeVisible();
   await page.getByRole('button', { name: '다음' }).click();
 
   // 5단계: AI/STT/DB 연결 — 키만 넣으면 되는 것과 설치가 필요한 것이 갈려 보인다. 확인만 하고 마친다.
-  await expect(page.getByRole('tab', { name: '5. AI/STT/DB 연결', selected: true })).toBeVisible();
-  for (const name of ['1. AI', '2. STT', '3. DB']) {
+  await expect(page.getByRole('tab', { name: '5. 외부 서비스 연결', selected: true })).toBeVisible();
+  for (const name of ['1. AI 정리', '2. 녹음 글로 옮기기', '3. 데이터베이스']) {
     await expect(page.locator('details.wire-card-details summary', { hasText: name })).toBeVisible();
   }
   await page.getByRole('button', { name: '완료' }).click();
 
   // ── 완료 화면 = 기관 요약 → 상담 일정 ──────────────────────────
   await expect(page).toHaveURL(/#\/workspace\?done=1$/);
-  await expect(page.getByRole('heading', { name: '기관 설정을 마쳤어요', level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '기관 설정 완료', level: 1 })).toBeVisible();
   await expect(page.getByText(ORG, { exact: true })).toBeVisible();
   await page.getByRole('link', { name: '상담 일정으로 이동하기' }).click();
   await expect(page).toHaveURL(/#\/schedule$/);
@@ -120,7 +120,7 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
   expect(await gate.json()).toEqual({ open: false, workspace: { name: ORG, slug: 'e2e-slug' } });
   const stranger = await browser.newPage();
   await stranger.goto(`${base}/#/signup`);
-  await expect(stranger.getByRole('heading', { name: '이 기관은 초대 링크로만 가입할 수 있어요', level: 1 })).toBeVisible();
+  await expect(stranger.getByRole('heading', { name: '초대 링크로만 가입 가능', level: 1 })).toBeVisible();
   await expect(stranger.locator('#su-email')).toHaveCount(0);
   await expect(stranger.getByText(ORG, { exact: true })).toBeVisible();
   // 세션 없는 깊은 주소는 랜딩을 거치지 않고 로그인으로 가고, 로그인 뒤 그 주소로 돌아간다.

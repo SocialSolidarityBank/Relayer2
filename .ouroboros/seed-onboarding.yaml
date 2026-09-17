@@ -21,7 +21,7 @@ constraints:
   - "관리자 수를 바꾸는 모든 트랜잭션(가입·초대 수락·역할 변경·탈퇴)은 같은 organization 행 잠금을 먼저 잡아 직렬화한다. 마지막 활성 관리자는 실무자로 내리거나 탈퇴시킬 수 없다"
   - "초대 규율 유지: 기관을 만드는 첫 가입만 예외이고 그 뒤 합류는 초대 링크뿐이다. 메일 발송을 넣지 않는다(링크 수동 복사 유지). SPEC §18-3 문장을 이 예외로 고친다"
   - "마법사: #/onboarding 은 관리자 전용 단계형 화면. 순서 기관 정보(reg_no·address·phone, 이름은 가입에서 이미) → 사업 1개 이상(이름·기간·한 줄 설명) → 실무자 초대(건너뛰기 가능) → API 연결 → 완료. 완료가 POST /settings/onboarding/complete 로 onboarded_at 을 찍고 #/participants/new 로 보낸다. onboarded_at 이 비어 있는 동안 관리자는 클라이언트 리다이렉트로 마법사에 머문다(서버 잠금 없음). GET /me 에 onboarded:boolean 을 싣는다. 기존 settings 폼 컴포넌트를 재사용하고 새 스타일·토큰을 만들지 않는다"
-  - "마이그레이션(0024)에서 `update organization set onboarded_at = now() where name <> ''` 로 기존 배포는 마법사를 건너뛴다. PUT /settings/org 의 name 은 min(1)"
+  - "마이그레이션(0025)에서 `update organization set onboarded_at = now() where name <> ''` 로 기존 배포는 마법사를 건너뛴다. PUT /settings/org 의 name 은 min(1)"
   - "API 연결 단계: '키만 넣으면 되는 것'(OpenAI API 키 → gpt-5.5)과 '설치가 필요한 것'(STT Azure, DB)을 나눠 보여 준다. PUT /settings/ai-key {key:string|null} 은 관리자 전용, 저장 전 OpenAI GET /v1/models 로 검증해 실패하면 400 이고 저장하지 않으며, pii.ts 의 encryptPii 로 organization.enc_openai_key 에 넣고, null 이면 지운다. ai.ts 의 callOpenAi 는 호출마다 DB 키 → OPENAI_API_KEY 순으로 고르고 provider 가 openai 일 때만 DB 키를 쓴다. GET /settings/connections 의 ai 에 source:'db'|'env'|null 을 더하고 키 값은 어떤 응답·감사·로그에도 싣지 않는다. 감사 ai.key.set(fields provider=openai 또는 removed=1). STT·Supabase 키 입력 방식은 이번 범위 밖(상태·안내만)"
   - "사업 실체: programs 에 starts_on date·ends_on date·description text 를 더하고(starts_on ≤ ends_on 검사, ends_on 은 정보용), support_cases.program_id bigint FK → programs 를 더해 백필한다. 백필 규칙: programs 에 없는 program_name 은 사업으로 만들고, program_name = '' 은 '(미지정)' 사업(on conflict 로 재사용, retired_at 이 없으면 now())에 붙인다. 그 뒤 program_id NOT NULL, program_name 컬럼 제거. program_name 을 읽던 조회(settings.ts:98·148·167·358, service.ts 목록·상세, audit.ts:188·343(CSV), participant-access.ts:146, api/src/domain/briefing.ts, api/src/domain/types.ts:97, web api.ts 타입)는 join 으로 바꾸고 POST /cases 와 당사자 등록 화면(participant-new.tsx)은 program_id 를 보낸다. POST /settings/programs 도 {name, starts_on?, ends_on?, description?} 를 받는다"
   - "사업 이름 변경: PATCH /settings/programs/:id {name?, starts_on?, ends_on?, description?} 관리자 전용, id 고정. retired_at 이 있는 사업은 409 로 거절한다(종료 후 수정 불가 — 다시 열기 뒤에만). 과거 열람 기록·당사자 화면에도 새 이름이 보이는 것을 받아들인다. 감사 program.update"
@@ -42,7 +42,7 @@ acceptance_criteria:
       그 뒤 GET /auth/signup 은 open:false, 두 번째 POST 는 403 으로 계정을 만들지 않고, 동시에 두 번 보내도 관리자는 한 명만 생기며,
       GET /me 가 onboarded:false 를 싣고 POST /settings/onboarding/complete 뒤 onboarded:true 가 된다
     verify_command: "RELAYER_INTEGRATION=1 pnpm --dir api exec vitest run test/signup.integration.test.ts --reporter=basic"
-    expected_artifacts: ["api/src/routes.ts", "api/src/settings.ts", "api/test/signup.integration.test.ts", "migrations/0024_onboarding_programs.sql"]
+    expected_artifacts: ["api/src/routes.ts", "api/src/settings.ts", "api/test/signup.integration.test.ts", "migrations/0025_onboarding_programs.sql"]
     output_assertion: "NONE"
   - description: >-
       관리자가 실무자를 관리자로 올리고 다시 내릴 수 있고, 마지막 활성 관리자를 내리거나 탈퇴시키면 409 이며,
@@ -54,8 +54,8 @@ acceptance_criteria:
       마이그레이션 적용 뒤 support_cases 에 program_name 이 없고 program_id 가 NOT NULL 이며, 이전에 program_name 이 사업 목록에 없던 사례는
       그 이름의 사업에, 빈 이름이던 사례는 내린 '(미지정)' 사업에 붙어 있고, programs 에 starts_on·ends_on·description 이 있으며,
       기존 배포(기관 이름 있음)는 onboarded_at 이 채워지고, 미적용 마이그레이션이 없다
-    verify_command: "RELAYER_INTEGRATION=1 pnpm --dir api exec vitest run test/migration-0024.integration.test.ts --reporter=basic && RELAYER_INTEGRATION=1 node api/src/migrate.ts --check"
-    expected_artifacts: ["migrations/0024_onboarding_programs.sql", "api/test/migration-0024.integration.test.ts"]
+    verify_command: "RELAYER_INTEGRATION=1 pnpm --dir api exec vitest run test/migration-0025.integration.test.ts --reporter=basic && RELAYER_INTEGRATION=1 node api/src/migrate.ts --check"
+    expected_artifacts: ["migrations/0025_onboarding_programs.sql", "api/test/migration-0025.integration.test.ts"]
     output_assertion: "NONE"
   - description: >-
       사업 이름을 바꿔도 그 사업의 사례가 새 이름으로 조회되고, 열린 사례·예정 회차가 있는 사업을 종료하면 409 에 건수가 실리며 confirm 으로 종료되고,
@@ -169,7 +169,7 @@ exit_conditions:
     description: "새 통합 테스트 6개와 기존 테스트가 통과한다"
     criteria: "RELAYER_INTEGRATION=1 pnpm --dir api exec vitest run --reporter=basic 명령의 종료 코드가 0이다"
   - name: "마이그레이션 검사"
-    description: "0024 적용 후 검사가 통과한다"
+    description: "0025 적용 후 검사가 통과한다"
     criteria: "RELAYER_INTEGRATION=1 node api/src/migrate.ts --check 명령의 종료 코드가 0이다"
   - name: "화면 흐름 검증"
     description: "가입→마법사→당사자 등록→배정→사업별 필터 E2E 가 통과한다"

@@ -65,6 +65,7 @@ const KEY_LABEL: Record<string, string> = {
   deleted: '지운 수',
   missing: '없던 수',
   delete_after: '지울 날',
+  store: '응답 보관',
 };
 
 /** `fields` 한 조각을 사람 말로 편다. */
@@ -78,7 +79,11 @@ function fieldText(field: string): string {
   }
   if (field.includes('=')) {
     const [k, v] = field.split('=');
-    const val = k === 'bytes' ? `${Math.ceil(Number(v) / 1024)}KB` : k === 'assignee' && v === 'none' ? '없음' : v;
+    const val =
+      k === 'bytes' ? `${Math.ceil(Number(v) / 1024)}KB`
+      : k === 'assignee' && v === 'none' ? '없음'
+      : k === 'store' ? (v === 'false' ? '끔' : '켬')
+      : v;
     return `${KEY_LABEL[k] ?? k} ${val}`;
   }
   return FIELD_LABEL[field] ?? field;
@@ -129,7 +134,7 @@ export function AuditScreen({ embedded }: { embedded?: boolean } = {}) {
     setRows(null);
     void listAudit(query)
       .then(setRows)
-      .catch((e) => setError(e instanceof Error ? e.message : '불러오지 못했어요.'));
+      .catch((e) => setError(e instanceof Error ? e.message : '불러오기 실패'));
   }, [query, asked]);
 
   // 글자 검색은 화면이 한다. 이름이 금고 암호문이라 서버가 이름으로 못 찾는다.
@@ -153,7 +158,7 @@ export function AuditScreen({ embedded }: { embedded?: boolean } = {}) {
 
   return (
     <>
-      {!embedded && <PageHeader title="열람 기록" meta="누가 누구 것을 언제 봤는지. 본 값은 남기지 않아요" />}
+      {!embedded && <PageHeader title="열람 기록" meta="누가 누구 것을 언제 봤는지, 본 값은 남기지 않음" />}
 
       {/* 필터는 카드 밖 한 줄이다(2026-09-16 Q). 아래 기록이 본체라 위가 무거우면 안 된다. */}
       <div className="log-filters">
@@ -210,17 +215,17 @@ export function AuditScreen({ embedded }: { embedded?: boolean } = {}) {
 
       {!asked ? (
         <Card title="열람 기록">
-          <Empty>기간·확인 필요·검색 중에 하나를 고르면 기록이 나와요.</Empty>
+          <Empty>기간, 확인 필요, 검색 중 하나 선택</Empty>
         </Card>
       ) : (
         <Card
           title={rows === null ? '열람 기록' : `열람 기록 ${shown.length.toLocaleString()}건`}
-          hint={shown.length >= LIMIT ? `${LIMIT}건까지 보여요. 기간을 줄이거나 더 좁혀 보세요.` : undefined}
+          hint={shown.length >= LIMIT ? `${LIMIT}건까지 표시, 기간을 줄이거나 더 좁히기` : undefined}
         >
           {rows === null ? (
-            <Empty>찾는 중이에요.</Empty>
+            <Empty>찾는 중</Empty>
           ) : shown.length === 0 ? (
-            <Empty>해당하는 기록이 없어요.</Empty>
+            <Empty>해당하는 기록 없음</Empty>
           ) : (
             <div className="data-table-wrap">
               <table className="data-table">
@@ -249,7 +254,7 @@ export function AuditScreen({ embedded }: { embedded?: boolean } = {}) {
                         {r.off_assignment && ' (맡은 당사자 아님)'}
                       </td>
                       <td>{r.program_name ?? ''}</td>
-                      <td>{r.fields.map(fieldText).join(' · ')}</td>
+                      <td>{r.fields.map(fieldText).join(', ')}</td>
                     </tr>
                   ))}
                 </tbody>

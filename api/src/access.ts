@@ -18,8 +18,8 @@ export class CaseClosed extends Error {}
 export async function assertCaseOpen(caseId: number): Promise<void> {
   const [row] = await sql<Array<{ status: string }>>`
     select status from support_cases where id = ${caseId}`;
-  if (!row) throw new NotFound('사례를 찾지 못했어요.');
-  if (row.status === 'closed') throw new CaseClosed('종결된 상담이라 녹음·전사를 더 받지 않아요.');
+  if (!row) throw new NotFound('사례 없음');
+  if (row.status === 'closed') throw new CaseClosed('종결된 상담, 녹음·전사 불가');
 }
 
 /** 사례가 속한 사업이 종료됐다. 정리(종결·회수·배정)만 되고 새 기록은 막힌다. 라우트는 409 로 답한다. */
@@ -47,8 +47,8 @@ export async function assertCaseAccess(caseId: number, userId: number): Promise<
     select exists (select 1 from case_assignments a
                    where a.case_id = c.id and a.user_id = ${userId}) as mine
     from support_cases c where c.id = ${caseId}`;
-  if (!row) throw new NotFound('사례를 찾지 못했어요.');
-  if (!row.mine) throw new AccessDenied('맡은 당사자가 아니에요.');
+  if (!row) throw new NotFound('사례 없음');
+  if (!row.mine) throw new AccessDenied('배정되지 않은 당사자');
 }
 
 /** 회차 → 사례. 없으면 null. */

@@ -13,25 +13,39 @@ export type OutcomeSubmission = {
 /**
  * 회차 순서상 마지막 결과. 회차 seq 가 큰 쪽이 최신이고,
  * 같은 회차 안에 여러 행이 쌓였으면(고쳐 쓴 경우) **나중에 쓴 행**이 유효하다.
+ *
+ * **사람이 누른 결과가 자동 `unchecked` 보다 우선한다**(2026-09-18 버그리포트 4·5).
+ * `unchecked` 는 "저장할 때 안 눌렀음"을 저장이 자동으로 찍는 표시다. 3회차를 나중에 고쳐 쓰며
+ * `완료`를 찍어도, 먼저 저장된 4~6회차의 `unchecked` 가 뒤 회차라는 이유로 이기면 카드가 안 닫힌다.
+ * 그래서 명시 결과끼리 먼저 겨루고, 하나도 없을 때만 `unchecked` 를 본다.
  */
 export function latestOutcome(
   card: Card,
   outcomes: CardOutcome[],
   seqBySession: Record<number, number>,
 ): CardOutcome | undefined {
-  let best: CardOutcome | undefined;
-  let bestSeq = -1;
-  let bestId = -1;
+  let explicit: CardOutcome | undefined;
+  let explicitSeq = -1;
+  let explicitId = -1;
+  let unchecked: CardOutcome | undefined;
+  let uncheckedSeq = -1;
+  let uncheckedId = -1;
   for (const o of outcomes) {
     if (o.card_id !== card.id) continue;
     const seq = seqBySession[o.session_id] ?? -1;
-    if (seq > bestSeq || (seq === bestSeq && o.id > bestId)) {
-      bestSeq = seq;
-      bestId = o.id;
-      best = o;
+    if (o.result === 'unchecked') {
+      if (seq > uncheckedSeq || (seq === uncheckedSeq && o.id > uncheckedId)) {
+        uncheckedSeq = seq;
+        uncheckedId = o.id;
+        unchecked = o;
+      }
+    } else if (seq > explicitSeq || (seq === explicitSeq && o.id > explicitId)) {
+      explicitSeq = seq;
+      explicitId = o.id;
+      explicit = o;
     }
   }
-  return best;
+  return explicit ?? unchecked;
 }
 
 /**

@@ -60,7 +60,7 @@ describe('음성 동의 문안', () => {
     // "얼마나 갖고 있는가"가 동의의 내용이다. 기간이 바뀌면 다시 받아야 한다.
     const before = copyHash('voice_original_retention_period');
     expect(canonicalPreimage('voice_original_retention_period')).toContain(
-      'retentionDuration=institution_retention_1y',
+      'retentionDuration=institution_retention_30d',
     );
     expect(before).toMatch(/^[0-9a-f]{64}$/);
   });

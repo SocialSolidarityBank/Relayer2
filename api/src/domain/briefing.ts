@@ -17,6 +17,12 @@ export type BriefingItem = {
   text: string;
   source_session_seq: number;
   last_result: string | null;
+  /** 과제 수행 주체(2026-09-18). 질문 카드도 값은 있지만 화면은 과제에만 쓴다. */
+  owner: Card['owner'];
+  /** 닫힌 카드만: 어느 회차가 닫았나(완료·중단·확인함을 찍은 회차). */
+  closed_session_seq?: number;
+  /** not_done 일 때 continue·stop. 중단은 `stop`. */
+  last_follow?: string | null;
 };
 
 export type Briefing = {
@@ -43,6 +49,9 @@ export type Briefing = {
   };
   today_questions: BriefingItem[] | null;
   open_tasks: { items: BriefingItem[]; unchecked_carried_over: number } | null;
+  /** 완료·중단·확인함으로 닫힌 카드. 레일 아래 접힌 목록이 보여 준다(2026-09-18 Q). 닫은 회차 최신순. */
+  closed_tasks: BriefingItem[];
+  closed_questions: BriefingItem[];
 };
 
 export type BriefingInput = {
@@ -73,6 +82,7 @@ export function buildBriefing(input: BriefingInput): Briefing {
     text: card.text,
     source_session_seq: seqBySession[card.source_session_id] ?? 0,
     last_result: latestOutcome(card, outcomes, seqBySession)?.result ?? null,
+    owner: card.owner,
   });
 
   const open = openCards(cards, outcomes, sessions).sort(
@@ -80,6 +90,20 @@ export function buildBriefing(input: BriefingInput): Briefing {
   );
   const questions = open.filter((c) => c.kind === 'question').map(toItem);
   const tasks = open.filter((c) => c.kind === 'promise');
+
+  const openIds = new Set(open.map((c) => c.id));
+  const closed = cards
+    .filter((c) => (c.kind === 'promise' || c.kind === 'question') && !openIds.has(c.id))
+    .map((c) => {
+      const last = latestOutcome(c, outcomes, seqBySession);
+      const item: BriefingItem = {
+        ...toItem(c),
+        closed_session_seq: seqBySession[last?.session_id ?? -1] ?? 0,
+        last_follow: last?.follow ?? null,
+      };
+      return { kind: c.kind, item };
+    })
+    .sort((a, b) => (b.item.closed_session_seq ?? 0) - (a.item.closed_session_seq ?? 0));
 
   // 위험 신호는 확정된 것만. 위험 관련 과제는 목록 위로 올린다.
   const risks = cards.filter((c) => c.kind === 'judgment' && c.risk_type).map(toItem);
@@ -131,5 +155,7 @@ export function buildBriefing(input: BriefingInput): Briefing {
       taskItems.length > 0
         ? { items: taskItems, unchecked_carried_over: uncheckedCarriedOver(tasks, outcomes, sessions) }
         : null,
+    closed_tasks: closed.filter((c) => c.kind === 'promise').map((c) => c.item),
+    closed_questions: closed.filter((c) => c.kind === 'question').map((c) => c.item),
   };
 }

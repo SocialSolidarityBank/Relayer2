@@ -36,6 +36,7 @@ import {
   setAiKey,
   setWorkerRole,
   updateProgram,
+  Unauthorized,
   workerCases,
   type AssignmentCase,
   type Connections,
@@ -67,6 +68,7 @@ import {
   Fold,
   FormActions,
   Item,
+  Meta,
   PageHeader,
 } from '../ui.tsx';
 import { setTheme, themeChoice, type ThemeChoice } from '../theme.ts';
@@ -95,28 +97,28 @@ export const SETTINGS_GROUPS = [
     key: 'me',
     title: '내 정보',
     items: [
-      { key: 'profile', label: '내 정보', desc: '이름·연락처·이메일을 고쳐요.', admin: false },
-      { key: 'theme', label: '화면 테마', desc: '밝게·어둡게·기기 설정 따라.', admin: false },
-      { key: 'leave', label: '계정 삭제하기', desc: '로그인을 막아요. 남긴 기록은 그대로 있어요.', admin: false },
+      { key: 'profile', label: '내 정보', desc: '이름·연락처·이메일 수정', admin: false },
+      { key: 'theme', label: '화면 테마', desc: '밝게·어둡게·기기 설정 따라', admin: false },
+      { key: 'leave', label: '계정 삭제하기', desc: '로그인 차단, 기록은 유지', admin: false },
     ],
   },
   {
     key: 'staff',
     title: '실무자 관리',
     items: [
-      { key: 'workers', label: '실무자 목록', desc: '누가 있고 누구를 맡고 있는지 봐요.', admin: true },
-      { key: 'assign', label: '담당 배정하기', desc: '올라온 요청을 확정하고, 담당이 바뀔 때 넘겨요.', admin: true },
-      { key: 'invite', label: '실무자 초대하기', desc: '초대 링크를 만들어 건네요. 7일 뒤 만료돼요.', admin: true },
+      { key: 'workers', label: '실무자 목록', desc: '실무자와 담당 현황', admin: true },
+      { key: 'assign', label: '담당 배정하기', desc: '배정 요청 확정, 담당 변경 넘기기', admin: true },
+      { key: 'invite', label: '실무자 초대하기', desc: '초대 링크 만들기, 7일 뒤 만료', admin: true },
       // 관리자에게는 `담당 배정하기` 안에 합쳐 두었다. 실무자에게만 따로 선다.
-      { key: 'request', label: '담당 배정 요청하기', desc: '내가 맡겠다고 올린 당사자를 봐요.', admin: false, workerOnly: true },
+      { key: 'request', label: '담당 배정 요청하기', desc: '내가 올린 배정 요청', admin: false, workerOnly: true },
     ],
   },
   {
     key: 'org',
     title: '기관 정보 관리',
     items: [
-      { key: 'org-info', label: '기관 정보', desc: '기관 이름·번호·주소·전화.', admin: true },
-      { key: 'programs', label: '사업 목록', desc: '당사자를 등록할 때 고르는 사업이에요.', admin: true },
+      { key: 'org-info', label: '기관 정보', desc: '기관 이름·번호·주소·전화', admin: true },
+      { key: 'programs', label: '사업 목록', desc: '당사자 등록 시 고르는 사업', admin: true },
     ],
   },
   {
@@ -126,10 +128,10 @@ export const SETTINGS_GROUPS = [
     // 서로 상관이 없어, 한 페이지에 쌓으면 무엇을 보러 왔는지 잃는다.
     nested: true,
     items: [
-      { key: 'connections', label: 'AI/STT/DB 연결', desc: 'AI·전사·데이터베이스가 붙어 있는지.', admin: true },
-      { key: 'audit', label: '열람 기록 관리', desc: '누가 언제 무엇을 열었는지 찾아봐요.', admin: true },
-      { key: 'consent', label: '동의서 관리', desc: '지금 쓰는 동의 문안.', admin: true },
-      { key: 'download', label: '자료 다운로드', desc: '기간·실무자·종류를 정해 CSV 로 받아요.', admin: true },
+      { key: 'connections', label: '외부 서비스 연결', desc: 'AI 정리·녹음 글로 옮기기·데이터베이스 연결 상태', admin: true },
+      { key: 'audit', label: '열람 기록 관리', desc: '누가 언제 무엇을 열었는지 검색', admin: true },
+      { key: 'consent', label: '동의서 관리', desc: '지금 쓰는 동의 문안', admin: true },
+      { key: 'download', label: '자료 다운로드', desc: '기간·실무자·종류를 정해 CSV 받기', admin: true },
     ],
   },
 ] as const;
@@ -224,8 +226,8 @@ export function SettingsScreen({
     return (
       <>
         <PageHeader title={(known && ('title' in known ? known.title : known.label)) ?? '설정'} />
-        <Card title="관리자만 볼 수 있어요">
-          <Empty>이 설정은 기관 관리자가 다뤄요. 필요하면 관리자에게 말씀해 주세요.</Empty>
+        <Card title="관리자 전용">
+          <Empty>기관 관리자가 다루는 설정, 필요하면 관리자에게 문의</Empty>
         </Card>
       </>
     );
@@ -280,7 +282,7 @@ function ProfilePane() {
   useEffect(() => {
     void getProfile().then(setP);
   }, []);
-  if (!p) return <Empty>불러오는 중이에요.</Empty>;
+  if (!p) return <Empty>불러오는 중</Empty>;
 
   const save = async () => {
     setErr(null);
@@ -288,7 +290,7 @@ function ProfilePane() {
       setP(await saveProfile({ name: p.name, phone: p.phone, contact_email: p.contact_email }));
       setSaved(true);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : '저장하지 못했어요.');
+      setErr(e instanceof Error ? e.message : '저장 실패');
     }
   };
 
@@ -315,7 +317,7 @@ function ProfilePane() {
       </Field>
       <FormActions>
         {err && <ErrorText>{err}</ErrorText>}
-        {saved && !err && <span className="panel-meta">저장했어요.</span>}
+        {saved && !err && <span className="panel-meta">저장됨</span>}
         <Button variant="primary" onClick={() => void save()}>
           저장하기
         </Button>
@@ -327,9 +329,9 @@ function ProfilePane() {
 // 설명은 보기 안에서 끝낸다(2026-09-17 Q "설명은 짧게 선택창 안에서") — 세 줄 카드로
 // 늘어놓으면 고르는 일보다 읽는 일이 커진다(§13 설명형 글은 기본으로 두지 않는다).
 const THEMES: ReadonlyArray<[ThemeChoice, string]> = [
-  ['light', '밝게 — 흰 바탕'],
-  ['dark', '어둡게 — 어두운 바탕'],
-  ['system', '기기 설정 따라 — 기기가 어두워지면 같이'],
+  ['light', '밝게, 흰 바탕'],
+  ['dark', '어둡게, 어두운 바탕'],
+  ['system', '기기 설정 따라, 기기가 어두워지면 같이'],
 ];
 
 function ThemePane() {
@@ -367,14 +369,12 @@ function LeavePane() {
       await deactivateMe();
       window.location.reload();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : '나가지 못했어요.');
+      setErr(e instanceof Error ? e.message : '계정 삭제 실패');
     }
   };
   return (
-    <Card
-      title="계정 삭제하기"
-    >
-      <Field label="확인" htmlFor="leave-c" hint="`나가기` 라고 적어 주세요.">
+    <Card title="계정 삭제하기" tone="warn">
+      <Field label="확인" htmlFor="leave-c" tone="warn" hint="`나가기` 입력">
         <input id="leave-c" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
       </Field>
       <FormActions>
@@ -412,7 +412,7 @@ function AssignPane({ me }: { me: { id: number } }) {
       }
     } catch (e) {
       if (seq === dirSeq.current)
-        setDirError(e instanceof Error ? e.message : '불러오지 못했어요');
+        setDirError(e instanceof Error ? e.message : '불러오기 실패')
     }
   };
 
@@ -423,7 +423,7 @@ function AssignPane({ me }: { me: { id: number } }) {
       setReqs(requests);
       await loadDir();
     } catch (e) {
-      setDirError(e instanceof Error ? e.message : '배정 정보를 불러오지 못했어요.');
+      setDirError(e instanceof Error ? e.message : '배정 정보 불러오기 실패');
     }
   };
   useEffect(() => {
@@ -441,7 +441,7 @@ function AssignPane({ me }: { me: { id: number } }) {
       await decideRequest(id, decision);
       await reload();
     } catch (e) {
-      setSaveError(e instanceof Error ? e.message : '배정 요청을 처리하지 못했어요.');
+      setSaveError(e instanceof Error ? e.message : '배정 요청 처리 실패');
     } finally {
       setSaving(false);
     }
@@ -472,7 +472,7 @@ function AssignPane({ me }: { me: { id: number } }) {
       setConfirmClear(false);
       await reload();
     } catch (e) {
-      setSaveError(e instanceof Error ? e.message : '저장하지 못했어요');
+      setSaveError(e instanceof Error ? e.message : '저장 실패');
     } finally {
       setSaving(false);
     }
@@ -496,12 +496,12 @@ function AssignPane({ me }: { me: { id: number } }) {
         {saveError && <ErrorText>{saveError}</ErrorText>}
         <h3 className="wire-subhead">승인할 배정 요청 목록</h3>
         {toApprove.length === 0 ? (
-          <Empty>대기 중인 요청이 없어요.</Empty>
+          <Empty>대기 중인 요청 없음</Empty>
         ) : (
           toApprove.map((r) => (
             <div className="wire-repeat-card" key={r.id}>
               <Item
-                title={`${r.pseudonym} | ${r.program_name}`}
+                title={<Meta parts={[r.pseudonym, r.program_name]} />}
                 desc={`${r.requester}, ${date(r.created_at)}${r.reason ? `, ${r.reason}` : ''}`}
                 action={
                   <>
@@ -522,12 +522,12 @@ function AssignPane({ me }: { me: { id: number } }) {
 
         <h3 className="wire-subhead">내 요청</h3>
         {mine.length === 0 ? (
-          <Empty>내가 올린 요청이 없어요.</Empty>
+          <Empty>내가 올린 요청 없음</Empty>
         ) : (
           mine.map((r) => (
             <div className="wire-repeat-card" key={r.id}>
               <Item
-                title={`${r.pseudonym} | ${r.program_name}`}
+                title={<Meta parts={[r.pseudonym, r.program_name]} />}
                 desc={`${date(r.created_at)} 올림${r.reason ? `, ${r.reason}` : ''}`}
                 action={
                   r.decided_at ? (
@@ -559,14 +559,14 @@ function AssignPane({ me }: { me: { id: number } }) {
             </FormActions>
           </>
         ) : dir === null || workers === null ? (
-          <Empty>불러오는 중이에요.</Empty>
+          <Empty>불러오는 중</Empty>
         ) : dir.length === 0 ? (
-          <Empty>등록된 사례가 없어요.</Empty>
+          <Empty>등록된 사례 없음</Empty>
         ) : (
           dir.map((c) => (
             <div className="wire-repeat-card" key={c.id}>
               <Item
-                title={`${c.pseudonym} | ${c.program_name}`}
+                title={<Meta parts={[c.pseudonym, c.program_name]} />}
                 desc={`${c.status === 'open' ? '진행 중' : '종결'}, ${
                   c.assignees.length > 0 ? `담당 ${c.assignees.map((a) => a.name).join(', ')}` : '담당 없음'
                 }`}
@@ -591,7 +591,7 @@ function AssignPane({ me }: { me: { id: number } }) {
                     ))}
                   </ChoiceGroup>
                   {confirmClear && (
-                    <ErrorText>아무도 고르지 않으면 이 사례의 담당이 모두 거둬져요.</ErrorText>
+                    <ErrorText>아무도 고르지 않으면 담당 모두 해제</ErrorText>
                   )}
                   {saveError && <ErrorText>{saveError}</ErrorText>}
                   <FormActions>
@@ -633,7 +633,7 @@ export function InvitePane() {
     <>
       <Card
         title="실무자 초대"
-        actions={
+        action={
           <Button variant="primary" onClick={() => void make()}>
             링크 만들기
           </Button>
@@ -672,9 +672,9 @@ export function InvitePane() {
 
       <Card title="보낸 초대">
         {rows === null ? (
-          <Empty>불러오는 중이에요.</Empty>
+          <Empty>불러오는 중</Empty>
         ) : rows.length === 0 ? (
-          <Empty>보낸 초대가 없어요.</Empty>
+          <Empty>보낸 초대 없음</Empty>
         ) : (
           rows.map((v) => {
             const state = v.accepted_at
@@ -736,14 +736,14 @@ function WorkersPane({ me }: { me: { id: number } }) {
       // 자기 자신을 내렸으면 다음 요청부터 실무자다 — 셸이 알아야 하니 다시 읽게 한다.
       if (w.id === me.id) window.location.reload();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : '역할을 바꾸지 못했어요.');
+      setErr(e instanceof Error ? e.message : '역할 변경 실패');
     }
   };
 
   const picked = programs.find((p) => p.id === programId);
   return (
     <Card title="실무자 목록">
-      <Field label="사업" htmlFor="wk-program" control="select" hint="사업을 고르면 그 사업의 진행 중 사례를 맡은 사람만 보여요.">
+      <Field label="사업" htmlFor="wk-program" control="select" hint="선택한 사업의 진행 중 사례 담당자만 표시">
         <select
           id="wk-program"
           value={programId ?? ''}
@@ -760,9 +760,9 @@ function WorkersPane({ me }: { me: { id: number } }) {
       </Field>
       {err && <ErrorText>{err}</ErrorText>}
       {rows === null ? (
-        <Empty>불러오는 중이에요.</Empty>
+        <Empty>불러오는 중</Empty>
       ) : rows.length === 0 ? (
-        <Empty>{picked ? `${picked.name}의 진행 중 사례를 맡은 실무자가 없어요.` : '실무자가 없어요.'}</Empty>
+        <Empty>{picked ? `${picked.name} 진행 중 사례 담당 실무자 없음` : '실무자 없음'}</Empty>
       ) : (
         <div className="data-table-wrap">
           <table className="data-table">
@@ -803,11 +803,13 @@ function WorkersPane({ me }: { me: { id: number } }) {
                     <tr>
                       <td colSpan={5}>
                         {cases.length === 0 ? (
-                          <Empty>맡고 있는 당사자가 없어요.</Empty>
+                          <Empty>맡고 있는 당사자 없음</Empty>
                         ) : (
-                          cases
-                            .map((c) => `${c.pseudonym} | ${c.program_name} | ${c.status === 'open' ? '진행 중' : '종결'}`)
-                            .join(' / ')
+                          cases.map((c) => (
+                            <div key={c.id}>
+                              <Meta parts={[c.pseudonym, c.program_name, c.status === 'open' ? '진행 중' : '종결']} />
+                            </div>
+                          ))
                         )}
                       </td>
                     </tr>
@@ -866,7 +868,7 @@ export function OrgPane() {
   useEffect(() => {
     void getOrg().then(setOrg);
   }, []);
-  if (!org) return <Empty>불러오는 중이에요.</Empty>;
+  if (!org) return <Empty>불러오는 중</Empty>;
 
   const save = async () => {
     setErr(null);
@@ -874,7 +876,7 @@ export function OrgPane() {
       setOrg(await saveOrg(orgPayload(org)));
       setSaved(true);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : '저장하지 못했어요.');
+      setErr(e instanceof Error ? e.message : '저장 실패');
     }
   };
 
@@ -882,14 +884,14 @@ export function OrgPane() {
     <Card
       title="기관 정보"
       badge={org.slug ?? undefined}
-      actions={
+      action={
         <Button variant="primary" disabled={!org.name.trim()} onClick={() => void save()}>
           저장하기
         </Button>
       }
     >
       {err && <ErrorText>{err}</ErrorText>}
-      {saved && !err && <p className="panel-meta">저장했어요.</p>}
+      {saved && !err && <p className="panel-meta">저장됨</p>}
       <OrgForm value={org} onChange={(next) => setOrg({ ...org, ...next })} />
     </Card>
   );
@@ -925,7 +927,7 @@ function ProgramDetail({
       await updateProgram(p.id, { ...draft, name: draft.name.trim() });
       await onChanged();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : '저장하지 못했어요.');
+      setErr(e instanceof Error ? e.message : '저장 실패');
     }
   };
 
@@ -1037,7 +1039,7 @@ export function ProgramsPane({ onChanged }: { onChanged?: (programs: Program[]) 
       setJustAdded(made.id);
       await reload();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : '추가하지 못했어요.');
+      setErr(e instanceof Error ? e.message : '추가 실패');
     }
   };
 
@@ -1053,7 +1055,7 @@ export function ProgramsPane({ onChanged }: { onChanged?: (programs: Program[]) 
       setWarning(null);
       await reload();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : '삭제하지 못했어요.');
+      setErr(e instanceof Error ? e.message : '삭제 실패');
     }
   };
 
@@ -1061,7 +1063,7 @@ export function ProgramsPane({ onChanged }: { onChanged?: (programs: Program[]) 
     <>
       <Card
         title="사업 목록"
-        actions={
+        action={
           <Button variant="primary" aria-expanded={adding} onClick={() => setAdding(!adding)}>
             사업 추가
           </Button>
@@ -1090,7 +1092,7 @@ export function ProgramsPane({ onChanged }: { onChanged?: (programs: Program[]) 
         )}
         {err && <ErrorText>{err}</ErrorText>}
         {programs === null ? (
-          <Empty>불러오는 중이에요.</Empty>
+          <Empty>불러오는 중</Empty>
         ) : programs.length === 0 ? (
           <Empty>사업 없음</Empty>
         ) : (
@@ -1098,10 +1100,10 @@ export function ProgramsPane({ onChanged }: { onChanged?: (programs: Program[]) 
             <Fold
               key={p.id}
               group="programs"
-              chevron="button"
+             
               open={p.id === justAdded}
               title={p.retired_at ? `${p.name} (삭제됨)` : p.name}
-              desc={`${period(p)} | 당사자 ${p.cases}명${p.description ? ` | ${p.description}` : ''}`}
+              desc={<Meta parts={[period(p), `당사자 ${p.cases}명`, p.description]} />}
             >
               <ProgramDetail program={p} onChanged={reload} onRetire={retire} />
             </Fold>
@@ -1112,12 +1114,12 @@ export function ProgramsPane({ onChanged }: { onChanged?: (programs: Program[]) 
       {warning && (
         <Confirm
           open
-          title={`${warning.program.name}을(를) 삭제할까요?`}
+          title={`${warning.program.name} 삭제`}
           lines={[
-            `진행 중인 사례 ${warning.counts.open_cases}건, 잡혀 있는 예정 회차 ${warning.counts.planned_sessions}건이 있어요.`,
-            '삭제하면 이 사업의 사례에는 종결·열람 링크 회수·담당 배정만 할 수 있어요. 새 기록은 잠겨요. 기록은 지워지지 않아요.',
-            '삭제 전에 scripts/backup.sh 로 백업을 받아 두는 것을 권해요.',
-            '나중에 복구할 수 있어요.',
+            `진행 중 사례 ${warning.counts.open_cases}건, 예정 회차 ${warning.counts.planned_sessions}건`,
+            '삭제 후 이 사업의 사례는 종결·열람 링크 회수·담당 배정만 가능, 새 기록 잠김, 기록은 보존',
+            '삭제 전 scripts/backup.sh 백업 권장',
+            '복구 가능',
           ]}
           confirmLabel="삭제하기"
           onConfirm={() => void retire(warning.program, true)}
@@ -1145,7 +1147,7 @@ function ConsentPane() {
     <>
       <Card title="동의서 문안">
         {rows === null ? (
-          <Empty>불러오는 중이에요.</Empty>
+          <Empty>불러오는 중</Empty>
         ) : (
           rows.map((r) => (
             <div className="wire-repeat-card" key={r.domain}>
@@ -1159,10 +1161,10 @@ function ConsentPane() {
       <Card title="문안을 고칠 때">
         <DataRows
           rows={[
-            ['지금', '화면에서 고칠 수 없어요. 문안은 코드에 있어요.'],
-            ['고치면', '그 영역에 동의하신 모든 분이 `확인 필요`로 바뀌어요.'],
-            ['해야 할 일', '바뀐 내용을 알리고 다시 동의를 받아야 해요. 받기 전에는 그 기능이 멈춰요.'],
-            ['고치는 버튼', '알리는 절차를 정한 뒤에 붙여요.'],
+            ['지금', '화면에서 수정 불가, 문안은 코드에 있음'],
+            ['고치면', '그 영역에 동의한 모든 분이 `확인 필요`로 변경'],
+            ['해야 할 일', '변경 내용 알림 후 재동의 필요, 받기 전까지 기능 멈춤'],
+            ['고치는 버튼', '알리는 절차를 정한 뒤 추가'],
           ]}
         />
       </Card>
@@ -1237,8 +1239,8 @@ function DownloadPane() {
           value={withNames ? 'name' : 'pseudonym'}
           onChange={(e) => setWithNames(e.target.value === 'name')}
         >
-          <option value="pseudonym">가명만 — 외부 제출용</option>
-          <option value="name">이름 포함 — 기관 안에서만</option>
+          <option value="pseudonym">가명만, 외부 제출용</option>
+          <option value="name">이름 포함, 기관 안에서만</option>
         </select>
       </Field>
 
@@ -1252,7 +1254,7 @@ function DownloadPane() {
 }
 
 /**
- * AI/STT/DB 연결(2026-09-17 Q). 아코디언 셋 — AI·STT·DB. 접힌 줄에 상태·제공자·출처가 한 줄로 서고,
+ * 외부 서비스 연결(2026-09-17 Q, 이름은 2026-09-18 QA). 아코디언 셋 — AI 정리·녹음 글로 옮기기·데이터베이스. 접힌 줄에 상태·제공자·출처가 한 줄로 서고,
  * 펼치면 설정 자리다: AI 는 키 넣기, STT·DB 는 설정 가이드(랜딩의 가이드를 팝업으로 — 다음 세션).
  * OpenAI 키는 서버가 검증한 뒤 암호문으로 저장하고 값은 다시 보여 주지 않는다 — 저장돼 있으면 `••••••••` 로만 말한다.
  * 마법사의 5단계와 설정이 같은 화면이다.
@@ -1266,7 +1268,7 @@ export function ConnectionsPane() {
   useEffect(() => {
     void getConnections().then(setC);
   }, []);
-  if (!c) return <Empty>불러오는 중이에요.</Empty>;
+  if (!c) return <Empty>불러오는 중</Empty>;
 
   const submit = async (value: string | null) => {
     setBusy(true);
@@ -1275,16 +1277,16 @@ export function ConnectionsPane() {
     try {
       await setAiKey(value);
       setKey('');
-      setNote(value === null ? '키를 지웠어요.' : '키를 확인하고 저장했어요.');
+      setNote(value === null ? '키 삭제됨' : '키 확인 후 저장됨');
       setC(await getConnections());
     } catch (e) {
-      setErr(e instanceof Error ? e.message : '저장하지 못했어요.');
+      setErr(e instanceof Error ? e.message : '저장 실패');
     } finally {
       setBusy(false);
     }
   };
 
-  const status = (ok: boolean) => (ok ? <Badge tone="mint">연결</Badge> : <Badge tone="coral">해제</Badge>);
+  const status = (ok: boolean) => (ok ? <Badge tone="mint">연결됨</Badge> : <Badge tone="coral">연결 안 됨</Badge>);
   const aiSource = c.ai.source === 'db' ? '저장된 키 ••••••••' : c.ai.source === 'env' ? `서버 ${c.ai.env}` : '키 없음';
   const row = (ok: boolean, text: string) => (
     <span className="connection-summary">
@@ -1311,14 +1313,14 @@ export function ConnectionsPane() {
 
   return (
     <>
-      <p className="panel-meta">AI = 상담 기록 정리, STT = 녹음을 글로, DB = 기록 저장. 순서대로 붙인다 — AI 먼저.</p>
+      <p className="panel-meta">AI 정리 · 녹음 글로 옮기기 · 데이터베이스 — 순서대로 연결, AI 정리 먼저</p>
       <div className="connection-list">
-        <Fold title="1. AI" group="connections" chevron="button" desc={row(c.ai.connected, `${c.ai.provider} · ${c.ai.model} · ${aiSource}`)}>
+        <Fold title="1. AI 정리" group="connections" desc={row(c.ai.connected, `${c.ai.provider} · ${c.ai.model} · ${aiSource}`)}>
           {guide([
-            ['키 발급', <>{ext('https://platform.openai.com/api-keys', 'OpenAI API keys')} → Create new secret key → 복사(한 번만 보임)</>],
-            ['결제', <>{ext('https://platform.openai.com/settings/organization/billing', 'Billing')} 에 카드 등록 — 키만 있으면 호출이 거절된다</>],
-            ['여기 입력', '아래 칸에 붙여 넣고 저장. 서버가 OpenAI 에 확인한 뒤 암호문으로 저장한다'],
-            ['AI가 돕는 범위', '키 검증·저장·연결 상태 확인·요약 생성. 계정 가입·결제·키 발급은 사람이 한다'],
+            ['키 발급', <>{ext('https://platform.openai.com/api-keys', 'OpenAI API keys')} → Create new secret key → 복사(한 번만 표시)</>],
+            ['결제', <>{ext('https://platform.openai.com/settings/organization/billing', 'Billing')} 카드 등록 — 미등록이면 호출 거절</>],
+            ['여기 입력', '아래 칸에 붙여 넣고 저장 — 서버가 OpenAI 확인 후 암호문 저장'],
+            ['AI가 돕는 범위', '키 검증·저장·연결 상태 확인·요약 생성 — 계정 가입·결제·키 발급은 사람'],
           ])}
           {c.ai.provider === 'openai' && (
             <>
@@ -1341,24 +1343,24 @@ export function ConnectionsPane() {
           )}
         </Fold>
         <Fold
-          title="2. STT"
+          title="2. 녹음 글로 옮기기"
           group="connections"
-          chevron="button"
+         
           desc={row(c.stt.connected, `${c.stt.provider}${c.stt.region ? ` · ${c.stt.region}` : ''} · 서버 ${c.stt.env}`)}
         >
           {guide([
             ['리소스 만들기', <>{ext('https://portal.azure.com/#create/Microsoft.CognitiveServicesSpeechServices', 'Azure Speech 리소스 만들기')} — 리전 Korea Central, 요금제 S0</>],
             ['키·리전 확인', 'Azure 포털 › 리소스 › Keys and Endpoint 에서 KEY 1 과 Location/Region'],
-            ['서버에 넣기', <>기관 서버 <code>.env</code> 에 <code>AZURE_SPEECH_KEY</code>, <code>AZURE_SPEECH_REGION</code> 을 적고 앱을 다시 시작한다(<code>docs/deploy.md</code>)</>],
-            ['AI가 돕는 범위', '연결 상태 확인·전사 실패 이유 안내. Azure 가입·결제·리소스 생성·서버 파일 수정은 사람이 한다'],
+            ['서버에 넣기', <>기관 서버 <code>.env</code> 의 <code>AZURE_SPEECH_KEY</code>·<code>AZURE_SPEECH_REGION</code> 입력 후 앱 재시작(<code>docs/deploy.md</code>)</>],
+            ['AI가 돕는 범위', '연결 상태 확인·전사 실패 이유 안내 — Azure 가입·결제·리소스 생성·서버 파일 수정은 사람'],
           ])}
         </Fold>
-        <Fold title="3. DB" group="connections" chevron="button" desc={row(c.db.connected, `Postgres · 서버 ${c.db.env}`)}>
+        <Fold title="3. 데이터베이스" group="connections" desc={row(c.db.connected, `Postgres · 서버 ${c.db.env}`)}>
           {guide([
             ['DB 준비', <>{ext('https://supabase.com/dashboard', 'Supabase')} 프로젝트(서울 리전) 또는 기관 서버의 Postgres 17</>],
-            ['연결 문자열', <>Supabase › Project Settings › Database 의 URI(<code>postgres://…</code>)를 기관 서버 <code>.env</code> 의 <code>DATABASE_URL</code> 에 적는다</>],
-            ['표 만들기', <><code>node api/src/migrate.ts</code> 로 스키마를 올리고 앱을 다시 시작한다. 백업은 <code>scripts/backup.sh</code></>],
-            ['AI가 돕는 범위', '마이그레이션·백업·복구 절차 실행과 상태 확인. 계정 가입·결제·비밀번호 보관은 사람이 한다'],
+            ['연결 문자열', <>Supabase › Project Settings › Database 의 URI(<code>postgres://…</code>) → 기관 서버 <code>.env</code> 의 <code>DATABASE_URL</code></>],
+            ['표 만들기', <><code>node api/src/migrate.ts</code> 로 스키마 적용 후 앱 재시작 — 백업은 <code>scripts/backup.sh</code></>],
+            ['AI가 돕는 범위', '마이그레이션·백업·복구 실행과 상태 확인 — 계정 가입·결제·비밀번호 보관은 사람'],
           ])}
         </Fold>
       </div>
@@ -1378,14 +1380,14 @@ function RequestPane({ me }: { me: { id: number } }) {
       title="내가 올린 배정 요청"
     >
       {rows === null ? (
-        <Empty>불러오는 중이에요.</Empty>
+        <Empty>불러오는 중</Empty>
       ) : rows.length === 0 ? (
-        <Empty>올린 요청이 없어요.</Empty>
+        <Empty>올린 요청 없음</Empty>
       ) : (
         rows.map((r) => (
           <div className="wire-repeat-card" key={r.id}>
             <Item
-              title={`${r.pseudonym} | ${r.program_name}`}
+              title={<Meta parts={[r.pseudonym, r.program_name]} />}
               desc={`${date(r.created_at)} 올림${r.reason ? `, ${r.reason}` : ''}`}
               action={
                 r.decided_at ? (

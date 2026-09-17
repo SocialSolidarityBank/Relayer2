@@ -22,7 +22,7 @@ const OVERALL_GOAL = '연체를 정리하고 생활을 안정시킨다';
  */
 const openInfo = async (
   page: Page,
-  tab?: '당사자 정보' | '회차별 요약' | '회차별 전문 보기' | '목표',
+  tab?: '당사자 정보' | '회차별 요약' | '목표',
   // 일정을 저장하면 사례 주소를 떠나 일정 목록으로 간다(2026-09-17 Q) — 그때는 사례를 직접 준다.
   fromCaseId?: string,
 ) => {
@@ -70,8 +70,8 @@ test('등록부터 회차 기록·이어받기까지 한 바퀴', async ({ page 
   await page.locator('#name').fill(NAME);
   await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
   await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
-  // 사업은 고르기다(2026-09-16 Q) — 목록의 첫 사업을 집는다.
-  await page.locator('#program').selectOption({ index: 1 });
+  // 사업은 고르기다(2026-09-16 Q) — 시드 사업을 이름으로 집는다(목록은 최신이 위라 첫 칸이 매번 바뀐다).
+  await page.locator('#program').selectOption({ label: '함께온기금 울타리대출' });
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
 
   // ── 인테이크 작성하기 ───────────────────────────────────────
@@ -132,42 +132,47 @@ test('등록부터 회차 기록·이어받기까지 한 바퀴', async ({ page 
   await expect(page).toHaveURL(/#\/schedule$/);
   await expect(page.getByRole('heading', { name: '상담 일정', level: 1, exact: true })).toBeVisible();
 
-  // ── 회차별 요약 탭: 맨 위가 위험 신호다(2026-09-17 Q — 구 15초 다시보기 자리) ──
+  // ── 회차별 요약 탭: 한 회차가 한 접힘 카드다(2026-09-17 Q — 상단 위험 신호 배너 폐지) ──
   await openInfo(page, '회차별 요약', caseId);
-  const risk = page.locator('.risk-banner');
-  await expect(risk).toContainText('위험 신호 없음');
-  await expect(risk).toContainText('AI 확인 안 함');
-  // 배너가 회차 목록 위에 선다.
-  const bannerBox = await risk.boundingBox();
-  const listBox = await page
+  // 배너는 더 이상 없다. 위험 신호는 그 신호가 나온 회차 카드가 말한다.
+  await expect(page.locator('.risk-banner')).toHaveCount(0);
+  const summaryCard = page
     .locator('section.wire-card')
-    .filter({ has: page.getByRole('heading', { name: '회차별 요약' }) })
-    .boundingBox();
-  expect(bannerBox && listBox && bannerBox.y < listBox.y).toBeTruthy();
+    .filter({ has: page.getByRole('heading', { name: '회차별 요약' }) });
+  // 최신순이다 — 맨 위가 마지막 회차다.
+  await expect(summaryCard.locator('details').first().locator('.seq-head-no')).toHaveText('2회차');
+  await expect(summaryCard.locator('details')).toHaveCount(2);
 
-  // ── 목표 탭: 전체 상담 목표 ─────────────────────────────────
+  // ── 목표 탭(2026-09-18 Q 개편): 전체·다음 상담 목표는 입력칸, 이력은 모달 ──────
   await page.getByRole('tab', { name: '목표' }).click();
-  await expect(page.locator('section.wire-card', { hasText: '전체 상담 목표' }).first()).toContainText(
-    OVERALL_GOAL,
-  );
-  // `회차별 오늘 상담 목표`는 **기록된 회차**만 싣는다. 3회차는 아직 예정이라 비어 있다 —
-  // 다음 회차로 넘긴 목표는 그 회차의 전문에서 확인한다(2026-09-17 Q — 15초 다시보기 폐지로
-  // '예정 회차의 오늘 목표'를 미리 보여 주던 자리가 사라졌다).
-  await expect(
-    page.locator('section.wire-card', { hasText: '회차별 오늘 상담 목표' }),
-  ).toContainText('이어받은 목표가 아직 없어요');
+  await expect(page.getByLabel('전체 상담 목표', { exact: true })).toHaveValue(OVERALL_GOAL);
+  // 2회차가 쓴 다음 상담 목표는 아직 어느 회차도 이어받지 않았으므로 여기서 고칠 수 있다.
+  await expect(page.getByLabel('다음 상담 목표', { exact: true })).toHaveValue(NEXT_GOAL);
+  await expect(page.locator('section.wire-card', { hasText: '다음 상담 목표' })).toContainText('2회차에서 정함');
+  // 지난 목표 모달: 이력 첫 줄은 `승인`. 회차별 오늘 상담 목표는 기록된 회차만 — 3회차는 예정이라 비어 있다.
+  await page.getByRole('button', { name: '지난 목표 보기' }).click();
+  const goalDialog = page.getByRole('dialog', { name: '지난 목표' });
+  await expect(goalDialog).toBeVisible();
+  await expect(goalDialog).toContainText(OVERALL_GOAL);
+  await expect(goalDialog).toContainText('승인');
+  await expect(goalDialog).toContainText('이어받은 목표 없음');
+  await goalDialog.getByRole('button', { name: '닫기' }).click();
+  await expect(goalDialog).toBeHidden();
 
-  // ── 회차별 전문 보기: 2회차가 넘긴 다음 상담 목표 ───────────
-  await page.getByRole('tab', { name: '회차별 전문 보기' }).click();
+  // ── 회차 원본 드로어: 2회차가 넘긴 다음 상담 목표 ───────────
+  // 원본 전용 탭과 `/full` 화면은 폐지했다(2026-09-18 Q) — 회차 카드에서 드로어로 읽는다.
+  await page.getByRole('tab', { name: '회차별 요약' }).click();
   await page
-    .locator('.wire-repeat-card', { hasText: '2회차' })
-    .getByRole('button', { name: '전문 보기' })
+    .locator('details', { hasText: '2회차' })
+    .first()
+    .getByRole('button', { name: '상담 기록 보기' })
     .click();
-  await expect(page).toHaveURL(/\/full$/);
-  await expect(page.locator('details', { hasText: '수기 기록' }).first()).toContainText(NEXT_GOAL);
-  // 원문 보기의 되돌이 버튼은 `당사자 정보`다(2026-09-17 Q — 당사자 카드가 머리로 올라갔다).
-  await page.getByRole('button', { name: '당사자 정보' }).click();
-  await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
+  const originalDrawer = page.getByRole('dialog', { name: '2회차 상담 기록' });
+  await expect(originalDrawer).toContainText(NEXT_GOAL);
+  await originalDrawer.getByRole('button', { name: '닫기' }).click();
+  await expect(originalDrawer).toBeHidden();
+  // 드로어를 닫아도 회차 목록을 떠나지 않는다 — 그게 모달 대신 드로어를 쓰는 이유다.
+  await expect(page.getByRole('tab', { name: '회차별 요약' })).toBeVisible();
 
   // ── 확인할 과제·오늘 물어볼 것은 상담 기록하기의 레일이 보여 준다 ──
   // 같은 자료를 쓰던 15초 다시보기 화면이 없어져, 이 흐름의 유일한 자리다.
@@ -209,8 +214,8 @@ test('예정 회차가 없어도 상담 기록하기에서 일시를 적고 기�
   await page.locator('#name').fill(name);
   await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
   await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
-  // 사업은 고르기다(2026-09-16 Q) — 목록의 첫 사업을 집는다.
-  await page.locator('#program').selectOption({ index: 1 });
+  // 사업은 고르기다(2026-09-16 Q) — 시드 사업을 이름으로 집는다(목록은 최신이 위라 첫 칸이 매번 바뀐다).
+  await page.locator('#program').selectOption({ label: '함께온기금 울타리대출' });
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
   await expect(page).toHaveURL(/\/intake$/);
   await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
@@ -243,8 +248,8 @@ test('상담 종결은 회차를 만들지 않고 미완료 과제를 그대로 
   await page.locator('#name').fill(name);
   await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
   await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
-  // 사업은 고르기다(2026-09-16 Q) — 목록의 첫 사업을 집는다.
-  await page.locator('#program').selectOption({ index: 1 });
+  // 사업은 고르기다(2026-09-16 Q) — 시드 사업을 이름으로 집는다(목록은 최신이 위라 첫 칸이 매번 바뀐다).
+  await page.locator('#program').selectOption({ label: '함께온기금 울타리대출' });
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
   await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
 
@@ -264,11 +269,11 @@ test('상담 종결은 회차를 만들지 않고 미완료 과제를 그대로 
   await page.locator('.wire-container').getByRole('button', { name: '상담 종결' }).click();
   // 종결 앞에는 경고가 선다(2026-09-17 Q): 남은 과제·예정 회차·앞으로의 일정을 세어 보여 준다.
   const warning = page.locator('.confirm-dialog');
-  await expect(warning).toContainText('확인하지 못한 과제가 1건');
+  await expect(warning).toContainText('미확인 과제 1건');
   await warning.getByRole('button', { name: '종결 기록 쓰기' }).click();
   await page.waitForURL(/\/record\?closing=1$/);
   // 종결도 상담이라 기록이 먼저다 — 체크는 이미 켜져 있고 레일 맨 위에 선다.
-  await expect(page.getByRole('checkbox', { name: '이번이 마지막 상담이에요' })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: '마지막 상담' })).toBeChecked();
   await pickDateTime(page, 'held-at', '2026-09-21T14:00');
   await page.locator('#memo').fill('마지막으로 정리하고 마무리함');
   await page.getByRole('button', { name: '저장' }).click();
@@ -315,8 +320,8 @@ test('종결 상담으로 저장하면 종결 화면으로 이어진다', async 
   await page.locator('#name').fill(name);
   await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
   await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
-  // 사업은 고르기다(2026-09-16 Q) — 목록의 첫 사업을 집는다.
-  await page.locator('#program').selectOption({ index: 1 });
+  // 사업은 고르기다(2026-09-16 Q) — 시드 사업을 이름으로 집는다(목록은 최신이 위라 첫 칸이 매번 바뀐다).
+  await page.locator('#program').selectOption({ label: '함께온기금 울타리대출' });
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
   await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
 
@@ -329,7 +334,7 @@ test('종결 상담으로 저장하면 종결 화면으로 이어진다', async 
 
   // 기록 화면이 그 표시를 이어받는다
   await pickFromMenu(page, 'record', name);
-  await expect(page.getByRole('checkbox', { name: '이번이 마지막 상담이에요' })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: '마지막 상담' })).toBeChecked();
   await page.locator('#memo').fill('마지막으로 정리하고 마무리함');
   await page.getByRole('button', { name: '저장하고 종결로' }).click();
 
@@ -348,7 +353,7 @@ test('당사자 계정은 로그인되지 않고 이유를 말한다', async ({ 
   await page.locator('#password').fill('test3');
   await page.getByRole('button', { name: '로그인' }).click();
 
-  await expect(page.getByText('당사자는 로그인하지 않아요', { exact: false })).toBeVisible();
+  await expect(page.getByText('당사자 로그인 불가', { exact: false })).toBeVisible();
   await expect(page.locator('.app-nav-me')).toHaveCount(0);
 });
 
@@ -365,8 +370,8 @@ test('인테이크를 다시 열어 고쳐 쓴다', async ({ page }) => {
   await page.locator('#name').fill(name);
   await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
   await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
-  // 사업은 고르기다(2026-09-16 Q) — 목록의 첫 사업을 집는다.
-  await page.locator('#program').selectOption({ index: 1 });
+  // 사업은 고르기다(2026-09-16 Q) — 시드 사업을 이름으로 집는다(목록은 최신이 위라 첫 칸이 매번 바뀐다).
+  await page.locator('#program').selectOption({ label: '함께온기금 울타리대출' });
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
   await expect(page).toHaveURL(/\/intake$/);
   await page.locator('#overall-goal').fill('처음 적은 목표');
@@ -383,8 +388,8 @@ test('인테이크를 다시 열어 고쳐 쓴다', async ({ page }) => {
   await page
     .locator('section.wire-card')
     .filter({ has: page.getByRole('heading', { name: '회차별 요약' }) })
-    .locator('.wire-item', { hasText: '인테이크' })
-    .getByRole('button', { name: '고쳐 쓰기' })
+    .locator('details', { hasText: '인테이크' })
+    .getByRole('button', { name: '수정' })
     .click();
   await expect(page).toHaveURL(/\/intake$/);
   await expect(page.locator('#overall-goal')).toHaveValue('처음 적은 목표');
@@ -401,7 +406,7 @@ test('인테이크를 다시 열어 고쳐 쓴다', async ({ page }) => {
     page.locator('section.wire-card', { hasText: '전체 상담 목표' }).first(),
   ).toContainText('고쳐 적은 목표');
 
-  // 회차가 늘지 않았다 — 고쳐 쓰기는 새 회차를 만들지 않는다
+  // 회차가 늘지 않았다 — 수정은 새 회차를 만들지 않는다
   await openInfo(page, '회차별 요약');
   const sessions = page
     .locator('section.wire-card')
@@ -425,8 +430,8 @@ test('회차를 고쳐 쓰고, 적어만 둔 줄도 저장된다', async ({ page
   await page.locator('#name').fill(name);
   await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
   await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
-  // 사업은 고르기다(2026-09-16 Q) — 목록의 첫 사업을 집는다.
-  await page.locator('#program').selectOption({ index: 1 });
+  // 사업은 고르기다(2026-09-16 Q) — 시드 사업을 이름으로 집는다(목록은 최신이 위라 첫 칸이 매번 바뀐다).
+  await page.locator('#program').selectOption({ label: '함께온기금 울타리대출' });
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
   // 인테이크에서 `추가`를 누르지 않고 적어만 둔다
   await page.getByRole('textbox', { name: '수행할 과제' }).fill(task);
@@ -450,7 +455,7 @@ test('회차를 고쳐 쓰고, 적어만 둔 줄도 저장된다', async ({ page
   const summary = page
     .locator('section.wire-card')
     .filter({ has: page.getByRole('heading', { name: '회차별 요약' }) });
-  await summary.locator('.wire-item', { hasText: '2회차' }).getByRole('button', { name: '고쳐 쓰기' }).click();
+  await summary.locator('details', { hasText: '2회차' }).getByRole('button', { name: '수정' }).click();
   await expect(page).toHaveURL(/\/edit$/);
 
   // 지난번에 적은 것과 매긴 결과가 그대로 서 있다
@@ -483,14 +488,14 @@ test('민감정보 동의가 없으면 기록을 저장하지 못하고, 받으�
   await page.locator('#name').fill(name);
   await expect(page.getByRole('button', { name: '등록하고 인테이크 쓰기' })).toBeDisabled();
   await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
-  // 사업은 고르기다(2026-09-16 Q) — 목록의 첫 사업을 집는다.
-  await page.locator('#program').selectOption({ index: 1 });
+  // 사업은 고르기다(2026-09-16 Q) — 시드 사업을 이름으로 집는다(목록은 최신이 위라 첫 칸이 매번 바뀐다).
+  await page.locator('#program').selectOption({ label: '함께온기금 울타리대출' });
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
 
   // 인테이크 저장이 막힌다
   await expect(page).toHaveURL(/\/intake$/);
   await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
-  await expect(page.getByText('민감정보 처리 동의가 없어요', { exact: false })).toBeVisible();
+  await expect(page.getByText('민감정보 처리 동의 없음', { exact: false })).toBeVisible();
 
   // 당사자 정보 › 정보 탭에서 동의를 받는다
   await openInfo(page);
@@ -534,7 +539,7 @@ test('PII 를 본 조회가 열람 기록에 남고, 관리자만 본다', async
   // 실무자 사이드바에는 `시스템` 묶음이 서지 않는다(2026-09-16 Q 3차 — 묶음마다 메뉴 하나).
   await expect(page.getByRole('link', { name: '시스템' })).toHaveCount(0);
   await page.goto('/#/settings/system');
-  await expect(page.getByText('관리자만 볼 수 있어요', { exact: false })).toBeVisible();
+  await expect(page.getByText('관리자 전용', { exact: false })).toBeVisible();
 
   // 관리자로 바꿔 본다
   await page.getByRole('button', { name: '로그아웃' }).click();
@@ -551,13 +556,13 @@ test('PII 를 본 조회가 열람 기록에 남고, 관리자만 본다', async
     .click();
 
   // 찾기 전에는 아무것도 펼치지 않는다.
-  await expect(page.getByText('하나를 고르면 기록이 나와요', { exact: false })).toBeVisible();
+  await expect(page.getByText('기간, 확인 필요, 검색 중 하나 선택', { exact: false })).toBeVisible();
   await page.locator('#audit-q').fill('당사자 정보 조회');
 
   const log = page.locator('section.wire-card', { hasText: '열람 기록' });
   await expect(log).toContainText('시험 실무자');
   await expect(log).toContainText('당사자 정보 조회');
-  await expect(log).toContainText('이름 · 연락처 · 이메일'); // 항목 이름만, 값은 없다
+  await expect(log).toContainText('이름, 연락처, 이메일'); // 항목 이름만, 값은 없다
   await expect(log).not.toContainText('010-');
 });
 
@@ -576,8 +581,8 @@ test('자유 글을 저장하고 다시 열면 그대로 읽힌다', async ({ pa
   await page.locator('#name').fill(name);
   await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
   await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
-  // 사업은 고르기다(2026-09-16 Q) — 목록의 첫 사업을 집는다.
-  await page.locator('#program').selectOption({ index: 1 });
+  // 사업은 고르기다(2026-09-16 Q) — 시드 사업을 이름으로 집는다(목록은 최신이 위라 첫 칸이 매번 바뀐다).
+  await page.locator('#program').selectOption({ label: '함께온기금 울타리대출' });
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
   await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
 
@@ -588,14 +593,14 @@ test('자유 글을 저장하고 다시 열면 그대로 읽힌다', async ({ pa
   await page.getByRole('button', { name: '저장' }).click();
   await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
 
-  // 원문은 `회차별 전문 보기` 탭이 유일한 입구다(2026-09-17 Q — 요약의 인라인 `원문 보기` 폐지).
-  await openInfo(page, '회차별 전문 보기');
+  // 원본은 회차 카드의 `상담 기록 보기` 드로어가 유일한 입구다(2026-09-18 Q — 전용 탭 폐지).
+  await openInfo(page, '회차별 요약');
   await page
-    .locator('.wire-repeat-card', { hasText: '2회차' })
-    .getByRole('button', { name: '전문 보기' })
+    .locator('details', { hasText: '2회차' })
+    .first()
+    .getByRole('button', { name: '상담 기록 보기' })
     .click();
-  await expect(page).toHaveURL(/\/full$/);
-  await expect(page.locator('details', { hasText: '수기 기록' }).first()).toContainText(memo);
+  await expect(page.getByRole('dialog', { name: '2회차 상담 기록' })).toContainText(memo);
 });
 
 // P2 당사자 열람. 당사자는 로그인하지 않고 링크+코드로 자기 정보와 일정만 본다.
@@ -612,8 +617,8 @@ test('당사자는 링크와 코드로 자기 일정만 본다', async ({ page, 
   await page.locator('#phone').fill('010-5555-6666');
   await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
   await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
-  // 사업은 고르기다(2026-09-16 Q) — 목록의 첫 사업을 집는다.
-  await page.locator('#program').selectOption({ index: 1 });
+  // 사업은 고르기다(2026-09-16 Q) — 시드 사업을 이름으로 집는다(목록은 최신이 위라 첫 칸이 매번 바뀐다).
+  await page.locator('#program').selectOption({ label: '함께온기금 울타리대출' });
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
   await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
 
@@ -630,8 +635,8 @@ test('당사자는 링크와 코드로 자기 일정만 본다', async ({ page, 
   await page.getByRole('tab', { name: '당사자 정보' }).click();
   const access = page
     .locator('section.wire-card')
-    .filter({ has: page.getByRole('heading', { name: '당사자 열람' }) });
-  await access.getByRole('button', { name: '열람 링크 만들기' }).click();
+    .filter({ has: page.getByRole('heading', { name: '개인정보 및 민감정보 처리 동의 링크' }) });
+  await access.getByRole('button', { name: '링크 만들기' }).click();
   await expect(access).toContainText('확인 코드');
 
   const link = (await access.locator('.wire-data-row', { hasText: '링크' }).locator('dd').innerText()).trim();
@@ -647,7 +652,7 @@ test('당사자는 링크와 코드로 자기 일정만 본다', async ({ page, 
   // 틀린 코드는 남은 횟수를 알려 준다
   await guestPage.locator('#code').fill('000000');
   await guestPage.getByRole('button', { name: '열기' }).click();
-  await expect(guestPage.getByText('코드가 맞지 않아요', { exact: false })).toBeVisible();
+  await expect(guestPage.getByText('코드 불일치', { exact: false })).toBeVisible();
 
   // 맞는 코드로 열면 기본 정보와 일정만 보인다
   await guestPage.locator('#code').fill(code);
@@ -675,8 +680,8 @@ test('외부 LLM 동의가 없으면 AI 정리를 하지 않는다', async ({ pa
   await page.locator('#name').fill(name);
   await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
   await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
-  // 사업은 고르기다(2026-09-16 Q) — 목록의 첫 사업을 집는다.
-  await page.locator('#program').selectOption({ index: 1 });
+  // 사업은 고르기다(2026-09-16 Q) — 시드 사업을 이름으로 집는다(목록은 최신이 위라 첫 칸이 매번 바뀐다).
+  await page.locator('#program').selectOption({ label: '함께온기금 울타리대출' });
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
   await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
 
@@ -694,12 +699,12 @@ test('외부 LLM 동의가 없으면 AI 정리를 하지 않는다', async ({ pa
   const summary = page
     .locator('section.wire-card')
     .filter({ has: page.getByRole('heading', { name: '회차별 요약' }) });
-  await summary.locator('.wire-item', { hasText: '2회차' }).getByRole('button', { name: 'AI 정리' }).click();
+  await summary.locator('details', { hasText: '2회차' }).getByRole('button', { name: /^AI 정리/ }).click();
   await page.waitForURL(/\/review$/);
 
   // 동의가 없으니 정리가 막힌다
   await page.getByRole('button', { name: 'AI로 정리하기' }).click();
-  await expect(page.getByText('외부 LLM·국외 처리 동의가 없어요', { exact: false })).toBeVisible();
+  await expect(page.getByText('외부 LLM·국외 처리 동의 없음', { exact: false })).toBeVisible();
 });
 
 // 잘못 쓴 요청은 **400** 이다. 500 으로 답하면 서버가 고장난 줄 안다.

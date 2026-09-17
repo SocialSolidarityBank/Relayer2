@@ -57,19 +57,19 @@ export async function saveDocument(input: {
   bytes: Uint8Array;
   actorId: number;
 }): Promise<DocumentRow> {
-  if (input.bytes.byteLength === 0) throw new DocumentRejected('빈 파일이에요.');
+  if (input.bytes.byteLength === 0) throw new DocumentRejected('빈 파일');
   if (input.bytes.byteLength > MAX_BYTES) {
-    throw new DocumentRejected(`파일이 너무 커요. ${Math.floor(MAX_BYTES / 1024 / 1024)}MB 까지 받아요.`);
+    throw new DocumentRejected(`파일 크기 초과, ${Math.floor(MAX_BYTES / 1024 / 1024)}MB 까지`);
   }
   if (!ALLOWED.has(input.contentType)) {
-    throw new DocumentRejected('받지 않는 형식이에요. PDF·이미지·문서 파일만 받아요.');
+    throw new DocumentRejected('받지 않는 형식, 가능한 형식: PDF, 이미지, 문서');
   }
   const label = input.label.trim();
-  if (!label) throw new DocumentRejected('문서 이름을 적어 주세요.');
+  if (!label) throw new DocumentRejected('문서 이름 필요');
 
   await assertConsent(input.caseId, 'document_attachment');
 
-  const days = RETENTION_DAYS[CONSENT_COPY.document_attachment.retentionDuration ?? 'institution_retention_1y'];
+  const days = RETENTION_DAYS[CONSENT_COPY.document_attachment.retentionDuration ?? 'institution_retention_30d'];
   const sha256 = createHash('sha256').update(input.bytes).digest('hex');
   // 사례별로 나눠 둔다. 사례를 통째로 지울 때 폴더 하나만 지우면 된다.
   // 원본 파일명은 쓰지 않는다 — `김민희_진단서.pdf` 는 그 자체로 정보가 샌다.
@@ -111,8 +111,8 @@ export async function readDocument(
 ): Promise<{ row: DocumentRow; bytes: Uint8Array }> {
   const [row] = await sql<Array<DocumentRow & { rel_path: string }>>`
     select ${COLUMNS}, rel_path from documents where id = ${id}`;
-  if (!row) throw new DocumentRejected('문서를 찾지 못했어요.');
-  if (row.deleted_at) throw new DocumentRejected('보유기간이 지나 지운 문서예요.');
+  if (!row) throw new DocumentRejected('문서 없음');
+  if (row.deleted_at) throw new DocumentRejected('보유기간 만료로 삭제된 문서');
 
   const bytes = new Uint8Array(await readFile(join(DOC_ROOT, row.rel_path)));
 

@@ -30,7 +30,7 @@ export function ScheduleNewScreen({ caseId }: { caseId: number }) {
     let live = true;
     void getCaseDetail(caseId).then(d => { if (live) setDetail(d); }).catch(() => {});
     void getCase(caseId).then(data => { if (live) setView(data); }).catch(failure => {
-      if (live) setError(failure instanceof Error ? failure.message : '당사자 정보를 불러오지 못했어요.');
+      if (live) setError(failure instanceof Error ? failure.message : '당사자 정보 불러오기 실패');
     });
     return () => { live = false; };
   }, [caseId]);
@@ -52,7 +52,7 @@ export function ScheduleNewScreen({ caseId }: { caseId: number }) {
       // 일정을 잡은 다음 자리는 일정 목록이다(2026-09-17 Q) — 잇달아 잡는 일이 많다.
       window.location.hash = '#/schedule';
     } catch (e) {
-      setError(e instanceof Error ? e.message : '저장하지 못했어요.');
+      setError(e instanceof Error ? e.message : '저장 실패');
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -93,16 +93,15 @@ export function ScheduleNewScreen({ caseId }: { caseId: number }) {
           <Field label="메모" htmlFor="memo" control="textarea">
             <textarea id="memo" rows={3} value={memo} onChange={e => setMemo(e.target.value)} />
           </Field>
-          <Choice type="checkbox" label="종결 상담" checked={isClosing} onChange={() => setIsClosing(v => !v)}
-            hint="일정 저장만으로 사례를 종결하지 않아요." />
+          <Choice type="checkbox" label="종결 상담" checked={isClosing} onChange={() => setIsClosing(v => !v)} />
         </Card>
       </fieldset>
       <footer className="schedule-savebar" aria-busy={saving}>
         {/* 저장 전 상태(`아직 저장하지 않았어요`)와 `한국 시간`은 걷었다(2026-09-17 Q) —
             당연한 상태고, 시간대는 입력 카드가 이미 말한다. 고른 일시와 사고만 남긴다. */}
         <div className="schedule-save-summary" aria-live="polite">
-          <strong>{scheduledAt ? scheduleFormatter.format(new Date(scheduledAt)) : '날짜와 시간을 선택해 주세요.'}</strong>
-          {saving && <p className="panel-meta">일정을 저장하고 있어요.</p>}
+          <strong>{scheduledAt ? scheduleFormatter.format(new Date(scheduledAt)) : '날짜와 시간 선택 필요'}</strong>
+          {saving && <p className="panel-meta">일정 저장 중</p>}
           {error && <ErrorText>{error}</ErrorText>}
         </div>
         <Button type="submit" variant="primary" disabled={!scheduledAt || saving}>{saving ? '저장 중…' : '일정 저장'}</Button>

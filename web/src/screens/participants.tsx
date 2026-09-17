@@ -3,7 +3,7 @@
 // 서버 계약은 그대로 쓴다. 목록에 없는 연락처를 얻으려고 상담 상세를 미리 읽지 않는다.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getCaseDetail, listParticipants, type ParticipantRow } from '../api.ts';
-import { Badge, Button, Card, Chevron, Empty, PageHeader, Select } from '../ui.tsx';
+import { Badge, Button, Card, Chevron, Empty, Meta, PageHeader, Select } from '../ui.tsx';
 import './participants.css';
 
 const scheduleDate = new Intl.DateTimeFormat('ko-KR', {
@@ -203,10 +203,10 @@ export function ParticipantsScreen({
           </div>
         )}
 
-        {rows === null && <Empty>불러오는 중이에요.</Empty>}
+        {rows === null && <Empty>불러오는 중</Empty>}
         {rows !== null && shown.length === 0 && (
           <Card>
-            <Empty>{q ? '찾는 사람이 없어요.' : '아직 등록한 당사자가 없어요.'}</Empty>
+            <Empty>{q ? '검색 결과 없음' : '등록한 당사자 없음'}</Empty>
           </Card>
         )}
 
@@ -222,7 +222,7 @@ export function ParticipantsScreen({
               row.can_access && row.last_session_seq
                 ? `${row.program_name} ${row.last_session_seq}회차`
                 : row.program_name,
-            ].filter(Boolean).join(' | ');
+            ];
             // 둘째 줄은 어떻게 닿고 언제 만나나. 아코디언이 없으니 여기서 바로 드러난다.
             const reach = [
               contact?.phone ?? null,
@@ -230,7 +230,7 @@ export function ParticipantsScreen({
               row.can_access && row.next_scheduled_at
                 ? `다음 상담 ${scheduleDate.format(new Date(row.next_scheduled_at))}`
                 : null,
-            ].filter(Boolean).join(' | ');
+            ];
             const card = (
               <article className="surface-card participant-card" data-variant="list">
                 <header className="participant-card-header">
@@ -240,7 +240,7 @@ export function ParticipantsScreen({
                         {name}
                       </span>
                     </span>
-                    <span className="participant-card-id" title={meta}>{meta}</span>
+                    <span className="participant-card-id"><Meta parts={meta} /></span>
                   </span>
                   <span className="participant-card-badges">
                     {!row.can_access && <Badge>배정 필요</Badge>}
@@ -249,7 +249,7 @@ export function ParticipantsScreen({
                     </Badge>
                   </span>
                 </header>
-                {reach && <p className="participant-card-reach" title={reach}>{reach}</p>}
+                {reach.some(Boolean) && <p className="participant-card-reach"><Meta parts={reach} /></p>}
               </article>
             );
             return (

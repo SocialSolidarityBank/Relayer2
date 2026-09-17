@@ -26,7 +26,7 @@ export function AccessScreen({ token }: { token: string }) {
     try {
       setView(await openAccess(token, code.trim()));
     } catch (e) {
-      setError(e instanceof Error ? e.message : '열지 못했어요.');
+      setError(e instanceof Error ? e.message : '열기 실패');
     } finally {
       setBusy(false);
     }
@@ -35,7 +35,7 @@ export function AccessScreen({ token }: { token: string }) {
   if (!view) {
     return (
       <>
-        <PageHeader title="내 상담 일정" meta="담당 실무자에게 받은 여섯 자리 숫자를 넣어 주세요" />
+        <PageHeader title="내 상담 일정" meta="담당 실무자에게 받은 여섯 자리 숫자" />
         <div className="wire-container">
           <Card title="확인 코드">
             <Field label="여섯 자리 숫자" htmlFor="code" required>
@@ -70,7 +70,7 @@ export function AccessScreen({ token }: { token: string }) {
       <div className="wire-container">
         <Card title="다가오는 상담">
           {view.schedule.length === 0 ? (
-            <Empty>잡힌 상담이 없어요. 담당 실무자에게 물어봐 주세요.</Empty>
+            <Empty>예정된 상담 없음, 담당 실무자에게 문의</Empty>
           ) : (
             view.schedule.map((s) => (
               <Item
@@ -84,7 +84,7 @@ export function AccessScreen({ token }: { token: string }) {
           )}
         </Card>
 
-        <Card title="내 정보" hint="틀린 곳이 있으면 담당 실무자에게 알려 주세요.">
+        <Card title="내 정보" hint="잘못된 정보는 담당 실무자에게 문의">
           <Item title={view.name ?? '—'} desc="이름" />
           <Item title={view.phone ?? '—'} desc="연락처" />
           <Item title={view.email ?? '—'} desc="이메일" />

@@ -117,4 +117,23 @@ describe('카드 결과', () => {
     expect(openCards([promise], stop, sessions)).toHaveLength(0);
     expect(openCards([promise], keep, sessions)).toHaveLength(1);
   });
+
+  it('뒤 회차의 자동 unchecked 가 앞 회차에서 고쳐 쓴 완료·확인함을 덮지 않는다', () => {
+    // 2~6회차를 먼저 저장하고 3회차를 고쳐 쓰며 완료를 찍은 운영 사례 59(2026-09-18 버그리포트 4·5).
+    const many = [11, 12, 13, 14, 15, 16].map((id, i) => session({ id, seq: i + 1 }));
+    const outcomes: CardOutcome[] = [
+      { id: 1, card_id: 1, session_id: 13, result: 'unchecked', follow: null, reason: null, note: null },
+      { id: 2, card_id: 1, session_id: 14, result: 'unchecked', follow: null, reason: null, note: null },
+      { id: 3, card_id: 1, session_id: 16, result: 'unchecked', follow: null, reason: null, note: null },
+      { id: 4, card_id: 1, session_id: 13, result: 'done', follow: null, reason: null, note: null },
+    ];
+    expect(openCards([promise], outcomes, many)).toHaveLength(0);
+
+    // 명시 결과끼리는 여전히 뒤 회차가 이긴다 — 3회차 완료 뒤 5회차에서 못 함·계속이면 다시 열린다.
+    const reopened: CardOutcome[] = [
+      ...outcomes,
+      { id: 5, card_id: 1, session_id: 15, result: 'not_done', follow: 'continue', reason: null, note: null },
+    ];
+    expect(openCards([promise], reopened, many)).toHaveLength(1);
+  });
 });
