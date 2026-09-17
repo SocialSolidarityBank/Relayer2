@@ -172,7 +172,7 @@ export function OnboardingScreen({
                 disabled={i > step || (i === 0 && me.workspace !== null)}
                 onClick={() => setStep(i)}
               >
-                {i + 1} {label}
+                {i + 1}. {label}
               </button>
             </li>
           </Fragment>

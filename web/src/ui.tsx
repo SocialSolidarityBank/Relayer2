@@ -310,6 +310,7 @@ export function Fold({
   group,
   action,
   onOpen,
+  chevron = 'plain',
   children,
 }: {
   title: string;
@@ -325,6 +326,8 @@ export function Fold({
   action?: ReactNode;
   /** 펼치는 순간 한 번 부른다 — 펼쳐야 필요한 값을 그때 불러오는 자리다. */
   onOpen?: () => void;
+  /** 꺽쇠 모양. `button` 은 CCC 의 32px 원형 토글(`.wire-chevron-button`), 펼치면 위로 돈다(2026-09-17 Q). */
+  chevron?: 'plain' | 'button';
   children: ReactNode;
 }) {
   return (
@@ -343,7 +346,13 @@ export function Fold({
         </span>
         <span className="wire-card-summary-right">
           {action}
-          <Chevron dir="down" />
+          {chevron === 'button' ? (
+            <span className="wire-chevron-button wire-disclosure-chevron" aria-hidden="true">
+              <Chevron dir="down" />
+            </span>
+          ) : (
+            <Chevron dir="down" />
+          )}
         </span>
       </summary>
       <div className="wire-card-body">{children}</div>
@@ -574,7 +583,7 @@ export function Item({ title, desc, action }: { title: ReactNode; desc?: ReactNo
   );
 }
 
-export const Badge = ({ tone, children }: { tone?: 'mint' | 'lavender' | 'blue'; children: ReactNode }) => (
+export const Badge = ({ tone, children }: { tone?: 'mint' | 'lavender' | 'blue' | 'coral'; children: ReactNode }) => (
   <span className="wire-badge" data-tone={tone}>
     <span className="wire-badge-label">{children}</span>
   </span>

@@ -48,7 +48,7 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
   // ── 1단계: 기관 워크스페이스 만들기 ─────────────────────────────
   await expect(page).toHaveURL(/#\/onboarding$/);
   await expect(page.getByRole('heading', { name: '기관 워크스페이스 설정하기', level: 1 })).toBeVisible();
-  await expect(page.getByRole('tab', { name: '1 기관 워크스페이스', selected: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '1. 기관 워크스페이스', selected: true })).toBeVisible();
   // 주소 이름은 배포 설정(RELAYER_SLUG)이 기본값으로 들어와 있다 — 관리자가 고칠 수 있다.
   await expect(page.locator('#ws-slug')).toHaveValue('e2e-slug');
   // 마치기 전에 다른 화면으로 가면 마법사로 돌아온다.
@@ -58,7 +58,7 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
   await page.getByRole('button', { name: '기관 워크스페이스 만들기' }).click();
 
   // 2단계: 기관 정보 — 이름은 1단계에서 들어왔고 주소 이름은 제목 옆 배지다. `다음` 이 저장한다.
-  await expect(page.getByRole('tab', { name: '2 기관 정보', selected: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '2. 기관 정보', selected: true })).toBeVisible();
   await expect(page.locator('#og-name')).toHaveValue(ORG);
   await expect(page.getByText('e2e-slug', { exact: true })).toBeVisible();
   await page.locator('#og-reg').fill('123-45-67890');
@@ -67,7 +67,7 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
   await page.getByRole('button', { name: '다음' }).click();
 
   // 3단계: 사업 — 목록 위 한 줄에서 바로 더한다. 하나 이상 있어야 다음이 열린다.
-  await expect(page.getByRole('tab', { name: '3 사업', selected: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '3. 사업', selected: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '다음' })).toBeDisabled();
   await page.getByRole('button', { name: '사업 추가' }).click();
   await page.locator('#pg-new-name').fill(PROGRAM);
@@ -81,7 +81,7 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
   await page.getByRole('button', { name: '다음' }).click();
 
   // 4단계: 실무자 초대 — 링크를 하나 만들어 실무자가 먼저 들어오게 한다. 마법사가 끝나기 전이라 그 사람은 '기관 준비 중' 을 본다.
-  await expect(page.getByRole('tab', { name: '4 실무자 초대', selected: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '4. 실무자 초대', selected: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: '실무자 초대' })).toBeVisible();
   await page.getByRole('button', { name: '링크 만들기' }).click();
   const inviteLink = (await page.locator('code').first().textContent()) ?? '';
@@ -97,9 +97,9 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
   await page.getByRole('button', { name: '다음' }).click();
 
   // 5단계: AI/STT/DB 연결 — 키만 넣으면 되는 것과 설치가 필요한 것이 갈려 보인다. 확인만 하고 마친다.
-  await expect(page.getByRole('tab', { name: '5 AI/STT/DB 연결', selected: true })).toBeVisible();
-  for (const name of ['AI', 'STT', 'DB']) {
-    await expect(page.locator('details.wire-card-details summary', { hasText: new RegExp(`^${name}`) })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '5. AI/STT/DB 연결', selected: true })).toBeVisible();
+  for (const name of ['1. AI', '2. STT', '3. DB']) {
+    await expect(page.locator('details.wire-card-details summary', { hasText: name })).toBeVisible();
   }
   await page.getByRole('button', { name: '완료' }).click();
 
@@ -154,23 +154,20 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
   await assignCard.getByRole('button', { name: '저장하기' }).click();
   await expect(assignCard.getByText(/담당 E2E 관리자/)).toBeVisible();
 
-  // ── 사업별 보기 — 아코디언을 펼치면 파생 정보와 목록 링크가 있다 ──
+  // ── 사업별 보기 — 아코디언을 펼치면 파생 정보가 있고, 목록은 걸개 주소로 바로 간다 ──
   await page.goto(`${base}/#/settings/org`);
   const programFold = page.locator('details.wire-card-details', { hasText: PROGRAM });
   await expect(programFold.locator('summary')).toContainText('마법사에서 만든 사업');
   await programFold.locator('summary').click();
   await expect(programFold.getByText('참여 당사자')).toBeVisible();
   await expect(programFold.getByText('E2E 관리자', { exact: true })).toBeVisible();
-  await programFold.getByRole('link', { name: '당사자 목록' }).click();
-  await expect(page).toHaveURL(/#\/participants\?program=\d+$/);
+  const programs = (await (await page.request.get(`${base}/settings/programs`)).json()) as Array<{ id: number; name: string }>;
+  const programId = String(programs.find((p) => p.name === PROGRAM)!.id);
+  await page.goto(`${base}/#/participants?program=${programId}`);
   // 걸개가 그 사업으로 걸린 채 열린다.
-  const programId = new URL(page.url()).hash.match(/program=(\d+)/)![1];
   await expect(page.locator('#filter-program')).toHaveValue(programId);
   await expect(page.getByRole('link', { name: new RegExp(`^${PARTICIPANT},`) })).toBeVisible();
-
-  await page.goBack();
-  await programFold.locator('summary').click();
-  await programFold.getByRole('link', { name: '실무자 목록' }).click();
+  await page.goto(`${base}/#/settings/staff?program=${programId}`);
   await expect(page).toHaveURL(new RegExp(`#/settings/staff\\?program=${programId}$`));
   await expect(page.locator('#wk-program')).toHaveValue(programId);
   const workers = page.locator('section.wire-card', { hasText: '실무자 목록' });

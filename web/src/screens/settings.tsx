@@ -11,7 +11,7 @@
  * 기관에 있는 것(`실무자 초대하기`·`실무자 목록`)과 이 사람을 맡은 것(`담당 배정하기`)은
  * 다르다. 방금 초대한 사람은 아무도 안 맡았는데 `담당자`라 부르면 화면이 거짓말한다.
  */
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   addProgram,
   assignCase,
@@ -650,12 +650,15 @@ export function InvitePane() {
             {/* 역할 아래는 만든 링크(뒤에 QR)가 서는 자리다. 링크는 지금 한 번만 보인다 — 표에는 해시만 남는다. */}
             <div className="invite-link-slot" aria-live="polite">
               {link && (
-                <>
-                  <code style={{ wordBreak: 'break-all' }}>{link}</code>
-                  <FormActions>
+                <div className="wire-form-field">
+                  <span className="wire-form-label">초대 링크</span>
+                  <div className="inline-action-row invite-link-row">
+                    <div className="invite-link-card">
+                      <code>{link}</code>
+                    </div>
                     <Button onClick={() => void navigator.clipboard.writeText(link)}>복사하기</Button>
-                  </FormActions>
-                </>
+                  </div>
+                </div>
               )}
             </div>
           </div>
@@ -928,16 +931,17 @@ function ProgramDetail({
 
   return (
     <>
-      {/* 파생 정보의 라벨은 민트 배지다 — 입력 칸 라벨과 구분한다(2026-09-17 Q). */}
-      <DataRows
-        rows={[
-          [<Badge tone="mint">참여 당사자</Badge>, `${p.cases}명, 진행 중 ${p.open_cases}명`],
-          [
-            <Badge tone="mint">담당 실무자</Badge>,
-            workers === null ? '불러오는 중' : workers.length === 0 ? '없음' : workers.map((w) => w.name).join(', '),
-          ],
-        ]}
-      />
+      {/* 파생 정보 — 라벨은 민트 글자, 줄 사이 선 없음(2026-09-17 Q). 입력 칸 라벨과 구분한다. */}
+      <dl className="wire-data-rows program-facts">
+        <div className="wire-data-row">
+          <dt>참여 당사자</dt>
+          <dd>{`${p.cases}명, 진행 중 ${p.open_cases}명`}</dd>
+        </div>
+        <div className="wire-data-row">
+          <dt>담당 실무자</dt>
+          <dd>{workers === null ? '불러오는 중' : workers.length === 0 ? '없음' : workers.map((w) => w.name).join(', ')}</dd>
+        </div>
+      </dl>
       {!p.retired_at && (
         <div className="wire-container" data-grid="true">
           <div className="wire-col-6">
@@ -980,12 +984,6 @@ function ProgramDetail({
       )}
       {err && <ErrorText>{err}</ErrorText>}
       <FormActions>
-        <a className="wire-button" href={`#/participants?program=${p.id}`}>
-          <span className="wire-button-text">당사자 목록</span>
-        </a>
-        <a className="wire-button" href={`#/settings/staff?program=${p.id}`}>
-          <span className="wire-button-text">실무자 목록</span>
-        </a>
         {p.retired_at ? (
           <Button aria-label={`${p.name} 복구`} onClick={() => void reopenProgram(p.id).then(onChanged)}>
             복구
@@ -1070,7 +1068,7 @@ export function ProgramsPane({ onChanged }: { onChanged?: (programs: Program[]) 
         }
       >
         {adding && (
-          <div className="program-add-row">
+          <div className="inline-action-row">
             <Field label="새 사업 이름" htmlFor="pg-new-name" required>
               <input
                 id="pg-new-name"
@@ -1100,6 +1098,7 @@ export function ProgramsPane({ onChanged }: { onChanged?: (programs: Program[]) 
             <Fold
               key={p.id}
               group="programs"
+              chevron="button"
               open={p.id === justAdded}
               title={p.retired_at ? `${p.name} (삭제됨)` : p.name}
               desc={`${period(p)} | 당사자 ${p.cases}명${p.description ? ` | ${p.description}` : ''}`}
@@ -1285,29 +1284,43 @@ export function ConnectionsPane() {
     }
   };
 
-  const status = (ok: boolean) => (ok ? <Badge tone="mint">붙어 있어요</Badge> : <Badge>안 붙었어요</Badge>);
+  const status = (ok: boolean) => (ok ? <Badge tone="mint">연결</Badge> : <Badge tone="coral">해제</Badge>);
   const aiSource = c.ai.source === 'db' ? '저장된 키 ••••••••' : c.ai.source === 'env' ? `서버 ${c.ai.env}` : '키 없음';
-  const guide = (
-    <FormActions>
-      {/* 설정 가이드는 랜딩에 붙고 여기서는 팝업으로 본다 — 다음 세션. 자리만 잡아 둔다. */}
-      <Button disabled>설정 가이드</Button>
-    </FormActions>
+  const row = (ok: boolean, text: string) => (
+    <span className="connection-summary">
+      {status(ok)}
+      <span>{text}</span>
+    </span>
+  );
+  /** 설치 순서와 안내. 무엇을 어디서, 그리고 AI(이 도구)가 어디까지 돕는지. */
+  const guide = (steps: Array<[string, ReactNode]>) => (
+    <ol className="connection-guide">
+      {steps.map(([label, body]) => (
+        <li key={label}>
+          <strong>{label}</strong>
+          <span>{body}</span>
+        </li>
+      ))}
+    </ol>
+  );
+  const ext = (href: string, label: string) => (
+    <a href={href} target="_blank" rel="noreferrer">
+      {label}
+    </a>
   );
 
   return (
     <>
-      <p className="panel-meta">AI = 상담 기록 정리, STT = 녹음을 글로, DB = 기록 저장. 셋이 붙어 있는지 여기서 확인.</p>
+      <p className="panel-meta">AI = 상담 기록 정리, STT = 녹음을 글로, DB = 기록 저장. 순서대로 붙인다 — AI 먼저.</p>
       <div className="connection-list">
-        <Fold
-          title="AI"
-          group="connections"
-          desc={
-            <>
-              {status(c.ai.connected)} {c.ai.provider} | {c.ai.model} | {aiSource}
-            </>
-          }
-        >
-          {c.ai.provider === 'openai' ? (
+        <Fold title="1. AI" group="connections" chevron="button" desc={row(c.ai.connected, `${c.ai.provider} · ${c.ai.model} · ${aiSource}`)}>
+          {guide([
+            ['키 발급', <>{ext('https://platform.openai.com/api-keys', 'OpenAI API keys')} → Create new secret key → 복사(한 번만 보임)</>],
+            ['결제', <>{ext('https://platform.openai.com/settings/organization/billing', 'Billing')} 에 카드 등록 — 키만 있으면 호출이 거절된다</>],
+            ['여기 입력', '아래 칸에 붙여 넣고 저장. 서버가 OpenAI 에 확인한 뒤 암호문으로 저장한다'],
+            ['AI가 돕는 범위', '키 검증·저장·연결 상태 확인·요약 생성. 계정 가입·결제·키 발급은 사람이 한다'],
+          ])}
+          {c.ai.provider === 'openai' && (
             <>
               <Field label="OpenAI API 키" htmlFor="ai-key">
                 <input id="ai-key" type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} />
@@ -1325,32 +1338,28 @@ export function ConnectionsPane() {
                 </Button>
               </FormActions>
             </>
-          ) : (
-            guide
           )}
         </Fold>
         <Fold
-          title="STT"
+          title="2. STT"
           group="connections"
-          desc={
-            <>
-              {status(c.stt.connected)} {c.stt.provider}
-              {c.stt.region ? ` | ${c.stt.region}` : ''} | 서버 {c.stt.env}
-            </>
-          }
+          chevron="button"
+          desc={row(c.stt.connected, `${c.stt.provider}${c.stt.region ? ` · ${c.stt.region}` : ''} · 서버 ${c.stt.env}`)}
         >
-          {guide}
+          {guide([
+            ['리소스 만들기', <>{ext('https://portal.azure.com/#create/Microsoft.CognitiveServicesSpeechServices', 'Azure Speech 리소스 만들기')} — 리전 Korea Central, 요금제 S0</>],
+            ['키·리전 확인', 'Azure 포털 › 리소스 › Keys and Endpoint 에서 KEY 1 과 Location/Region'],
+            ['서버에 넣기', <>기관 서버 <code>.env</code> 에 <code>AZURE_SPEECH_KEY</code>, <code>AZURE_SPEECH_REGION</code> 을 적고 앱을 다시 시작한다(<code>docs/deploy.md</code>)</>],
+            ['AI가 돕는 범위', '연결 상태 확인·전사 실패 이유 안내. Azure 가입·결제·리소스 생성·서버 파일 수정은 사람이 한다'],
+          ])}
         </Fold>
-        <Fold
-          title="DB"
-          group="connections"
-          desc={
-            <>
-              {status(c.db.connected)} 확인 {new Date(c.db.checked_at).toLocaleString('ko-KR')} | 서버 {c.db.env}
-            </>
-          }
-        >
-          {guide}
+        <Fold title="3. DB" group="connections" chevron="button" desc={row(c.db.connected, `Postgres · 서버 ${c.db.env}`)}>
+          {guide([
+            ['DB 준비', <>{ext('https://supabase.com/dashboard', 'Supabase')} 프로젝트(서울 리전) 또는 기관 서버의 Postgres 17</>],
+            ['연결 문자열', <>Supabase › Project Settings › Database 의 URI(<code>postgres://…</code>)를 기관 서버 <code>.env</code> 의 <code>DATABASE_URL</code> 에 적는다</>],
+            ['표 만들기', <><code>node api/src/migrate.ts</code> 로 스키마를 올리고 앱을 다시 시작한다. 백업은 <code>scripts/backup.sh</code></>],
+            ['AI가 돕는 범위', '마이그레이션·백업·복구 절차 실행과 상태 확인. 계정 가입·결제·비밀번호 보관은 사람이 한다'],
+          ])}
         </Fold>
       </div>
     </>
