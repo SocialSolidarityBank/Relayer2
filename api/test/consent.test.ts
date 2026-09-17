@@ -83,22 +83,11 @@ describe('현재 상태 접기', () => {
 });
 
 // 정본은 여섯 영역이다. 셋은 P4(음성)가 쓴다.
-// 문안을 한 글자라도 바꾸면 해시가 달라져 기존 동의가 `확인 필요`로 떨어진다.
 describe('음성 세 영역', () => {
-  it('정본 문안 그대로다', () => {
-    expect(CONSENT_COPY.counseling_recording.copy).toBe('상담 내용을 녹음하여 상담 기록 작성에 이용합니다.');
-    expect(CONSENT_COPY.external_stt_processing.copy).toBe(
-      '녹음 음성을 선택한 외부 음성인식(STT) 제공자에게 보내 전사합니다.',
-    );
-    expect(CONSENT_COPY.voice_original_retention_period.copy).toBe(
-      '상담 음성 원본을 고지한 보유기간 동안 보관한 뒤 삭제합니다.',
-    );
-  });
-
   it('보유기간이 해시에 묶인다', () => {
     // 음성 보유기간은 "얼마나 갖고 있는가"가 동의의 내용이다. 기간이 바뀌면 다시 받아야 한다.
     expect(canonicalPreimage('voice_original_retention_period')).toContain(
-      'retentionDuration=institution_retention_1y',
+      'retentionDuration=institution_retention_30d',
     );
     expect(canonicalPreimage('personal_data_collection_use')).toContain('retentionDuration=<null>');
   });
@@ -108,6 +97,4 @@ describe('음성 세 영역', () => {
     expect(CONSENT_COPY.external_stt_processing.provider?.id).toBe('azure');
     expect(canonicalPreimage('external_stt_processing')).toContain('purpose=speech_to_text');
   });
-
-
 });

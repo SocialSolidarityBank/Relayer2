@@ -613,7 +613,7 @@ function Documents({ caseId }: { caseId: number }) {
       {/* 안내는 파일 선택 줄 **아래**다(2026-09-17 Q). 가로선을 하나 두고 카드 아래 여백과
           같은 24를 위아래로 준다 — 제목 줄의 구분선과 같은 리듬이다. */}
       <div className="doc-upload-note">
-        <p className="panel-meta">{file ? `${file.name}, ${size(file.size)}` : '보존기간 1년, 20MB 제한'}</p>
+        <p className="panel-meta">{file ? `${file.name}, ${size(file.size)}` : '보존기간 30일, 20MB 제한'}</p>
       </div>
       {error && <ErrorText>{error}</ErrorText>}
     </Card>
