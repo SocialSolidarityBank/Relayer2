@@ -31,10 +31,9 @@ test('이름 중심 목록에서 정보를 바로 보고 상세와 기록·일�
   await page.goto('/#/participants');
   const card = page.getByRole('link', { name: `${name}, ${program}, 당사자 정보`, exact: true });
   await expect(card.getByText(name, { exact: true })).toBeVisible();
-  await expect(card.getByText(program, { exact: true })).toBeVisible();
-  await expect(card.getByText('시험 실무자', { exact: true })).toBeVisible();
-  await expect(card.getByText('1회차까지 기록', { exact: true })).toBeVisible();
-  await expect(card.getByText('다음 상담', { exact: true })).toBeVisible();
+  // 카드는 한 행이다(2026-09-17 Q): 이름 + 12px 요약 `가명 · 담당 실무자 · 사업명 N회차 · 다음 상담`.
+  const meta = card.locator('.participant-card-id');
+  await expect(meta).toHaveText(new RegExp(`시험 실무자 · ${program} 1회차 · \\d+월 \\d+일`));
   await expect(card.getByText('예정 없음', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '내가 맡기', exact: true })).toHaveCount(0);
 
@@ -54,6 +53,20 @@ test('이름 중심 목록에서 정보를 바로 보고 상세와 기록·일�
     // 화면 이름은 더 이상 제목이 아니다 — 당사자 카드가 머리이고 제목은 사람 이름이다(2026-09-17 Q).
     await expect(page.getByRole('heading', { name, level: 1, exact: true })).toBeVisible();
   }
+
+  // ── 걸개와 정렬(2026-09-17 Q) ────────────────────────────────
+  await page.goto('/#/participants');
+  await page.getByLabel('사업명 걸개', { exact: true }).selectOption(program);
+  await expect(page.getByRole('article')).toHaveCount(1);
+  await expect(page.getByRole('article')).toContainText(name);
+  await page.getByLabel('상태 걸개', { exact: true }).selectOption('closed');
+  await expect(page.getByRole('article')).toHaveCount(0);
+  await page.getByLabel('상태 걸개', { exact: true }).selectOption('all');
+  await page.getByLabel('사업명 걸개', { exact: true }).selectOption('all');
+  // 정렬은 다음 상담이 있는 사람을 앞으로 올린다 — 이 사람은 이틀 뒤 일정이 있다.
+  await page.getByLabel('정렬', { exact: true }).selectOption('date_asc');
+  await expect(page.getByRole('article').first()).toContainText('월');
+  await page.getByLabel('정렬', { exact: true }).selectOption('name');
 
   // Revoking membership changes the live list response. A card must not pretend
   // that hidden records are empty, retain the old name, or offer self-assignment.
