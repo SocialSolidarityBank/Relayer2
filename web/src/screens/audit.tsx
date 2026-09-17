@@ -65,6 +65,7 @@ const KEY_LABEL: Record<string, string> = {
   deleted: '지운 수',
   missing: '없던 수',
   delete_after: '지울 날',
+  store: '응답 보관',
 };
 
 /** `fields` 한 조각을 사람 말로 편다. */
@@ -78,7 +79,11 @@ function fieldText(field: string): string {
   }
   if (field.includes('=')) {
     const [k, v] = field.split('=');
-    const val = k === 'bytes' ? `${Math.ceil(Number(v) / 1024)}KB` : k === 'assignee' && v === 'none' ? '없음' : v;
+    const val =
+      k === 'bytes' ? `${Math.ceil(Number(v) / 1024)}KB`
+      : k === 'assignee' && v === 'none' ? '없음'
+      : k === 'store' ? (v === 'false' ? '끔' : '켬')
+      : v;
     return `${KEY_LABEL[k] ?? k} ${val}`;
   }
   return FIELD_LABEL[field] ?? field;
