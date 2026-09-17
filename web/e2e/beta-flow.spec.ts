@@ -118,6 +118,19 @@ test('등록부터 회차 기록·이어받기까지 한 바퀴', async ({ page 
   await page.getByRole('button', { name: '일정 저장', exact: true }).click();
   await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
 
+  // ── 회차별 요약 탭: 맨 위가 위험 신호다(2026-09-17 Q — 구 15초 다시보기 자리) ──
+  await page.getByRole('tab', { name: '회차별 요약' }).click();
+  const risk = page.locator('.risk-banner');
+  await expect(risk).toContainText('위험 신호 없음');
+  await expect(risk).toContainText('AI 확인 안 함');
+  // 배너가 회차 목록 위에 선다.
+  const bannerBox = await risk.boundingBox();
+  const listBox = await page
+    .locator('section.wire-card')
+    .filter({ has: page.getByRole('heading', { name: '회차별 요약' }) })
+    .boundingBox();
+  expect(bannerBox && listBox && bannerBox.y < listBox.y).toBeTruthy();
+
   // ── 목표 탭: 전체 상담 목표 ─────────────────────────────────
   await page.getByRole('tab', { name: '목표' }).click();
   await expect(page.locator('section.wire-card', { hasText: '전체 상담 목표' }).first()).toContainText(

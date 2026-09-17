@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import {
   documentHref,
   getAccess,
+  getBriefing,
   getCaseDetail,
   getConsentCopy,
   getConsents,
@@ -14,6 +15,7 @@ import {
   revokeAccess,
   uploadDocument,
   type AccessState,
+  type Briefing,
   type CaseDetail,
   type ConsentCopy,
   type ConsentView,
@@ -53,15 +55,62 @@ const TRANSCRIPT_LABEL: Record<string, string> = {
   skipped: '전사 건너뜀',
 };
 
+const AI_OFF_LABEL: Record<string, string> = {
+  ai_disabled: 'AI 확인 안 함',
+  pending: '확인 중',
+};
+
+/**
+ * 위험 신호 배너 — **회차별 요약의 맨 위**다(2026-09-17 Q — 구 15초 다시보기 자리).
+ * 비어도 빠지지 않고 상태를 쓴다. 화면에서 유일한 위험색 테두리이고 접히지 않는다.
+ * 확정된 위험 카드만 싣는다(`kind='judgment'` + `risk_type`) — 그 판정은 서버가 한다.
+ */
+function RiskBanner({ caseId }: { caseId: number }) {
+  const [risk, setRisk] = useState<Briefing['risk_signals'] | null>(null);
+  useEffect(() => {
+    void getBriefing(caseId).then((b) => setRisk(b.risk_signals));
+  }, [caseId]);
+
+  return (
+    <section className="risk-banner">
+      <div className="risk-banner-head">
+        <h2 className="risk-banner-title">위험 신호</h2>
+      </div>
+      {risk === null ? (
+        <p className="empty">불러오는 중이에요.</p>
+      ) : risk.items.length === 0 ? (
+        <p className="empty">위험 신호 없음</p>
+      ) : (
+        <ul className="risk-banner-list">
+          {risk.items.map((r) => (
+            <li key={r.card_id}>
+              <Item
+                title={r.text}
+                desc={`${r.source_session_seq}회차${r.last_result === 'unchecked' ? ' · 지난 회차 미확인' : ''}`}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+      {risk !== null && (
+        <p className="panel-meta">{AI_OFF_LABEL[risk.status.reason ?? 'ai_disabled']}</p>
+      )}
+    </section>
+  );
+}
+
 function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
   const [openIds, setOpenIds] = useState<number[]>([]);
   const done = detail.sessions.filter((s) => s.status === 'done');
 
   // 아직 아무 기록이 없으면 **여기서 바로 시작할 수 있어야 한다.**
   // 빈 화면만 보여 주고 어디로 가라는 말이 없으면 위 메뉴를 뒤지게 된다.
+  // 위험 신호는 기록이 없어도 선다 — 인테이크에서 이미 확정될 수 있다.
   if (done.length === 0) {
     const hasIntake = detail.sessions.some((s) => s.kind === 'intake');
     return (
+      <>
+      <RiskBanner caseId={caseId} />
       <Card title="회차별 요약">
         <Empty>아직 기록한 상담이 없어요.</Empty>
         <FormActions>
@@ -81,11 +130,16 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
           </Button>
         </FormActions>
       </Card>
+      </>
     );
   }
 
   return (
     <>
+      {/* 이 탭은 **이 사례의 지금 상태와 회차 기록**이다(2026-09-17 Q — 15초 다시보기 폐지로
+          다시 정의). 맨 위가 위험 신호, 그 아래가 회차 목록이다. 목표는 `목표` 탭, 전문은
+          `회차별 전문 보기` 탭, 확인할 과제·오늘 물어볼 것은 상담 기록하기의 레일이 갖는다. */}
+      <RiskBanner caseId={caseId} />
       <Card title="회차별 요약" hint="회차 줄은 기록 상태예요. 승인한 AI 정리는 아래 접힌 카드에 있어요.">
         {done.map((s) => {
           // 수기·음성 상태는 회차 줄의 설명에 붙는다(2026-09-16 인계).
