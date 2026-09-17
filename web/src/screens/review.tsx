@@ -184,6 +184,8 @@ export function ReviewScreen({ caseId, sessionId }: { caseId: number; sessionId:
 
             <FormActions>
               {error && <ErrorText>{error}</ErrorText>}
+              {/* 승인 뒤엔 그 사실이 보여야 한다(2026-09-18 UI-7). 초안 status 가 곧 그 신호다. */}
+              {draft.status === 'approved' && !busy && <Badge>승인 완료</Badge>}
               <Button disabled={busy} onClick={() => void run(() => makeDraft(sessionId))}>
                 다시 정리
               </Button>
@@ -201,7 +203,7 @@ export function ReviewScreen({ caseId, sessionId }: { caseId: number; sessionId:
                   )
                 }
               >
-                {busy ? '처리 중…' : '승인'}
+                {busy ? '처리 중…' : draft.status === 'approved' ? '다시 승인' : '승인'}
               </Button>
             </FormActions>
 
