@@ -1,7 +1,7 @@
 // 상담 기록하기 — 사용자 피드백에 따른 다섯 구획. 수기 없이 녹음만 있는 회차도 기록이다.
 // 구획이 곧 카드 분류다. 실무자는 문장마다 분류를 고르지 않는다.
-// 레이아웃은 CCC 기록 레일 계약: wire-container rail-grid record-grid > .record-side + .record-main.
-import { useEffect, useRef, useState } from 'react';
+// 레이아웃은 본문 5:5(2026-09-18 Q D2): wire-container rail-grid record-grid > .record-side(오른쪽 붙박이) + .record-main(왼쪽).
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   getBriefing,
   getCaseDetail,
@@ -83,6 +83,8 @@ export function RecordScreen({
   const [opinion, setOpinion] = useState('');
   const [nextGoal, setNextGoal] = useState('');
   const [place, setPlace] = useState('');
+  // 소요 시간(분). 빈 칸이면 보내지 않는다(2026-09-18 Q D4 — `sessions.duration_min`).
+  const [duration, setDuration] = useState('');
   // 예정 회차가 없을 때 이 자리에서 바로 적는 일시·상담 방식.
   const [heldAt, setHeldAt] = useState(nowDateTime);
   const [method, setMethod] = useState<NewSessionInput['method']>('in_person');
@@ -127,6 +129,7 @@ export function RecordScreen({
         setEditing(rec);
         setMemo(rec.memo ?? '');
         setPlace(rec.place ?? '');
+        setDuration(rec.duration_min == null ? '' : String(rec.duration_min));
         setHeldAt(rec.held_at ? dateTimeFromIso(rec.held_at) : nowDateTime());
         setMethod((rec.method as NewSessionInput['method']) ?? 'in_person');
         setIsClosing(startClosing || rec.is_closing);
@@ -167,6 +170,7 @@ export function RecordScreen({
       setTaskDraft({ text: '', owner: 'participant' });
       setQuestionDraft({ text: '' });
       setPlace(planned?.place ?? '');
+      setDuration('');
       // 당사자 카드에서 종결로 들어온 경우가 예정 회차의 표시보다 세다(2026-09-17 Q).
       setIsClosing(startClosing || (planned?.is_closing ?? false));
       setMethod((planned?.method as NewSessionInput['method']) ?? 'in_person');
@@ -286,6 +290,7 @@ export function RecordScreen({
         is_closing: isClosing,
         memo,
         place: inPerson ? place.trim() || null : null,
+        duration_min: duration.trim() === '' ? null : Number(duration),
         next_goal_text: nextGoal.trim() || null,
         cards: [
           // `추가`를 누르지 않고 적어만 둔 줄도 함께 저장한다.
@@ -338,30 +343,33 @@ export function RecordScreen({
 
       <div className="wire-container rail-grid record-grid" data-grid="true">
         <aside className="record-side">
-          {/* 종결 상담 체크는 레일 **맨 위**다(2026-09-17 Q — 구 레일 아래). 이번이 마지막인지가
-              과제 결과보다 먼저 정해지는 일이고, 당사자 카드에서 `상담 종결`로 들어오면 이미
-              켜진 채로 열린다. */}
-          <Card title="종결 상담">
+          {/* 종결 상담 체크는 레일 **맨 위**다(2026-09-17 Q). 이번이 마지막인지가 과제 결과보다
+              먼저 정해지는 일이고, 당사자 카드에서 `상담 종결`로 들어오면 이미 켜진 채로 열린다.
+              제목 없는 2행 카드다(2026-09-18 Q D2) — 체크 한 줄, 안내 한 줄, 가로선 없음. */}
+          <Card className="record-closing-card">
             <Choice
               type="checkbox"
-              label="마지막 상담"
-              hint="저장 시 상담 종결 화면으로 이동"
+              label="종결 상담"
+              hint="체크 시 상담 기록 저장 후 상담 종결지 작성 화면으로 이동"
               checked={isClosing}
               onChange={() => setIsClosing((v) => !v)}
             />
           </Card>
-          <Card title="확인할 과제">
+          {/* 확인할 과제·오늘 물어볼 것은 카드 안 카드가 아니라 가로선으로 가른다(2026-09-18 Q D5).
+              항목이 넷 이상이면 접을 수 있는 카드로 세운다 — 기본은 펼침. */}
+          <OpenList title="확인할 과제" count={openTasks.length}>
             {openTasks.length === 0 ? (
               <Empty>없음</Empty>
             ) : (
               openTasks.map((t) => (
-                <div className="wire-repeat-card" key={t.card_id}>
+                <div className="record-open-item" key={t.card_id}>
                   <Item
                     title={t.text}
                     desc={`${t.source_session_seq}회차, ${OWNER_LABEL[t.owner]}${t.last_result === 'unchecked' ? ', 지난 회차 미확인' : ''}`}
                   />
-                  {/* 결과는 셋이다(2026-09-15 Q). 그만두는 것은 상태가 아니라 과제를 접는 일이라 따로 둔다. */}
-                  <ChoiceGroup legend="결과">
+                  {/* 결과는 셋이다(2026-09-15 Q). 범례 없이 라디오만 선다(2026-09-18 Q D6).
+                      그만두는 것은 상태가 아니라 과제를 접는 일이라 따로 둔다. */}
+                  <div className="wire-choice-group" role="radiogroup" aria-label="결과">
                     {TASK_RESULTS.map(({ label, value }) => (
                       <Choice
                         key={label}
@@ -372,7 +380,7 @@ export function RecordScreen({
                         onChange={() => setOutcome(t.card_id, { ...value, card_id: t.card_id })}
                       />
                     ))}
-                  </ChoiceGroup>
+                  </div>
                   <Choice
                     type="checkbox"
                     label="이 과제 그만두기"
@@ -395,33 +403,31 @@ export function RecordScreen({
                 </div>
               ))
             )}
-          </Card>
+          </OpenList>
 
-          <Card title="오늘 물어볼 것">
+          <OpenList title="오늘 물어볼 것" count={openQuestions.length}>
             {openQuestions.length === 0 ? (
               <Empty>없음</Empty>
             ) : (
               openQuestions.map((q) => (
-                <div className="wire-repeat-card" key={q.card_id}>
+                <div className="record-open-item" key={q.card_id}>
                   <Item title={q.text} desc={`${q.source_session_seq}회차`} />
-                  <ChoiceGroup legend="결과">
-                    <Choice
-                      type="checkbox"
-                      name={`confirm-${q.card_id}`}
-                      label="확인함"
-                      checked={outcomes[q.card_id]?.result === 'confirmed'}
-                      onChange={() =>
-                        setOutcome(
-                          q.card_id,
-                          outcomes[q.card_id]?.result === 'confirmed' ? null : { card_id: q.card_id, result: 'confirmed' },
-                        )
-                      }
-                    />
-                  </ChoiceGroup>
+                  <Choice
+                    type="checkbox"
+                    name={`confirm-${q.card_id}`}
+                    label="확인함"
+                    checked={outcomes[q.card_id]?.result === 'confirmed'}
+                    onChange={() =>
+                      setOutcome(
+                        q.card_id,
+                        outcomes[q.card_id]?.result === 'confirmed' ? null : { card_id: q.card_id, result: 'confirmed' },
+                      )
+                    }
+                  />
                 </div>
               ))
             )}
-          </Card>
+          </OpenList>
           {/* 닫힌 카드는 다시 볼 일이 드물어 접어 둔다(2026-09-18 Q). 펼쳐도 읽기만이고,
               다시 열려면 그 회차를 수정한다. 비어 있으면 카드를 아예 안 그린다. */}
           {briefing.closed_tasks.length > 0 && (
@@ -471,9 +477,23 @@ export function RecordScreen({
             </Card>
           )}
 
-          {/* 일시·방식·장소는 한 묶음이다. 장소는 대면일 때만 나오고 방식 바로 아래에 붙는다(요구 14). */}
+          {/* 일시·소요 시간·방식·장소는 한 묶음이다. 장소는 대면일 때만 나오고 방식 바로 아래에 붙는다(요구 14). */}
           <Card title="1. 오늘 상담 내용">
-            <DateTimeInput idPrefix="held-at" value={heldAt} onChange={setHeldAt} disabled={saving} required />
+            <div className="record-when-row">
+              <DateTimeInput idPrefix="held-at" value={heldAt} onChange={setHeldAt} disabled={saving} required />
+              <Field label="소요 시간(분)" htmlFor="duration-min">
+                <input
+                  id="duration-min"
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  step={5}
+                  value={duration}
+                  disabled={saving}
+                  onChange={(e) => setDuration(e.target.value)}
+                />
+              </Field>
+            </div>
             <ChoiceGroup legend="상담 방식">
               {METHODS.map((m) => (
                 <Choice
@@ -605,5 +625,19 @@ export function RecordScreen({
         </main>
       </div>
     </>
+  );
+}
+
+/**
+ * 레일의 열린 항목 묶음. 넷 이상이면 접을 수 있는 카드(기본 펼침), 아니면 보통 카드다
+ * (2026-09-18 Q D5). 제목은 같고, 접을 수 있을 때만 개수가 붙는다(`완료한 과제 N` 과 같은 꼴).
+ */
+function OpenList({ title, count, children }: { title: string; count: number; children: ReactNode }) {
+  return count >= 4 ? (
+    <Fold title={`${title} ${count}`} open>
+      {children}
+    </Fold>
+  ) : (
+    <Card title={title}>{children}</Card>
   );
 }

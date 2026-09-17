@@ -478,3 +478,35 @@ body { margin: 0; }
 .number-stepper > button:focus-visible { outline: 2px solid var(--blue-deep); outline-offset: 1px; }
 .wire-input-box:has(.number-stepper) { position: relative; }
 .wire-input-box:has(.number-stepper) > input { padding-inline-end: var(--space-6); }
+
+/* ==== L2 기록 ==== (2026-09-18 UI 개편 — 상담 기록하기) */
+
+/* 레일 항목은 카드 안 카드가 아니라 **가로선**으로 갈린다(D5 — 구 .wire-repeat-card 중첩 대체).
+   레시피는 인테이크 조회 표 항목(.intake-read-table-entry)과 같다: 본문 gap 12 + 위 16. */
+.record-open-item { display: grid; gap: var(--space-2); min-width: 0; }
+.record-open-item + .record-open-item { padding-top: var(--space-4); border-top: 1px solid var(--line); }
+
+/* 종결 카드는 제목 없는 2행이다(D2): 체크 한 줄, 안내 한 줄 — 체크는 첫 줄에 선다(이식
+   .wire-choice 의 flex-start 그대로). 체크 행의 위아래 8 패딩만 걷어 24 사방 한 값을 지킨다. */
+.record-closing-card .wire-choice { padding: 0; }
+
+/* 일시와 소요 시간이 한 행이다(D7 — `sessions.duration_min`). 날짜·시·분 부품이 왼쪽을 넓게
+   쓰고 분 칸은 좁다. 767 이하에서는 한 열이다. */
+.record-when-row { display: grid; grid-template-columns: minmax(0, 1fr) 128px; gap: var(--space-4) var(--space-6); align-items: end; min-width: 0; }
+.record-when-row > * { min-width: 0; }
+@media (max-width: 767px) {
+  .record-when-row { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* 녹음 카드 머리(D1): 왼쪽은 안내 세 줄(파일 형식·파일 크기·주의), 오른쪽은 버튼 두 개가
+   같은 행 세로 중앙이다. 안내 라벨은 민트 deep(§6 라벨 색), 값은 --sub. */
+.recording-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4) var(--space-6); min-width: 0; }
+.recording-note { display: grid; gap: var(--space-1); margin: 0; min-width: 0; }
+.recording-note > div { display: flex; gap: var(--space-2); min-width: 0; font-size: var(--text-sm); line-height: var(--leading-normal); }
+.recording-note dt { flex: none; font-weight: 600; color: var(--mint-deep); }
+.recording-note dd { margin: 0; color: var(--sub); }
+.recording-actions { display: flex; flex: none; gap: var(--space-3); }
+@media (max-width: 767px) {
+  .recording-head { flex-direction: column; align-items: stretch; }
+  .recording-actions { justify-content: flex-end; }
+}

@@ -66,6 +66,17 @@ const accepts = (file: File, formats: string[]): boolean =>
 const pickMimeType = (): string | undefined =>
   ['audio/webm;codecs=opus', 'audio/mp4'].find((t) => MediaRecorder.isTypeSupported(t));
 
+/**
+ * 화면 잠김 안내(2026-09-18 Q D1-사실). 근거는 PR 본문의 출처 목록:
+ * - iOS: 화면 잠김·앱 전환 시 마이크 트랙이 멈춘다는 보고가 WebKit Bugzilla 에 반복되고(241400·211829),
+ *   홈 화면 웹앱·WKWebView 는 WebKit 이 백그라운드 캡처를 의도적으로 끈다(217948). 애플 문서가
+ *   "잠기면 반드시 멈춘다"고 못박지는 않으므로 `멈출 수 있음`으로 적는다.
+ * - Chrome: 마이크를 잡은 탭은 백그라운드 동결 대상에서 뺀다고 문서화돼 있다(freezing-on-energy-saver).
+ *   그래도 절전·메모리 압박은 문서 밖이라 "켜 두고 앞에 두는 것이 안전" 수준으로만 말한다.
+ */
+const LOCK_NOTE =
+  'iPhone·iPad는 화면 잠김이나 앱 전환 시 녹음이 멈출 수 있음, 어느 기기든 화면을 켜고 이 화면을 앞에 둔 채 녹음';
+
 /** 녹음 행의 전사 상태 한 줄. 'done' 은 전사문 상태(draft/approved)로 더 정확히 말한다. */
 const stateLabel = (r: Recording, transcript: Transcript | null): string => {
   if (r.transcribe_state === 'done') {
@@ -392,30 +403,44 @@ export function RecordingPanel({
   if (!status?.enabled) return null;
 
   return (
-    <Card
-      title="상담 녹음"
-      hint={`${status.formats.join(', ') || '오디오'}, ${fmtBytes(status.max_bytes)} 까지, iPhone·iPad 화면 잠김 시 녹음 끊김`}
-    >
+    <Card title="상담 녹음">
       {error && <ErrorText>{error}</ErrorText>}
 
+      {/* 안내 세 줄 + 버튼 한 행(2026-09-18 Q D1 — 구 카드 도움말 한 줄 대체). */}
+      <div className="recording-head">
+        <dl className="recording-note">
+          <div>
+            <dt>파일 형식</dt>
+            <dd>{status.formats.join(', ') || '오디오'}</dd>
+          </div>
+          <div>
+            <dt>파일 크기</dt>
+            <dd>{fmtBytes(status.max_bytes)} 이내</dd>
+          </div>
+          <div>
+            <dt>주의</dt>
+            <dd>{LOCK_NOTE}</dd>
+          </div>
+        </dl>
+        <div className="recording-actions">
+          {recording ? (
+            <Button variant="primary" onClick={stopRecording}>
+              녹음 멈춤
+            </Button>
+          ) : (
+            <Button variant="primary" disabled={busy !== null} onClick={() => void startRecording()}>
+              {busy === 'record' ? '시작 중…' : '녹음 시작'}
+            </Button>
+          )}
+          <Button
+            disabled={busy !== null || recording}
+            onClick={() => fileRef.current?.click()}
+          >
+            파일 업로드
+          </Button>
+        </div>
+      </div>
       {recording && <p className="panel-meta">녹음 중 {fmtMs(elapsed)}</p>}
-      <FormActions>
-        {recording ? (
-          <Button variant="primary" onClick={stopRecording}>
-            녹음 멈춤
-          </Button>
-        ) : (
-          <Button variant="primary" disabled={busy !== null} onClick={() => void startRecording()}>
-            {busy === 'record' ? '시작 중…' : '녹음 시작'}
-          </Button>
-        )}
-        <Button
-          disabled={busy !== null || recording}
-          onClick={() => fileRef.current?.click()}
-        >
-          파일 업로드
-        </Button>
-      </FormActions>
       <input
         ref={fileRef}
         id="voice-file"
