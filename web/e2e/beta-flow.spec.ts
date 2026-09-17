@@ -22,7 +22,7 @@ const OVERALL_GOAL = '연체를 정리하고 생활을 안정시킨다';
  */
 const openInfo = async (
   page: Page,
-  tab?: '당사자 정보' | '회차별 요약' | '회차별 원본 보기' | '목표',
+  tab?: '당사자 정보' | '회차별 요약' | '목표',
   // 일정을 저장하면 사례 주소를 떠나 일정 목록으로 간다(2026-09-17 Q) — 그때는 사례를 직접 준다.
   fromCaseId?: string,
 ) => {
@@ -159,17 +159,20 @@ test('등록부터 회차 기록·이어받기까지 한 바퀴', async ({ page 
   await goalDialog.getByRole('button', { name: '닫기' }).click();
   await expect(goalDialog).toBeHidden();
 
-  // ── 회차별 원본 보기: 2회차가 넘긴 다음 상담 목표 ───────────
-  await page.getByRole('tab', { name: '회차별 원본 보기' }).click();
+  // ── 회차 원본 드로어: 2회차가 넘긴 다음 상담 목표 ───────────
+  // 원본 전용 탭과 `/full` 화면은 폐지했다(2026-09-18 Q) — 회차 카드에서 드로어로 읽는다.
+  await page.getByRole('tab', { name: '회차별 요약' }).click();
   await page
-    .locator('.wire-repeat-card', { hasText: '2회차' })
-    .getByRole('button', { name: '원본 보기' })
+    .locator('details', { hasText: '2회차' })
+    .first()
+    .getByRole('button', { name: '상담 기록 보기' })
     .click();
-  await expect(page).toHaveURL(/\/full$/);
-  await expect(page.locator('details', { hasText: '상담 내용' }).first()).toContainText(NEXT_GOAL);
-  // 원문 보기의 되돌이 버튼은 `당사자 정보`다(2026-09-17 Q — 당사자 카드가 머리로 올라갔다).
-  await page.getByRole('button', { name: '당사자 정보' }).click();
-  await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
+  const originalDrawer = page.getByRole('dialog', { name: '2회차 상담 기록' });
+  await expect(originalDrawer).toContainText(NEXT_GOAL);
+  await originalDrawer.getByRole('button', { name: '닫기' }).click();
+  await expect(originalDrawer).toBeHidden();
+  // 드로어를 닫아도 회차 목록을 떠나지 않는다 — 그게 모달 대신 드로어를 쓰는 이유다.
+  await expect(page.getByRole('tab', { name: '회차별 요약' })).toBeVisible();
 
   // ── 확인할 과제·오늘 물어볼 것은 상담 기록하기의 레일이 보여 준다 ──
   // 같은 자료를 쓰던 15초 다시보기 화면이 없어져, 이 흐름의 유일한 자리다.
@@ -590,14 +593,14 @@ test('자유 글을 저장하고 다시 열면 그대로 읽힌다', async ({ pa
   await page.getByRole('button', { name: '저장' }).click();
   await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
 
-  // 원문은 `회차별 원본 보기` 탭이 유일한 입구다(2026-09-17 Q — 요약의 인라인 `원문 보기` 폐지).
-  await openInfo(page, '회차별 원본 보기');
+  // 원본은 회차 카드의 `상담 기록 보기` 드로어가 유일한 입구다(2026-09-18 Q — 전용 탭 폐지).
+  await openInfo(page, '회차별 요약');
   await page
-    .locator('.wire-repeat-card', { hasText: '2회차' })
-    .getByRole('button', { name: '원본 보기' })
+    .locator('details', { hasText: '2회차' })
+    .first()
+    .getByRole('button', { name: '상담 기록 보기' })
     .click();
-  await expect(page).toHaveURL(/\/full$/);
-  await expect(page.locator('details', { hasText: '상담 내용' }).first()).toContainText(memo);
+  await expect(page.getByRole('dialog', { name: '2회차 상담 기록' })).toContainText(memo);
 });
 
 // P2 당사자 열람. 당사자는 로그인하지 않고 링크+코드로 자기 정보와 일정만 본다.

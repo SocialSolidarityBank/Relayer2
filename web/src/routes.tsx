@@ -18,7 +18,6 @@ import { ParticipantsScreen } from './screens/participants.tsx';
 import { RecordScreen } from './screens/record.tsx';
 import { ReviewScreen } from './screens/review.tsx';
 import { ScheduleNewScreen } from './screens/schedule-new.tsx';
-import { SessionFullScreen } from './screens/session-full.tsx';
 
 const HOME = '#/schedule';
 
@@ -128,10 +127,6 @@ export function Routes() {
 
     const reviewing = path.match(/^#\/cases\/(\d+)\/sessions\/(\d+)\/review$/);
     if (reviewing) return <ReviewScreen caseId={Number(reviewing[1])} sessionId={Number(reviewing[2])} />;
-
-    // 수기·음성 전문 보기(2026-09-16 인계). 읽기 전용 — 편집·승인은 기록 화면이 담당한다.
-    const full = path.match(/^#\/cases\/(\d+)\/sessions\/(\d+)\/full$/);
-    if (full) return <SessionFullScreen caseId={Number(full[1])} sessionId={Number(full[2])} />;
 
     // 목표 탭 직행(2026-09-18 UI-9). 기록 화면의 목표 카드 `수정`이 여기로 온다.
     const goals = path.match(/^#\/cases\/(\d+)\/info\/goals$/);

@@ -238,6 +238,42 @@ body { margin: 0; }
 .confirm-dialog h2 { margin: 0 0 var(--space-4); font-size: var(--text-lg); font-weight: 600; }
 .confirm-lines { display: grid; gap: var(--space-2); margin: 0 0 var(--space-5); padding-left: var(--space-5); color: var(--sub); font-size: var(--text-sm); }
 
+/* 회차 원본 드로어(2026-09-18 Q 승인). 네이티브 `<dialog>` 를 **오른쪽 면 전체**에 붙인다 —
+   모달은 화면을 다 가려서 회차 목록·요약과 대조하며 읽을 수 없다. 폭은 인테이크 원본(라벨 + 값
+   두 단)이 접히지 않는 선에서 가장 좁게 잡았다. 머리는 고정, 본문만 스크롤한다. */
+.side-drawer {
+  width: min(720px, 100vw);
+  max-width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  margin: 0 0 0 auto;
+  padding: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  border: 0;
+  border-inline-start: 1px solid var(--line);
+  background: var(--canvas);
+  color: var(--ink);
+}
+.side-drawer::backdrop { background: rgb(0 0 0 / 40%); }
+.side-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-6);
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.side-drawer-head h2 { margin: 0; font-size: var(--text-lg); font-weight: 600; }
+.side-drawer-body { overflow-y: auto; padding: var(--space-6); display: grid; gap: var(--space-4); align-content: start; }
+/* 인테이크 원본은 작성 화면을 그대로 잠근 것이라 자기 열 여백을 갖고 온다 — 드로어 안에서는 뺀다. */
+.side-drawer-body > .wire-container { padding: 0; }
+@media (max-width: 767px) {
+  .side-drawer-head { padding: var(--space-4); }
+  .side-drawer-body { padding: var(--space-4); }
+}
+
 /* 파일 업로드 한 행(2026-09-17 Q): [파일 선택 | 문서 이름] 입력칸 + 업로드 버튼.
    선택 버튼은 **입력칸 안**이다(전역 통일) — 칸 왼쪽에 붙고 글자 입력은 그 오른쪽을 쓴다. */
 .doc-upload-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
