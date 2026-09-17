@@ -199,7 +199,7 @@ export function OnboardingScreen({
           {err && <ErrorText>{err}</ErrorText>}
           <Button onClick={() => setStep(step - 1)}>이전</Button>
           <Button variant="primary" disabled={busy || !canNext} onClick={() => (last ? void finish() : setStep(step + 1))}>
-            {busy ? '마치는 중…' : last ? '마치기' : '다음'}
+            {busy ? '완료 중…' : last ? '완료' : '다음'}
           </Button>
         </FormActions>
       )}

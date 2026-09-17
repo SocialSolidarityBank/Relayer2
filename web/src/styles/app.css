@@ -51,6 +51,12 @@ body { margin: 0; }
 .schedule-wizard-steps .wire-step { cursor: pointer; }
 .schedule-wizard-steps .wire-step:disabled { cursor: default; }
 .schedule-wizard-arrow { color: var(--sub); font-size: var(--text-sm); }
+/* 사업 목록의 인라인 추가 줄: 입력 칸 + 오른쫁 버튼. 버튼은 입력 칸 바닥선에 맞춘다(라벨 높이만큼 내려온다). */
+.program-add-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-3); align-items: end; }
+/* 연결 아코디언 사이 여백(2026-09-17 Q "너무 다닥붙어 있다"). */
+.connection-list { display: grid; gap: var(--space-4); }
+/* 초대: 역할 아래 링크(·QR) 자리. */
+.invite-link-slot { display: grid; gap: var(--space-2); min-height: 120px; }
 .info-original { margin: var(--space-2) 0 0; padding: var(--space-3); border-radius: var(--radius-md); background: var(--panel-alt, var(--panel)); color: var(--ink); white-space: pre-wrap; }
 /* 회차별 요약 안 승인된 AI 정리(2026-09-16 검수). 원문 위, 제목 아래 본문 단이다.
    grid 항목은 min-width:auto 라 안의 nowrap 글자가 폭을 밀어낸다 — 항목마다 0 을 박는다. */

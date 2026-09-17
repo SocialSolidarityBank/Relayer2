@@ -69,11 +69,12 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
   // 3단계: 사업 — 목록 위 한 줄에서 바로 더한다. 하나 이상 있어야 다음이 열린다.
   await expect(page.getByRole('tab', { name: '3 사업', selected: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '다음' })).toBeDisabled();
-  await page.locator('#pg-new-name').fill(PROGRAM);
   await page.getByRole('button', { name: '사업 추가' }).click();
-  // 아코디언을 펼쳐 설명을 적는다.
+  await page.locator('#pg-new-name').fill(PROGRAM);
+  await page.getByRole('button', { name: '추가하기' }).click();
+  // 방금 만든 사업의 아코디언은 펼쳐진 채로 온다 — 바로 설명을 적는다.
   const fold = page.locator('details.wire-card-details', { hasText: PROGRAM });
-  await fold.locator('summary').click();
+  await expect(fold).toHaveAttribute('open', '');
   await fold.getByLabel('한 줄 설명').fill('마법사에서 만든 사업');
   await fold.getByRole('button', { name: '저장하기' }).click();
   await expect(fold.locator('summary')).toContainText('마법사에서 만든 사업');
@@ -97,9 +98,10 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
 
   // 5단계: AI/STT/DB 연결 — 키만 넣으면 되는 것과 설치가 필요한 것이 갈려 보인다. 확인만 하고 마친다.
   await expect(page.getByRole('tab', { name: '5 AI/STT/DB 연결', selected: true })).toBeVisible();
-  await expect(page.getByRole('heading', { name: '키만 넣으면 되는 것' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: '설치가 필요한 것' })).toBeVisible();
-  await page.getByRole('button', { name: '마치기' }).click();
+  for (const name of ['AI', 'STT', 'DB']) {
+    await expect(page.locator('details.wire-card-details summary', { hasText: new RegExp(`^${name}`) })).toBeVisible();
+  }
+  await page.getByRole('button', { name: '완료' }).click();
 
   // ── 완료 화면 = 기관 요약 → 상담 일정 ──────────────────────────
   await expect(page).toHaveURL(/#\/workspace\?done=1$/);
