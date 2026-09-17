@@ -658,6 +658,8 @@ export type ConsentCopy = {
   hash: string;
   /** 이것이 없으면 사례를 열 수 없다. */
   required: boolean;
+  /** 관리자에게만 true(D6). 설정 › 동의서 관리의 `수정` 이 이것을 본다. */
+  editable: boolean;
 };
 export const getConsentCopy = () => json<ConsentCopy[]>('/consent-copy');
 
@@ -677,3 +679,46 @@ export const signupOpen = () => json<{ open: boolean; workspace: Workspace | nul
 /** 계정만 만든다. 기관 워크스페이스는 로그인 뒤 마법사 0단계다. */
 export const signup = (body: { email: string; password: string; name: string }) =>
   json<{ ok: true }>('/auth/signup', { method: 'POST', body: JSON.stringify(body) });
+
+// ── L4 설정 (UI 개편 2026-09-18, ui-plan §4 L5 계약, #54 착지) ─────────────────
+
+/** J1. 한 실무자가 맡은 당사자 — 회차 = 기록된 회차 수, 다음 상담 = 첫 예정 회차. 남의 것을 보면 서버가 감사에 남긴다. */
+export type WorkerCaseRow = { case_id: number; name: string | null; program: string; seq: number; next_at: string | null };
+export const workerCaseRows = (id: number) => json<WorkerCaseRow[]>(`/users/${id}/cases`);
+
+/** J3. 열린 사례만, 10건씩. `q` 는 가명·사업 이름에 건다(이름·연락처는 금고라 서버가 못 거른다). */
+export type AssignCase = {
+  case_id: number;
+  name: string | null;
+  /** 당사자 아이디 = 가명. */
+  login: string;
+  program: string;
+  seq: number;
+  phone: string | null;
+  email: string | null;
+  assignees: Assignee[];
+};
+export const ASSIGN_PAGE_SIZE = 10;
+export const listAssignCases = (params: { q?: string; program?: number | null; page?: number } = {}) => {
+  const qs = new URLSearchParams();
+  if (params.q?.trim()) qs.set('q', params.q.trim());
+  if (params.program) qs.set('program', String(params.program));
+  if (params.page && params.page > 1) qs.set('page', String(params.page));
+  const s = qs.toString();
+  return json<{ items: AssignCase[]; total: number; page: number; page_size: number }>(`/assign/cases${s ? `?${s}` : ''}`);
+};
+
+/** J3·D7. 전체 치환 — 빠진 사람은 거둬지고 빈 배열은 모두 거둔다. 감사 `assignment.set`. */
+export const setAssignments = (caseId: number, user_ids: number[]) =>
+  json<{ ok: true; assignees: Assignee[] }>(`/cases/${caseId}/assignments`, { method: 'PUT', body: JSON.stringify({ user_ids }) });
+
+/** L3·D6. 저장하면 새 판 `consent-standard-form-v<N+1>` 이 되고 모든 지난 동의가 `확인 필요` 로 떨어진다. */
+export type ConsentCopyInput = {
+  copy: string;
+  items: string[];
+  purpose_text: string;
+  retention_text: string;
+  refusal_text: string;
+};
+export const putConsentCopy = (domain: ConsentDomain, body: ConsentCopyInput) =>
+  json<ConsentCopy>(`/consent-copy/${domain}`, { method: 'PUT', body: JSON.stringify(body) });

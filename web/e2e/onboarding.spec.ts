@@ -67,17 +67,16 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
   await page.locator('#og-tel').fill('02-000-0000');
   await page.getByRole('button', { name: '다음' }).click();
 
-  // 3단계: 사업 — 목록 위 한 줄에서 바로 더한다. 하나 이상 있어야 다음이 열린다.
+  // 3단계: 사업 — 목록 위 한 줄(입력칸 + `사업 추가`)에서 바로 더한다. 하나 이상 있어야 다음이 열린다.
   await expect(page.getByRole('tab', { name: '3. 사업', selected: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '다음' })).toBeDisabled();
-  await page.getByRole('button', { name: '사업 추가' }).click();
   await page.locator('#pg-new-name').fill(PROGRAM);
-  await page.getByRole('button', { name: '추가하기' }).click();
+  await page.getByRole('button', { name: '사업 추가' }).click();
   // 방금 만든 사업의 아코디언은 펼쳐진 채로 온다 — 바로 설명을 적는다.
   const fold = page.locator('details.wire-card-details', { hasText: PROGRAM });
   await expect(fold).toHaveAttribute('open', '');
   await fold.getByLabel('한 줄 설명').fill('마법사에서 만든 사업');
-  await fold.getByRole('button', { name: '저장하기' }).click();
+  await fold.getByRole('button', { name: '저장', exact: true }).click();
   await expect(fold.locator('summary')).toContainText('마법사에서 만든 사업');
   await page.getByRole('button', { name: '다음' }).click();
 
@@ -146,13 +145,14 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
   await page.goto(`${base}/#/participants`);
   await expect(page).toHaveURL(/#\/participants$/);
 
-  // ── 관리자 배정 ─────────────────────────────────────────────
+  // ── 관리자 배정 — 행의 `실무자 배정` 이 드로어를 열고, 지금 담당은 배지를 단 채 서 있다 ──
   await page.goto(`${base}/#/settings/staff`);
   const assignCard = page.locator('section.wire-card', { hasText: '담당 실무자 배정' });
-  await assignCard.getByRole('button', { name: '담당 고르기' }).first().click();
-  // 등록한 사람이 첫 담당이다 — 이미 켜져 있다. 저장으로 배정을 확정한다.
-  await expect(assignCard.getByRole('checkbox', { name: /E2E 관리자/ })).toBeChecked();
-  await assignCard.getByRole('button', { name: '저장하기' }).click();
+  await assignCard.getByRole('button', { name: /실무자 배정$/ }).first().click();
+  const drawer = page.locator('dialog.assign-drawer');
+  // 등록한 사람이 첫 담당이다 — 이미 목록에 있다. 저장으로 배정을 확정한다.
+  await expect(drawer.locator('.assign-pick-row', { hasText: 'E2E 관리자' })).toContainText('담당 실무자');
+  await drawer.getByRole('button', { name: '저장', exact: true }).click();
   await expect(assignCard.getByText(/담당 E2E 관리자/)).toBeVisible();
 
   // ── 사업별 보기 — 아코디언을 펼치면 파생 정보가 있고, 목록은 걸개 주소로 바로 간다 ──
@@ -172,5 +172,5 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
   await expect(page).toHaveURL(new RegExp(`#/settings/staff\\?program=${programId}$`));
   await expect(page.locator('#wk-program')).toHaveValue(programId);
   const workers = page.locator('section.wire-card', { hasText: '실무자 목록' });
-  await expect(workers.getByRole('cell', { name: 'E2E 관리자', exact: true })).toBeVisible();
+  await expect(workers.locator('details.wire-card-details summary', { hasText: 'E2E 관리자' })).toBeVisible();
 });
