@@ -1,6 +1,6 @@
 // A안: 선택 완료와 일정 저장을 구분한다. 예정 회차를 만드는 API는 그대로 쓴다.
 import { useEffect, useRef, useState } from 'react';
-import { getCase, getCaseDetail, listSchedules, planSession } from '../api.ts';
+import { getCase, getCaseDetail, planSession } from '../api.ts';
 import type { CaseDetail, CaseView, NewSessionInput } from '../api.ts';
 import {
   Button,
@@ -84,10 +84,9 @@ export function ScheduleNewScreen({ caseId, thenRecord = false }: { caseId: numb
     .sort((a, b) => a.seq - b.seq)[0] ?? null;
 
   /**
-   * 예정 회차가 있으면 그 값이 채워진 채 시작한다(D1). 방식·장소·일시는 사례 조회가 이미 주고,
-   * 메모는 일정 목록 조회(`/schedules`)만 싣고 있어 그 회차의 날짜 범위로 한 번 더 부른다.
-   * **사례가 오기 전에는 판단하지 않는다** — 첫 렌더의 `planned === null` 을 "예정 없음"으로 읽으면
-   * 예정 회차가 있는 사람에게도 안내 팝업이 떠서 버튼을 가린다(2026-09-18 e2e 실측).
+   * 예정 회차가 있으면 그 일시·방식·장소·메모가 채워진 채 시작한다(D1) — 값은 사례 조회 하나가
+   * 다 준다. **사례가 오기 전에는 판단하지 않는다**: 첫 렌더의 `planned === null` 을 "예정 없음"으로
+   * 읽으면 예정 회차가 있는 사람에게도 안내 팝업이 떠서 버튼을 가린다(2026-09-18 e2e 실측).
    */
   useEffect(() => {
     if (!view || !thenRecord) return;
@@ -95,21 +94,11 @@ export function ScheduleNewScreen({ caseId, thenRecord = false }: { caseId: numb
       setNotice(true);
       return;
     }
-    let live = true;
     if (planned.scheduled_at) setAt(dateTimeFromIso(planned.scheduled_at));
     if (planned.method) setMethod(planned.method as NewSessionInput['method']);
     setPlace(planned.place ?? '');
+    setMemo(planned.plan_memo ?? '');
     setIsClosing(planned.is_closing);
-    const day = planned.scheduled_at?.slice(0, 10);
-    if (day) {
-      void listSchedules(`${day}T00:00:00.000Z`, `${day}T23:59:59.999Z`)
-        .then(rows => {
-          const row = rows.find(r => r.session_id === planned.id);
-          if (live && row?.plan_memo) setMemo(row.plan_memo);
-        })
-        .catch(() => {});
-    }
-    return () => { live = false; };
   }, [view, thenRecord]);
 
   // 안내는 네이티브 모달이다(`Dialog`·`Confirm` 과 같은 문법) — Escape·바깥 클릭이 닫기다.

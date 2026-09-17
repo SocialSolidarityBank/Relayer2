@@ -48,6 +48,8 @@ export type CaseView = {
     method: string | null;
     place: string | null;
     scheduled_at: string | null;
+    /** 예정 회차에 적어 둔 메모. 일정 예약 화면이 그 회차를 다시 보여 줄 때 쓴다. */
+    plan_memo: string | null;
     is_closing: boolean;
   }>;
 };
