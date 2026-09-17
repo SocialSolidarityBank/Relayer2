@@ -180,17 +180,17 @@ export async function saveRecording(
   actorId: number,
   opts?: { durationMs?: number; contentType?: string },
 ): Promise<Recording> {
-  if (!voiceEnabled()) throw new SttUnavailable('녹음 기능이 꺼져 있어요.');
-  if (audio.byteLength === 0) throw new RecordingRejected('빈 파일이에요.');
+  if (!voiceEnabled()) throw new SttUnavailable('녹음 기능 꺼짐');
+  if (audio.byteLength === 0) throw new RecordingRejected('빈 파일');
   if (audio.byteLength > SPEECH_MAX_BYTES) {
     throw new RecordingRejected(
-      `파일이 너무 커요. ${Math.floor(SPEECH_MAX_BYTES / 1024 / 1024)}MB 까지 받아요.`,
+      `파일 크기 초과, ${Math.floor(SPEECH_MAX_BYTES / 1024 / 1024)}MB 까지`,
     );
   }
   const format = detectFormat(audio, opts?.contentType);
   if (!format) {
     throw new RecordingRejected(
-      `알 수 없는 음성 형식이에요. ${SPEECH_FORMATS.join('·')} 파일만 받아요.`,
+      `알 수 없는 음성 형식, 가능한 형식: ${SPEECH_FORMATS.join(', ')}`,
     );
   }
   const durationMs = opts?.durationMs;
@@ -198,11 +198,11 @@ export async function saveRecording(
     durationMs !== undefined &&
     (!Number.isSafeInteger(durationMs) || durationMs <= 0 || durationMs > 2_147_483_647)
   ) {
-    throw new RecordingRejected('녹음 길이가 올바르지 않아요.');
+    throw new RecordingRejected('녹음 길이 오류');
   }
 
   const [session] = await sql<Session[]>`select * from sessions where id = ${sessionId}`;
-  if (!session) throw new NotFound('회차를 찾지 못했어요.');
+  if (!session) throw new NotFound('회차 없음');
   // 배정되지 않은 실무자는 동의 문구가 뭐든 받지 않는다. 확인은 부수 효과보다 먼저다.
   await assertCaseAccess(session.case_id, actorId);
   await assertCaseOpen(session.case_id);
@@ -215,7 +215,7 @@ export async function saveRecording(
   const autoStart = await autoTranscribeGate(session.case_id);
 
   const days = RETENTION_DAYS[CONSENT_COPY.voice_original_retention_period.retentionDuration ?? ''];
-  if (!days) throw new Error('보유기간 문구를 해석하지 못했어요.');
+  if (!days) throw new Error('보유기간 문구 해석 실패');
 
   const sha256 = createHash('sha256').update(audio).digest('hex');
   // 같은 회차에 같은 파일을 두 번 올리면 새 물건이 아니다 — 있는 행을 돌려준다.
@@ -274,7 +274,7 @@ export async function saveRecording(
 /** 회차의 녹음 목록. 지운 것도 낸다 — 있었다는 사실이 기록이다. */
 export async function listRecordings(sessionId: number, actorId: number): Promise<Recording[]> {
   const caseId = await caseIdOfSession(sessionId);
-  if (caseId === null) throw new NotFound('회차를 찾지 못했어요.');
+  if (caseId === null) throw new NotFound('회차 없음');
   await assertCaseAccess(caseId, actorId);
   const rows = await sql<Recording[]>`
     select ${RECORDING_COLUMNS}
@@ -292,22 +292,22 @@ export async function readRecordingAudio(
   actorId: number,
 ): Promise<{ recording: Recording; bytes: Uint8Array; content_type: string }> {
   const caseId = await caseIdOfRecording(recordingId);
-  if (caseId === null) throw new NotFound('녹음을 찾지 못했어요.');
+  if (caseId === null) throw new NotFound('녹음 없음');
   await assertCaseAccess(caseId, actorId);
 
   const [rec] = await sql<Array<Recording & { rel_path: string }>>`
     select ${RECORDING_COLUMNS}, rel_path
     from recordings where id = ${recordingId}`;
-  if (!rec) throw new NotFound('녹음을 찾지 못했어요.');
-  if (rec.deleted_at) throw new RecordingRejected('보유기간이 지나 지운 녹음이에요.');
+  if (!rec) throw new NotFound('녹음 없음');
+  if (rec.deleted_at) throw new RecordingRejected('보유기간 만료로 삭제된 녹음');
   const full = join(VOICE_ROOT, rec.rel_path);
   const info = await stat(full);
   if (info.size > SPEECH_MAX_BYTES) {
-    throw new RecordingRejected('허용 크기를 넘은 녹음은 열 수 없어요.');
+    throw new RecordingRejected('재생 불가, 허용 크기 초과');
   }
   const bytes = await readFile(full);
   const format = detectFormat(bytes, rec.content_type);
-  if (!format) throw new RecordingRejected('녹음 파일 형식이 저장 정보와 맞지 않아요.');
+  if (!format) throw new RecordingRejected('녹음 파일 형식 불일치');
   await audit({ actorId, action: 'voice.read', caseId, fields: [`recording=${recordingId}`] });
   // 파일을 읽는 사이 배정이 빠졌다면 바이트를 내보내지 않는다.
   await assertCaseAccess(caseId, actorId);
@@ -340,13 +340,13 @@ async function transcribeAudio(
   const configuredEndpoint = process.env.AZURE_SPEECH_ENDPOINT?.trim();
   const region = process.env.AZURE_SPEECH_REGION?.trim();
   if (!key || (!configuredEndpoint && !region)) {
-    throw new SttUnavailable('전사 제공자 설정이 없어 전사를 할 수 없어요.');
+    throw new SttUnavailable('전사 불가, 전사 제공자 설정 없음');
   }
 
   // 정본 제공자는 azure 다. 엔드포인트는 환경이 주면 그것을, 아니면 문서의 지역 엔드포인트를 쓴다.
   // 구독 키가 평문으로 나가지 않도록 HTTPS 아닌 주소는 요청 전에 막는다.
   if (!configuredEndpoint && !/^[a-z0-9-]+$/.test(region ?? '')) {
-    throw new SttUnavailable('전사 제공자 지역 설정이 올바르지 않아요.');
+    throw new SttUnavailable('전사 제공자 지역 설정 오류');
   }
   let url: string;
   try {
@@ -359,7 +359,7 @@ async function transcribeAudio(
     endpoint.hash = '';
     url = endpoint.toString();
   } catch {
-    throw new SttUnavailable('전사 제공자 주소 설정이 올바르지 않아요.');
+    throw new SttUnavailable('전사 제공자 주소 설정 오류');
   }
 
   const form = new FormData();
@@ -384,7 +384,7 @@ async function transcribeAudio(
         signal: AbortSignal.timeout(120_000),
       });
     } catch {
-      throw new SttUnavailable('전사 제공자에 연결하지 못했어요.');
+      throw new SttUnavailable('전사 제공자 연결 실패');
     }
     if (res.ok || !RETRYABLE_STATUS.has(res.status) || attempt >= RETRY_DELAYS_MS.length) break;
     const retryAfter = Number(res.headers.get('retry-after'));
@@ -395,16 +395,16 @@ async function transcribeAudio(
     await sleep(delay);
   }
 
-  if (!res.ok) throw new SttUnavailable(`전사가 되지 않았어요 (${res.status}).`);
+  if (!res.ok) throw new SttUnavailable(`전사 실패 (${res.status})`);
   const parsed = AzureResultSchema.safeParse(await res.json().catch(() => null));
-  if (!parsed.success) throw new SttUnavailable('전사 응답을 읽지 못했어요.');
+  if (!parsed.success) throw new SttUnavailable('전사 응답 해석 실패');
   const payload = parsed.data;
 
   const text = (
     (payload.combinedPhrases ?? []).map((p) => p.text?.trim() ?? '').filter(Boolean).join(' ') ||
     (payload.phrases ?? []).map((p) => p.text?.trim() ?? '').filter(Boolean).join(' ')
   ).trim();
-  if (!text) throw new SttUnavailable('전사 결과가 비어 있어요.');
+  if (!text) throw new SttUnavailable('전사 결과 없음');
 
   const segments = (payload.phrases ?? [])
     .filter((p) => p.text && Number.isFinite(p.offsetMilliseconds))
@@ -421,11 +421,11 @@ async function transcribeAudio(
 async function autoTranscribeGate(
   caseId: number,
 ): Promise<{ state: TranscribeState; note: string | null }> {
-  if (!sttEnabled()) return { state: 'skipped', note: '전사 제공자 설정이 없어요.' };
+  if (!sttEnabled()) return { state: 'skipped', note: '전사 제공자 설정 없음' };
   try {
     await assertConsent(caseId, 'external_stt_processing');
   } catch (err) {
-    if (err instanceof ConsentRequired) return { state: 'skipped', note: '외부 STT 동의가 없어요.' };
+    if (err instanceof ConsentRequired) return { state: 'skipped', note: '외부 STT 동의 없음' };
     throw err;
   }
   return { state: 'pending', note: null };
@@ -475,7 +475,7 @@ async function runAutoTranscribe(recordingId: number, actorId: number): Promise<
 /** 서버가 다시 떴다. 전사 중이던 것은 끊긴 것이다 — 그대로 두면 영원히 '전사 중'이다. */
 export async function failStaleTranscriptions(): Promise<number> {
   const rows = await sql<Array<{ id: number }>>`
-    update recordings set transcribe_state = 'failed', transcribe_note = '서버가 다시 시작돼 전사가 끊겼어요. 전사하기로 다시 시도해요.'
+    update recordings set transcribe_state = 'failed', transcribe_note = '서버 재시작으로 전사 중단, 전사하기로 재시도'
     where transcribe_state = 'pending' returning id`;
   return rows.length;
 }
@@ -486,16 +486,16 @@ export async function failStaleTranscriptions(): Promise<number> {
  * 동의가 없으면 skipped, 권한·존재 문제는 상태를 건드리지 않는다(그 녹음의 일이 아니다).
  */
 export async function draftTranscript(recordingId: number, actorId: number): Promise<Transcript> {
-  if (!voiceEnabled()) throw new SttUnavailable('전사 기능이 꺼져 있어요.');
-  if (!sttEnabled()) throw new SttUnavailable('전사 제공자 설정이 없어 전사를 할 수 없어요.');
+  if (!voiceEnabled()) throw new SttUnavailable('전사 기능 꺼짐');
+  if (!sttEnabled()) throw new SttUnavailable('전사 불가, 전사 제공자 설정 없음');
   try {
     const out = await transcribeRecording(recordingId, actorId);
     await setTranscribeState(recordingId, 'done', null);
     return out;
   } catch (err) {
-    if (err instanceof ConsentRequired) await setTranscribeState(recordingId, 'skipped', '외부 STT 동의가 없어요.');
+    if (err instanceof ConsentRequired) await setTranscribeState(recordingId, 'skipped', '외부 STT 동의 없음');
     else if (!(err instanceof AccessDenied) && !(err instanceof NotFound) && !(err instanceof CaseClosed)) {
-      await setTranscribeState(recordingId, 'failed', err instanceof Error ? err.message : '전사가 되지 않았어요.');
+      await setTranscribeState(recordingId, 'failed', err instanceof Error ? err.message : '전사 실패');
     }
     throw err;
   }
@@ -506,11 +506,11 @@ async function transcribeRecording(recordingId: number, actorId: number): Promis
   const [rec] = await sql<
     Array<{ id: number; session_id: number; rel_path: string; content_type: string; deleted_at: string | null }>
   >`select id, session_id, rel_path, content_type, deleted_at from recordings where id = ${recordingId}`;
-  if (!rec) throw new NotFound('녹음을 찾지 못했어요.');
-  if (rec.deleted_at) throw new RecordingRejected('보유기간이 지나 지운 녹음이에요.');
+  if (!rec) throw new NotFound('녹음 없음');
+  if (rec.deleted_at) throw new RecordingRejected('보유기간 만료로 삭제된 녹음');
 
   const [session] = await sql<Session[]>`select * from sessions where id = ${rec.session_id}`;
-  if (!session) throw new NotFound('회차를 찾지 못했어요.');
+  if (!session) throw new NotFound('회차 없음');
   // 외부로 나가기 직전에 배정을 다시 본다 — 파일을 읽고 나서 알면 늦는다.
   await assertCaseAccess(session.case_id, actorId);
   await assertCaseOpen(session.case_id);
@@ -519,11 +519,11 @@ async function transcribeRecording(recordingId: number, actorId: number): Promis
   const full = join(VOICE_ROOT, rec.rel_path);
   const info = await stat(full);
   if (info.size > SPEECH_MAX_BYTES) {
-    throw new RecordingRejected('허용 크기를 넘은 녹음은 전사할 수 없어요.');
+    throw new RecordingRejected('전사 불가, 허용 크기 초과');
   }
   const audio = await readFile(full);
   const format = detectFormat(audio, rec.content_type);
-  if (!format) throw new RecordingRejected('알 수 없는 음성 형식이라 전사할 수 없어요.');
+  if (!format) throw new RecordingRejected('전사 불가, 알 수 없는 음성 형식');
   // 파일을 읽는 사이 권한·동의가 바뀔 수 있다. 외부 전송 바로 앞에서 다시 확인한다.
   await assertCaseAccess(session.case_id, actorId);
   await assertConsent(session.case_id, 'external_stt_processing');
@@ -614,7 +614,7 @@ const decodeTranscript = (row: TranscriptRow): Transcript => {
 /** 회차의 현재 전사문. 마지막 행이 현재 상태다(AI 초안과 같은 규칙). */
 export async function latestTranscript(sessionId: number, actorId: number): Promise<Transcript | null> {
   const caseId = await caseIdOfSession(sessionId);
-  if (caseId === null) throw new NotFound('회차를 찾지 못했어요.');
+  if (caseId === null) throw new NotFound('회차 없음');
   await assertCaseAccess(caseId, actorId);
 
   const [row] = await sql<TranscriptRow[]>`
@@ -637,20 +637,20 @@ export async function approveTranscript(
   transcriptId: number,
 ): Promise<Transcript> {
   const caseId = await caseIdOfSession(sessionId);
-  if (caseId === null) throw new NotFound('회차를 찾지 못했어요.');
+  if (caseId === null) throw new NotFound('회차 없음');
   await assertCaseAccess(caseId, actorId);
   await assertConsent(caseId, 'external_stt_processing');
 
   const [row] = await sql<TranscriptRow[]>`
     select id, recording_id, session_id, status, text, segments, mask_hits, engine, created_at
     from transcripts where session_id = ${sessionId} order by id desc limit 1`;
-  if (!row) throw new NotFound('승인할 전사문이 없어요.');
+  if (!row) throw new NotFound('승인할 전사문 없음');
   const current = decodeTranscript(row);
   if (transcriptId !== current.id) {
-    throw new RecordingRejected('새 전사문이 올라왔어요. 내용을 다시 확인한 뒤 승인해 주세요.');
+    throw new RecordingRejected('새 전사문 도착, 내용 확인 후 승인');
   }
   if (current.status !== 'draft') {
-    throw new RecordingRejected('승인할 최신 전사 초안이 없어요.');
+    throw new RecordingRejected('승인할 최신 전사 초안 없음');
   }
 
   const text = editedText ?? current.text;
@@ -666,7 +666,7 @@ export async function approveTranscript(
     )
     returning id, created_at`;
   if (!inserted) {
-    throw new RecordingRejected('새 전사문이 올라왔어요. 내용을 다시 확인한 뒤 승인해 주세요.');
+    throw new RecordingRejected('새 전사문 도착, 내용 확인 후 승인');
   }
 
   await audit({

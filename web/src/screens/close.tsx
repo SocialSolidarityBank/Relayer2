@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { closeCase, getCaseDetail, type CaseDetail } from '../api.ts';
 import { OWNER_LABEL } from '../api.ts';
-import { Button, Card, Choice, ChoiceGroup, Empty, ErrorText, Field, FormActions, Item, ParticipantHero } from '../ui.tsx';
+import { Button, Card, Choice, ChoiceGroup, Empty, ErrorText, Field, FormActions, Item, Meta, ParticipantHero } from '../ui.tsx';
 
 // 종결 사유는 통합사례관리 종결 구분을 따른다. 없는 말을 지어내지 않는다.
 const REASONS = ['목표 달성', '타 기관 의뢰', '당사자 거부·중단', '연락 두절', '이사·전출', '기타'] as const;
@@ -19,7 +19,7 @@ export function CloseScreen({ caseId }: { caseId: number }) {
     void getCaseDetail(caseId).then(setDetail);
   }, [caseId]);
 
-  if (!detail) return <p className="empty">불러오는 중이에요.</p>;
+  if (!detail) return <p className="empty">불러오는 중</p>;
 
   const unfinished = detail.open_cards.filter((c) => c.kind === 'promise');
   const lastSeq = detail.sessions.filter((s) => s.status === 'done').at(-1)?.seq ?? null;
@@ -31,7 +31,7 @@ export function CloseScreen({ caseId }: { caseId: number }) {
       await closeCase(caseId, { close_reason: reason, unfinished_note: note.trim() || null });
       window.location.hash = `#/cases/${caseId}/info`;
     } catch (e) {
-      setError(e instanceof Error ? e.message : '종결하지 못했어요.');
+      setError(e instanceof Error ? e.message : '종결 실패');
     } finally {
       setSaving(false);
     }
@@ -62,7 +62,7 @@ export function CloseScreen({ caseId }: { caseId: number }) {
           }
         />
         <div className="wire-container">
-          <Card title="이미 종결한 사례예요">
+          <Card title="이미 종결한 사례">
             <Item title={detail.closure.close_reason} desc={new Date(detail.closure.closed_at).toLocaleString('ko-KR')} />
             <Button onClick={() => (window.location.hash = `#/cases/${caseId}/info`)}>당사자 정보로</Button>
           </Card>
@@ -81,21 +81,21 @@ export function CloseScreen({ caseId }: { caseId: number }) {
         }
       />
       <div className="wire-container">
-        <Card title="미완료 과제" hint="종결해도 완료나 중단으로 바꾸지 않아요. 남은 그대로 기록에 남아요.">
+        <Card title="미완료 과제">
           {unfinished.length === 0 ? (
-            <Empty>남은 과제가 없어요.</Empty>
+            <Empty>남은 과제 없음</Empty>
           ) : (
             unfinished.map((c) => (
               <Item
                 key={c.id}
                 title={c.text}
-                desc={`${c.source_session_seq ? `${c.source_session_seq}회차에서 시작` : '출처 회차 없음'} · ${OWNER_LABEL[c.owner]}`}
+                desc={<Meta parts={[c.source_session_seq ? `${c.source_session_seq}회차에서 시작` : '출처 회차 없음', OWNER_LABEL[c.owner]]} />}
               />
             ))
           )}
         </Card>
 
-        <Card title="종결 사유" hint="이 기록은 상담 회차가 아니에요. 회차 번호를 받지 않아요.">
+        <Card title="종결 사유">
           <ChoiceGroup legend="종결 사유">
             {REASONS.map((r) => (
               <Choice
@@ -108,7 +108,7 @@ export function CloseScreen({ caseId }: { caseId: number }) {
               />
             ))}
           </ChoiceGroup>
-          <Field label="남길 말" htmlFor="note" control="textarea" hint="미완료 과제를 어떻게 하기로 했는지 적어요.">
+          <Field label="남길 말" htmlFor="note" control="textarea" hint="미완료 과제 처리 방향">
             <textarea
               id="note"
               rows={3}

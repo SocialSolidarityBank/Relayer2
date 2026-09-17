@@ -16,7 +16,7 @@ export function LoginScreen({ onDone }: { onDone: () => void }) {
       await login(email.trim(), password);
       onDone();
     } catch (e) {
-      setError(e instanceof Error ? e.message : '들어가지 못했어요.');
+      setError(e instanceof Error ? e.message : '로그인 실패');
     } finally {
       setBusy(false);
     }
@@ -24,7 +24,7 @@ export function LoginScreen({ onDone }: { onDone: () => void }) {
 
   return (
     <>
-      <PageHeader title="릴레이어" meta="실무자와 관리자가 들어오는 자리예요" />
+      <PageHeader title="릴레이어" />
       <div className="wire-container">
         <Card title="로그인">
           <Field label="아이디" htmlFor="email" required>

@@ -189,7 +189,7 @@ export function RecordingPanel({
         if (!live) return;
         if (e instanceof Forbidden) onAccessLost?.();
         setLoadFailed(true);
-        setError(e instanceof Error ? e.message : '불러오지 못했어요.');
+        setError(e instanceof Error ? e.message : '불러오기 실패');
       }
     })();
     return () => {
@@ -229,7 +229,7 @@ export function RecordingPanel({
 
   const guard = (e: unknown): void => {
     if (e instanceof Forbidden) onAccessLost?.();
-    if (alive.current) setError(e instanceof Error ? e.message : '실패했어요.');
+    if (alive.current) setError(e instanceof Error ? e.message : '작업 실패');
   };
 
   const startRecording = async () => {
@@ -239,7 +239,7 @@ export function RecordingPanel({
       const id = await ensureSession();
       if (!alive.current) return;
       if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
-        throw new Error('이 브라우저는 바로 녹음을 지원하지 않아요. 파일 업로드로 올려 주세요.');
+        throw new Error('이 브라우저는 바로 녹음 불가, 파일 업로드 사용');
       }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       // 권한 창이 떠 있는 사이 화면을 나갔으면, 방금 얻은 마이크를 즉시 놓는다.
@@ -272,9 +272,9 @@ export function RecordingPanel({
       }
     } catch (e) {
       if (e instanceof DOMException && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) {
-        setError('마이크 사용을 허용해 주세요. 브라우저 주소창의 권한을 확인해요.');
+        setError('마이크 권한 필요, 브라우저 주소창에서 허용');
       } else if (e instanceof DOMException && e.name === 'NotFoundError') {
-        setError('마이크를 찾지 못했어요. 파일 업로드로 올려 주세요.');
+        setError('마이크 없음, 파일 업로드 사용');
       } else {
         guard(e);
       }
@@ -298,7 +298,7 @@ export function RecordingPanel({
     chunksRef.current = [];
     if (blob.size === 0) return;
     if (status.max_bytes > 0 && blob.size > status.max_bytes) {
-      if (alive.current) setError(`녹음이 너무 커요. ${fmtBytes(status.max_bytes)} 까지 올릴 수 있어요.`);
+      if (alive.current) setError(`녹음 크기 초과, ${fmtBytes(status.max_bytes)} 까지`);
       return;
     }
     if (alive.current) setBusy('upload');
@@ -317,11 +317,11 @@ export function RecordingPanel({
     if (!status) return;
     setError(null);
     if (status.max_bytes > 0 && file.size > status.max_bytes) {
-      setError(`파일이 너무 커요. ${fmtBytes(status.max_bytes)} 까지 올릴 수 있어요.`);
+      setError(`파일 크기 초과, ${fmtBytes(status.max_bytes)} 까지`);
       return;
     }
     if (status.formats.length > 0 && !accepts(file, status.formats)) {
-      setError(`이 형식은 받지 않아요. 가능한 형식: ${status.formats.join(', ')}`);
+      setError(`받을 수 없는 형식, 가능한 형식: ${status.formats.join(', ')}`);
       return;
     }
     setBusy('upload');
@@ -394,7 +394,7 @@ export function RecordingPanel({
   return (
     <Card
       title="상담 녹음"
-      hint={`${status.formats.join(', ') || '오디오'}, ${fmtBytes(status.max_bytes)} 까지, iPhone·iPad 는 화면이 잠기거나 다른 앱으로 가면 녹음이 끊길 수 있어요.`}
+      hint={`${status.formats.join(', ') || '오디오'}, ${fmtBytes(status.max_bytes)} 까지, iPhone·iPad 화면 잠김 시 녹음 끊김`}
     >
       {error && <ErrorText>{error}</ErrorText>}
 
@@ -435,7 +435,7 @@ export function RecordingPanel({
 
       {sessionId !== null &&
         (recordings.length === 0 ? (
-          <Empty>올라온 녹음이 없어요.</Empty>
+          <Empty>올라온 녹음 없음</Empty>
         ) : (
           recordings.map((r) => (
             <div className="wire-repeat-card" key={r.id}>
@@ -445,9 +445,9 @@ export function RecordingPanel({
                 }`}
                 desc={
                   r.deleted_at
-                    ? '보유기간이 지나 지웠어요.'
+                    ? '보유기간 만료로 삭제됨'
                     : `${fmtDate(r.delete_after)}까지 보관, ${stateLabel(r, transcript)}${
-                        r.transcribe_note ? ` — ${r.transcribe_note}` : ''
+                        r.transcribe_note ? `, ${r.transcribe_note}` : ''
                       }`
                 }
                 action={
@@ -479,7 +479,7 @@ export function RecordingPanel({
         ))}
       {recordings.some((r) => r.transcribe_state === 'failed' || r.transcribe_state === 'skipped') &&
         !status.transcription_ready && (
-        <p className="panel-meta">전사 준비가 안 됐어요. 전사하기는 누를 수 없어요.</p>
+        <p className="panel-meta">전사 준비 안 됨, 전사하기 불가</p>
       )}
 
       {transcript && (
@@ -487,6 +487,7 @@ export function RecordingPanel({
           label={transcript.status === 'approved' ? '전사문(확인됨)' : '전사문 초안'}
           htmlFor="transcript"
           control="textarea"
+          tone="ai"
           hint={transcript.status === 'approved' ? undefined : '승인 전 초안'}
         >
           <textarea
@@ -576,7 +577,7 @@ export function SessionAudio({
       } catch (e) {
         if (!live) return;
         if (e instanceof Forbidden) onAccessLost?.();
-        setError(e instanceof Error ? e.message : '불러오지 못했어요.');
+        setError(e instanceof Error ? e.message : '불러오기 실패');
       } finally {
         if (live) setLoading(false);
       }
@@ -589,7 +590,7 @@ export function SessionAudio({
 
   const guard = (e: unknown): void => {
     if (e instanceof Forbidden) onAccessLost?.();
-    if (alive.current) setError(e instanceof Error ? e.message : '실패했어요.');
+    if (alive.current) setError(e instanceof Error ? e.message : '작업 실패');
   };
 
   const checkMismatches = async () => {
@@ -611,7 +612,7 @@ export function SessionAudio({
     status === null
       ? '불러오는 중'
       : !status.enabled
-        ? '꺼져 있어요'
+        ? '꺼짐'
         : transcript?.status === 'approved'
           ? '전사 확인됨'
           : transcript
@@ -622,12 +623,12 @@ export function SessionAudio({
     <Fold title="음성·수기 기록 불일치" desc={error ? '불러오기 실패' : summary}>
       {error && <ErrorText>{error}</ErrorText>}
       {loading ? (
-        <Empty>불러오는 중이에요.</Empty>
+        <Empty>불러오는 중</Empty>
       ) : error && !status ? (
         <Button onClick={() => window.location.reload()}>다시 불러오기</Button>
       ) : !status?.enabled ? (
         // 기능이 꺼져 있으면 꺼져 있다고만 말한다. 빈 양식을 보여 주면 켜져 있는 줄 안다.
-        <Empty>녹음·전사 기능이 꺼져 있어요.</Empty>
+        <Empty>녹음·전사 기능 꺼짐</Empty>
       ) : (
         <>
           {transcript?.status === 'approved' && (
@@ -636,18 +637,18 @@ export function SessionAudio({
             </Button>
           )}
 
-          {writtenChanged && <Empty>변경한 수기 기록을 저장한 뒤 비교할 수 있어요.</Empty>}
+          {writtenChanged && <Empty>수기 기록 저장 후 비교 가능</Empty>}
           {!writtenChanged && mismatches && (
             <>
               {/* 구획 이름은 소제목이다(2026-09-17 Q) — 구 `.panel-meta`(14/400)는 값·상태의 옷이라
                   아래 목록과 위계가 같아졌다. */}
               <h3 className="wire-subhead">숫자 항목 비교</h3>
               {mismatches.voice_status === 'unavailable' ? (
-                <Empty>{mismatches.voice_reason === 'missing_written' ? '저장된 수기 기록이 없어 비교할 수 없어요.' : '전사문이 없어 비교할 수 없어요.'}</Empty>
+                <Empty>{mismatches.voice_reason === 'missing_written' ? '비교 불가, 수기 기록 없음' : '비교 불가, 전사문 없음'}</Empty>
               ) : mismatches.voice_status === 'needs_review' ? (
-                <Empty>전사 확인 전이라 아직 비교하지 않았어요.</Empty>
+                <Empty>전사 확인 전, 비교 안 함</Empty>
               ) : mismatches.voice_vs_written.length === 0 ? (
-                <Empty>전사문과 수기 기록 사이에 어긋난 숫자 항목이 없어요.</Empty>
+                <Empty>어긋난 숫자 항목 없음</Empty>
               ) : (
                 <MismatchList items={mismatches.voice_vs_written} />
               )}

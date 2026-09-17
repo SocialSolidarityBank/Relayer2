@@ -23,13 +23,13 @@ export function InviteScreen({ token, onDone }: { token: string; onDone: () => v
       .catch(() => setRole(null));
   }, [token]);
 
-  if (role === 'loading') return <p className="empty">불러오는 중이에요.</p>;
+  if (role === 'loading') return <p className="empty">불러오는 중</p>;
   if (role === null)
     return (
       <>
-        <PageHeader title="쓸 수 없는 초대예요" />
-        <Card title="다시 받아 주세요">
-          <p className="panel-meta">기한이 지났거나 이미 쓰인 링크예요. 초대한 분께 새 링크를 부탁해 주세요.</p>
+        <PageHeader title="쓸 수 없는 초대" />
+        <Card title="새 초대 필요">
+          <p className="panel-meta">기한 만료 또는 사용된 링크, 초대한 분께 새 링크 요청</p>
         </Card>
       </>
     );
@@ -42,7 +42,7 @@ export function InviteScreen({ token, onDone }: { token: string; onDone: () => v
       window.location.hash = '#/';
       onDone();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : '들어오지 못했어요.');
+      setErr(e instanceof Error ? e.message : '가입 실패');
     } finally {
       setBusy(false);
     }
@@ -50,15 +50,15 @@ export function InviteScreen({ token, onDone }: { token: string; onDone: () => v
 
   return (
     <>
-      <PageHeader title="릴레이어에 들어오기" meta={role === 'admin' ? '관리자로 초대받았어요' : '실무자로 초대받았어요'} />
-      <Card title="쓸 계정을 만들어요" hint="아이디는 나중에 바꿀 수 없어요. 지난 기록이 누구의 것인지 흐려지기 때문이에요.">
+      <PageHeader title="릴레이어에 들어오기" meta={role === 'admin' ? '관리자 초대' : '실무자 초대'} />
+      <Card title="계정 만들기">
         <Field label="아이디" htmlFor="iv-email" required>
           <input id="iv-email" value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
         <Field label="비밀번호" htmlFor="iv-pw" required>
           <input id="iv-pw" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
         </Field>
-        <Field label="이름" htmlFor="iv-name" required hint="당사자에게 보이는 이름이에요.">
+        <Field label="이름" htmlFor="iv-name" required hint="당사자에게 보이는 이름">
           <input id="iv-name" value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
         <FormActions>

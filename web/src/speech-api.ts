@@ -21,14 +21,14 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
       headers: init?.headers ?? (init?.body ? { 'content-type': 'application/json' } : undefined),
     });
   } catch {
-    announce('서버에 닿지 못했어요. 잠시 뒤 다시 해 주세요.');
-    throw new Error('서버에 닿지 못했어요.');
+    announce('서버 연결 실패, 잠시 뒤 다시 시도');
+    throw new Error('서버 연결 실패');
   }
   if (!res.ok) {
     const message = (await res.json().catch(() => ({}))).error;
-    if (res.status === 401) throw new Unauthorized(message ?? '로그인이 필요해요.');
-    if (res.status === 403) throw new Forbidden(message ?? '이 사례에 접근할 수 없어요.');
-    if (res.status >= 500 || res.status === 404) announce(message ?? `요청이 실패했어요 (${res.status}).`);
+    if (res.status === 401) throw new Unauthorized(message ?? '로그인 필요');
+    if (res.status === 403) throw new Forbidden(message ?? '이 사례 접근 불가');
+    if (res.status >= 500 || res.status === 404) announce(message ?? `요청 실패 (${res.status})`);
     throw new Error(message ?? `${res.status}`);
   }
   return (await res.json()) as T;

@@ -175,7 +175,7 @@ export function RecordScreen({
       if (!live) return;
       setBriefing(null);
       setView(null);
-      setError(failure instanceof Error ? failure.message : '상담 기록을 불러오지 못했어요.');
+      setError(failure instanceof Error ? failure.message : '상담 기록 불러오기 실패');
     });
     return () => {
       live = false;
@@ -184,8 +184,8 @@ export function RecordScreen({
 
   if ((!briefing || !view) && error) return <ErrorText>{error}</ErrorText>;
 
-  if (!briefing || !view) return <p className="empty">불러오는 중이에요.</p>;
-  if (editingId && !editing) return <p className="empty">불러오는 중이에요.</p>;
+  if (!briefing || !view) return <p className="empty">불러오는 중</p>;
+  if (editingId && !editing) return <p className="empty">불러오는 중</p>;
 
   // 예정 회차가 있으면 그것을 기록한다. 없으면 여기서 일시·상담 방식을 적고 회차를 만든다.
   // 일정을 미리 잡지 않고 만난 상담(갑작스러운 방문·전화)이 기록되지 못하면 안 된다.
@@ -232,13 +232,13 @@ export function RecordScreen({
   const accessLost = () => {
     setBriefing(null);
     setView(null);
-    setError('담당 배정이 해제되어 상담 기록을 열 수 없어요.');
+    setError('담당 배정 해제, 상담 기록 열기 불가');
   };
 
   const save = async () => {
     // 일시가 덜 골라진 채 저장하면 회차를 열거나 PATCH 하기 전에 막는다.
     if (!heldAtIso) {
-      setError('상담 일시를 모두 골라 주세요.');
+      setError('상담 일시 선택 필요');
       return;
     }
     setSaving(true);
@@ -267,7 +267,7 @@ export function RecordScreen({
       });
       window.location.hash = isClosing ? `#/cases/${caseId}/close` : `#/cases/${caseId}/info`;
     } catch (e) {
-      setError(e instanceof Error ? e.message : '저장하지 못했어요.');
+      setError(e instanceof Error ? e.message : '저장 실패');
     } finally {
       setSaving(false);
     }
@@ -314,15 +314,15 @@ export function RecordScreen({
           <Card title="종결 상담">
             <Choice
               type="checkbox"
-              label="이번이 마지막 상담이에요"
-              hint="저장하면 상담 종결 화면으로 이어져요. 저장에 실패하면 사례를 닫지 않아요."
+              label="마지막 상담"
+              hint="저장 시 상담 종결 화면으로 이동"
               checked={isClosing}
               onChange={() => setIsClosing((v) => !v)}
             />
           </Card>
-          <Card title="확인할 과제" hint="누르지 않으면 이번에 확인 안 함으로 남고, 다음에 다시 올라와요.">
+          <Card title="확인할 과제">
             {openTasks.length === 0 ? (
-              <Empty>아직 없어요.</Empty>
+              <Empty>없음</Empty>
             ) : (
               openTasks.map((t) => (
                 <div className="wire-repeat-card" key={t.card_id}>
@@ -346,14 +346,13 @@ export function RecordScreen({
                   <Choice
                     type="checkbox"
                     label="이 과제 그만두기"
-                    hint="더 안 하기로 했을 때만. 다음 상담에 올라오지 않아요."
                     checked={outcomes[t.card_id]?.follow === 'stop'}
                     onChange={() => {
                       if (outcomes[t.card_id]?.follow === 'stop') {
                         setOutcome(t.card_id, null);
                         return;
                       }
-                      const reason = window.prompt('그만두는 이유를 적어 주세요.');
+                      const reason = window.prompt('그만두는 이유');
                       if (reason?.trim())
                         setOutcome(t.card_id, {
                           card_id: t.card_id,
@@ -370,7 +369,7 @@ export function RecordScreen({
 
           <Card title="오늘 물어볼 것">
             {openQuestions.length === 0 ? (
-              <Empty>아직 없어요.</Empty>
+              <Empty>없음</Empty>
             ) : (
               openQuestions.map((q) => (
                 <div className="wire-repeat-card" key={q.card_id}>
@@ -473,10 +472,10 @@ export function RecordScreen({
                   setMemo(e.target.value);
                   // 수기 첫 입력도 상담의 시작이다 — 회차가 없으면 여기서 만든다.
                   void ensureSession().catch((err: unknown) =>
-                    setError(err instanceof Error ? err.message : '회차를 열지 못했어요.'),
+                    setError(err instanceof Error ? err.message : '회차 열기 실패'),
                   );
                 }}
-                placeholder="오늘 나눈 이야기를 적어 주세요."
+                placeholder="오늘 나눈 이야기"
               />
             </Field>
           </Card>
@@ -505,7 +504,7 @@ export function RecordScreen({
             */}
             {duplicateTasks.length > 0 && (
               <p className="panel-meta">
-                왼쪽 확인할 과제에 이미 있어요: {duplicateTasks.join(', ')}. 결과만 매기면 다음에도 올라와요.
+                왼쪽 확인할 과제와 중복: {duplicateTasks.join(', ')}, 결과만 매기면 다음에도 올라옴
               </p>
             )}
           </Card>
@@ -557,7 +556,7 @@ export function RecordScreen({
             />
           ) : (
             <Fold title="음성·수기 기록 불일치">
-              <Empty>녹음을 시작하거나 상담 내용을 적으면 회차가 생겨요.</Empty>
+              <Empty>녹음 시작 또는 상담 내용 입력 시 회차 생성</Empty>
             </Fold>
           )}
 

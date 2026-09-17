@@ -43,11 +43,11 @@ export function ConsentLinkCard({
               ['확인 코드', code],
             ]}
           />
-          <p className="panel-meta">이 화면을 닫으면 코드는 다시 볼 수 없어요. 지금 전해 주세요.</p>
+          <p className="panel-meta">코드는 지금 한 번만 표시</p>
           {children}
         </>
       ) : (
-        <p className="panel-meta">개인 정보 및 민감 정보 처리 동의 받기 링크를 생성하세요</p>
+        <p className="panel-meta">만든 링크 없음</p>
       )}
     </Card>
   );
