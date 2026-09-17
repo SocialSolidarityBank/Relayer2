@@ -304,9 +304,11 @@ export function Fold({
   group,
   action,
   onOpen,
+  crisis = false,
   children,
 }: {
-  title: string;
+  /** 문자열이 기본이다. 배지를 제목 줄에 함께 세울 때만 노드를 준다. */
+  title: ReactNode;
   /** 접힌 채로도 보이는 한 줄. 펼치지 않고 고를 수 있어야 한다. */
   desc?: ReactNode;
   open?: boolean;
@@ -319,11 +321,13 @@ export function Fold({
   action?: ReactNode;
   /** 펼치는 순간 한 번 부른다 — 펼쳐야 필요한 값을 그때 불러오는 자리다. */
   onOpen?: () => void;
+  /** 위험 신호가 붙은 카드. 이식 CSS 의 `is-crisis`(risk 테두리·틴트)를 그대로 쓴다. */
+  crisis?: boolean;
   children: ReactNode;
 }) {
   return (
     <details
-      className="surface-card wire-card wire-card-details"
+      className={`surface-card wire-card wire-card-details${crisis ? ' is-crisis' : ''}`}
       name={group}
       open={open}
       onToggle={event => {

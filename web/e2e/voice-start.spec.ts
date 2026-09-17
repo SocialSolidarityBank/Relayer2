@@ -70,10 +70,12 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
   await page.goto(`/#/cases/${caseId}/info`);
   await expect(page.getByRole('heading', { name: NAME })).toBeVisible();
   await page.getByRole('tab', { name: '회차별 요약' }).click();
-  const row = page.locator('.wire-repeat-card', { hasText: '1회차' });
-  await expect(row).toContainText('수기 미작성');
-  await expect(row).toContainText('녹음 1');
-  await expect(row).toContainText('전사 건너뜀');
+  // 한 회차가 한 접힘 카드다(2026-09-17 Q). 기록 상태는 펼친 본문의 `기록 상태` 구역에 있다.
+  const fold = page.locator('details', { hasText: '1회차' }).first();
+  await fold.locator('summary').click();
+  await expect(fold).toContainText('수기 미작성');
+  await expect(fold).toContainText('녹음 1');
+  await expect(fold).toContainText('전사 건너뜀');
 
   // ── 원문 보기 — `회차별 원본 보기` 탭이 그 입구다 ───────────
   // 화면 이름과 구획(2026-09-17 Q): `상담 내용 원본 보기` · `상담 내용`·`음성 기록` 접힘 카드.
@@ -97,5 +99,7 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
   await page.getByRole('button', { name: '당사자 정보' }).click();
   await expect(page.getByRole('heading', { name: NAME })).toBeVisible();
   await page.getByRole('tab', { name: '회차별 요약' }).click();
-  await expect(page.locator('.wire-repeat-card', { hasText: '1회차' })).toContainText('녹음 1');
+  const again = page.locator('details', { hasText: '1회차' }).first();
+  await again.locator('summary').click();
+  await expect(again).toContainText('녹음 1');
 });

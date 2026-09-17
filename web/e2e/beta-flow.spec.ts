@@ -132,18 +132,16 @@ test('등록부터 회차 기록·이어받기까지 한 바퀴', async ({ page 
   await expect(page).toHaveURL(/#\/schedule$/);
   await expect(page.getByRole('heading', { name: '상담 일정', level: 1, exact: true })).toBeVisible();
 
-  // ── 회차별 요약 탭: 맨 위가 위험 신호다(2026-09-17 Q — 구 15초 다시보기 자리) ──
+  // ── 회차별 요약 탭: 한 회차가 한 접힘 카드다(2026-09-17 Q — 상단 위험 신호 배너 폐지) ──
   await openInfo(page, '회차별 요약', caseId);
-  const risk = page.locator('.risk-banner');
-  await expect(risk).toContainText('위험 신호 없음');
-  await expect(risk).toContainText('AI 확인 안 함');
-  // 배너가 회차 목록 위에 선다.
-  const bannerBox = await risk.boundingBox();
-  const listBox = await page
+  // 배너는 더 이상 없다. 위험 신호는 그 신호가 나온 회차 카드가 말한다.
+  await expect(page.locator('.risk-banner')).toHaveCount(0);
+  const summaryCard = page
     .locator('section.wire-card')
-    .filter({ has: page.getByRole('heading', { name: '회차별 요약' }) })
-    .boundingBox();
-  expect(bannerBox && listBox && bannerBox.y < listBox.y).toBeTruthy();
+    .filter({ has: page.getByRole('heading', { name: '회차별 요약' }) });
+  // 최신순이다 — 맨 위가 마지막 회차다.
+  await expect(summaryCard.locator('details').first().locator('.seq-head-no')).toHaveText('2회차');
+  await expect(summaryCard.locator('details')).toHaveCount(2);
 
   // ── 목표 탭(2026-09-18 Q 개편): 전체·다음 상담 목표는 입력칸, 이력은 모달 ──────
   await page.getByRole('tab', { name: '목표' }).click();
@@ -387,7 +385,7 @@ test('인테이크를 다시 열어 고쳐 쓴다', async ({ page }) => {
   await page
     .locator('section.wire-card')
     .filter({ has: page.getByRole('heading', { name: '회차별 요약' }) })
-    .locator('.wire-item', { hasText: '인테이크' })
+    .locator('details', { hasText: '인테이크' })
     .getByRole('button', { name: '수정' })
     .click();
   await expect(page).toHaveURL(/\/intake$/);
@@ -454,7 +452,7 @@ test('회차를 고쳐 쓰고, 적어만 둔 줄도 저장된다', async ({ page
   const summary = page
     .locator('section.wire-card')
     .filter({ has: page.getByRole('heading', { name: '회차별 요약' }) });
-  await summary.locator('.wire-item', { hasText: '2회차' }).getByRole('button', { name: '수정' }).click();
+  await summary.locator('details', { hasText: '2회차' }).getByRole('button', { name: '수정' }).click();
   await expect(page).toHaveURL(/\/edit$/);
 
   // 지난번에 적은 것과 매긴 결과가 그대로 서 있다
@@ -698,7 +696,7 @@ test('외부 LLM 동의가 없으면 AI 정리를 하지 않는다', async ({ pa
   const summary = page
     .locator('section.wire-card')
     .filter({ has: page.getByRole('heading', { name: '회차별 요약' }) });
-  await summary.locator('.wire-item', { hasText: '2회차' }).getByRole('button', { name: 'AI 정리' }).click();
+  await summary.locator('details', { hasText: '2회차' }).getByRole('button', { name: /^AI 정리/ }).click();
   await page.waitForURL(/\/review$/);
 
   // 동의가 없으니 정리가 막힌다
