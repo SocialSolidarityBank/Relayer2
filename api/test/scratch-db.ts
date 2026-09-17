@@ -3,6 +3,7 @@
 // 같은 로컬 Postgres 서버에 `relayer_shared_check_` 접두로 만들고 끝나면 지운다.
 import { randomUUID } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
+import { once } from 'node:events';
 import { createServer } from 'node:net';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -59,13 +60,14 @@ export async function scratchDb(): Promise<Scratch> {
 
 /** 새 DB 를 바라보는 API 서버 한 프로세스. 가입 문은 실제 서버로 두드린다(app.request 는 공유 sql 에 묶여 있다). */
 export async function startServer(databaseUrl: string): Promise<{ base: string; stop(): void }> {
-  const { promise: freePort, resolve, reject } = Promise.withResolvers<number>();
   const probe = createServer();
-  probe.listen(0, '127.0.0.1', () => {
-    const address = probe.address();
-    probe.close(() => (typeof address === 'object' && address ? resolve(address.port) : reject(new Error('no port'))));
-  });
-  const port = await freePort;
+  probe.listen(0, '127.0.0.1');
+  await once(probe, 'listening');
+  const address = probe.address();
+  if (typeof address !== 'object' || !address) throw new Error('no port');
+  const port = address.port;
+  probe.close();
+  await once(probe, 'close');
   const child: ChildProcess = spawn(process.execPath, ['api/src/index.ts'], {
     cwd: root,
     env: {

@@ -3,6 +3,7 @@
 // 브라우저 시간대를 한국 밖으로 둔다 — 한국 시간 저장이 브라우저 지역시각에 기대면 여기서 깨진다.
 import { expect, test, type Page } from '@playwright/test';
 import { expectDateTime, pickDateTime } from './date-time.ts';
+import { createProgram } from './programs.ts';
 
 const api = process.env.PLAYWRIGHT_API_PREFIX ?? '/api';
 test.use({ timezoneId: 'America/Los_Angeles' });
@@ -15,7 +16,7 @@ const newCase = async (page: Page) => {
   await page.getByRole('button', { name: '로그인', exact: true }).click();
   await expect(page.locator('.app-nav-me')).toBeVisible();
   const created = await page.request.post(`${api}/cases`, { data: {
-    name: `일시 합성 ${Date.now()}`, program_name: '일시 입력 검증',
+    name: `일시 합성 ${Date.now()}`, program_id: await createProgram('일시 입력 검증'),
     consents: [
       { domain: 'personal_data_collection_use', decision: 'grant' },
       { domain: 'sensitive_information_processing', decision: 'grant' },

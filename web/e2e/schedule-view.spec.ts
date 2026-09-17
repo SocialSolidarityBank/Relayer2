@@ -3,6 +3,7 @@
 // 한국 날짜와 어긋나는 지점이라, 화면이 한국 시간을 안 쓰면 기본 달이 9월로 잘못 열린다.
 // 합성 자료만 쓰고, 다른 spec 과 겹치지 않게 날짜·이름을 고유하게 잡는다.
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { createProgram } from './programs.ts';
 import { pickDate } from './date-time.ts';
 
 const api = process.env.PLAYWRIGHT_API_PREFIX ?? '/api';
@@ -21,7 +22,7 @@ const login = async (page: Page) => {
 
 const makeCase = async (page: Page, name: string): Promise<number> => {
   const created = await page.request.post(`${api}/cases`, { data: {
-    name, program_name: '달력 보기 검증',
+    name, program_id: await createProgram('달력 보기 검증'),
     consents: [{ domain: 'personal_data_collection_use', decision: 'grant' }],
   } });
   expect(created.status()).toBe(201);

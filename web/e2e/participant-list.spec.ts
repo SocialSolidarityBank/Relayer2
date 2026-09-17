@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { createProgram } from './programs.ts';
 
 const api = process.env.PLAYWRIGHT_API_PREFIX ?? '/api';
 
@@ -14,7 +15,7 @@ test('이름 중심 목록에서 정보를 바로 보고 상세와 기록·일�
   const name = `가나다 목록 검증 ${Date.now()}`;
   const program = `목록 검증 사업 ${Date.now()}`;
   const created = await page.request.post(`${api}/cases`, { data: {
-    name, program_name: program,
+    name, program_id: await createProgram(program),
     consents: [
       { domain: 'personal_data_collection_use', decision: 'grant' },
       { domain: 'sensitive_information_processing', decision: 'grant' },
