@@ -32,6 +32,10 @@ body { margin: 0; }
    하나뿐이라 선이 가르는 것이 없다 — 나누는 일은 제목 줄의 아래 패딩 24 가 이미 한다.
    `Fold` 가 그리던 `.wire-card-divider` 는 마크업에서 걷었다(선이 두 줄이었다). */
 .wire-card-details[open] > .wire-card-summary { border-bottom: 0; }
+/* 펼친 제목 줄의 설명 글자도 채운 면 전용 색을 받는다(2026-09-17 Q). 이식 CSS 는 제목·배지·
+   세로선만 반전하고 설명(`--sub`)은 빼 두었다 — 다크의 `--sub`(#B5AEBE)가 파스텔 면 위에
+   올라가 대비 1.15:1 이 됐다(실측). 라이트도 4.34:1 로 기준 밑이었다. */
+.wire-card-details[open]:not(.is-crisis) > .wire-card-summary .fold-title-desc { color: var(--on-action); }
 
 /* 항목 행에 행동이 있으면 **글 왼쪽 · 행동 오른쪽, 세로 가운데**다(2026-09-17 Q).
    이식 CSS 의 `.wire-item-action{justify-self:start}` 는 행동을 설명 아래 왼쪽에 쌓아,
