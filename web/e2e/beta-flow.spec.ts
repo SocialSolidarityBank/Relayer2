@@ -538,8 +538,6 @@ test('PII 를 본 조회가 열람 기록에 남고, 관리자만 본다', async
 
   // 관리자로 바꿔 본다
   await page.getByRole('button', { name: '로그아웃' }).click();
-  // 로그아웃하면 랜딩(로그인하기·가입하기)이다 — 로그인 폼은 한 번 더 들어가야 나온다(2026-09-17 Q).
-  await page.getByRole('link', { name: '로그인하기' }).click();
   await page.locator('#email').fill('test1');
   await page.locator('#password').fill('test1');
   await page.getByRole('button', { name: '로그인' }).click();

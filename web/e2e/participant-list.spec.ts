@@ -90,8 +90,6 @@ test('이름 중심 목록에서 정보를 바로 보고 상세와 기록·일�
   // that hidden records are empty, retain the old name, or offer self-assignment.
   await page.goto('/#/schedule');
   await page.getByRole('button', { name: '로그아웃', exact: true }).click();
-  // 로그아웃하면 랜딩(로그인하기·가입하기)이다 — 로그인 폼은 한 번 더 들어가야 나온다(2026-09-17 Q).
-  await page.getByRole('link', { name: '로그인하기' }).click();
   await page.locator('#email').fill('test1');
   await page.locator('#password').fill('test1');
   await page.getByRole('button', { name: '로그인', exact: true }).click();

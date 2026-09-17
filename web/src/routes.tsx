@@ -21,7 +21,6 @@ import { ScheduleNewScreen } from './screens/schedule-new.tsx';
 import { SessionFullScreen } from './screens/session-full.tsx';
 import { SignupScreen } from './screens/signup.tsx';
 import { OnboardingScreen } from './screens/onboarding.tsx';
-import { LandingScreen } from './screens/landing.tsx';
 import { SetupPendingScreen, WorkspaceScreen } from './screens/workspace.tsx';
 
 const HOME = '#/schedule';
@@ -95,9 +94,10 @@ export function Routes() {
   if (me === 'loading') return <p className="empty">불러오는 중이에요.</p>;
 
   /**
-   * 로그아웃 상태(2026-09-17 Q·ASTRA). 루트에서는 랜딩(로그인하기·가입하기), `#/login`·`#/signup` 은 그 화면.
-   * 그 밖의 깊은 주소(세션 끊김)는 랜딩을 거치지 않고 로그인으로 가고, 로그인 뒤 그 주소로 돌아간다.
+   * 로그아웃 상태(2026-09-17 Q·ASTRA). 문은 하나 — **로그인 화면이 곧 랜딩**이다(`/`·`#/login`·홈·깊은 주소 모두).
+   * `#/signup` 만 가입 화면. 깊은 주소(세션 끊김)는 그 주소를 적어 두었다가 로그인 뒤 돌아간다.
    * 로그인 응답이 온 뒤 주소를 바꾸는 일은 `afterLogin` 한 곳에서만 한다.
+   * 게이트 화면은 `.preview-gate` 가 스스로 `.page-content` 를 갖는다(CCC-new /login 과 같은 문법) — 셸만 씌운다.
    */
   if (!me) {
     const afterLogin = () =>
@@ -107,30 +107,10 @@ export function Routes() {
         window.location.hash = back ?? HOME;
         setMe(who);
       });
-    if (hash === '#/signup') {
-      return (
-        <div className="wire-shell">
-          <div className="page-content">
-            <SignupScreen onDone={afterLogin} />
-          </div>
-        </div>
-      );
-    }
-    if (PUBLIC_HASHES.has(hash) && hash !== '#/login') {
-      return (
-        <div className="wire-shell">
-          <div className="page-content">
-            <LandingScreen />
-          </div>
-        </div>
-      );
-    }
-    rememberReturnTo(hash);
+    if (hash !== '#/signup') rememberReturnTo(hash);
     return (
       <div className="wire-shell">
-        <div className="page-content">
-          <LoginScreen onDone={afterLogin} />
-        </div>
+        {hash === '#/signup' ? <SignupScreen onDone={afterLogin} /> : <LoginScreen onDone={afterLogin} />}
       </div>
     );
   }

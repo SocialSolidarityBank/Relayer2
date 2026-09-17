@@ -33,9 +33,9 @@ test.afterAll(async () => {
 test.setTimeout(180_000);
 
 test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까지 한 바퀴', async ({ page, browser }) => {
-  // ── 랜딩 → 가입 ─────────────────────────────────────────────
+  // ── 랜딩 = 로그인 화면 → 가입하기 ─────────────────────────────
   await page.goto(`${base}/`);
-  await expect(page.getByRole('link', { name: '로그인하기' })).toBeVisible();
+  await expect(page.locator('#email')).toBeVisible();
   await page.getByRole('link', { name: '가입하기' }).click();
   await expect(page).toHaveURL(/#\/signup$/);
   // 새 DB: 첫 가입 문이 열려 있다. 계정만 만든다.
