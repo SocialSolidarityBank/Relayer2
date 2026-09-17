@@ -42,10 +42,10 @@ import {
   ParticipantHero,
 } from '../ui.tsx';
 import { ConsentLinkCard } from '../consent-link.tsx';
-import { OriginalButtons, SessionOriginalDrawer, type OriginalPart } from '../session-original.tsx';
+import { SessionOriginalDrawer } from '../session-original.tsx';
 import { Dialog } from '../dialog.tsx';
 
-const TABS = ['당사자 정보', '회차별 요약', '목표'] as const;
+const TABS = ['당사자 정보', '회차별 요약', '회차별 원본 보기', '목표'] as const;
 type Tab = (typeof TABS)[number];
 
 const dateLabel = (iso: string | null): string => {
@@ -83,12 +83,6 @@ const AI_OFF_LABEL: Record<string, string> = {
  */
 function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
   const [brief, setBrief] = useState<Briefing | null>(null);
-  const [open, setOpen] = useState<{
-    sessionId: number;
-    seq: number;
-    part: OriginalPart;
-    hasVoice: boolean;
-  } | null>(null);
   useEffect(() => {
     void getBriefing(caseId).then(setBrief);
   }, [caseId]);
@@ -166,19 +160,9 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
               }
               action={
                 <>
-                  {/* 원본은 이 자리에서 **드로어로 열린다**(2026-09-18 Q 승인) — 구 `회차별 원본 보기`
-                      탭과 `상담 내용 원본 보기` 화면을 대체한다. 회차 목록을 떠나지 않고 대조한다. */}
-                  <OriginalButtons
-                    hasVoice={s.voice.recordings > 0}
-                    onOpen={(part) =>
-                      setOpen({
-                        sessionId: s.id,
-                        seq: s.seq,
-                        part,
-                        hasVoice: s.voice.recordings > 0,
-                      })
-                    }
-                  />
+                  {/* 원본 입구는 **`회차별 원본 보기` 탭 하나**다(2026-09-18 Q — 한 행동에 입구를
+                      둘 두지 않는다). 요약 머리에서는 원본 버튼을 걷었다: 버튼 넷은 390에서
+                      두 줄로 밀렸고, 무엇보다 원본을 어디서 여는지가 흐려졌다. */}
                   {/* 이름이 상태를 말한다(2026-09-17 Q): 승인 전에는 검토, 승인 뒤에는 보기. */}
                   <Button
                     onClick={(event) => {
@@ -294,16 +278,6 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
             }`}
           />
         </Card>
-      )}
-      {open && (
-        <SessionOriginalDrawer
-          caseId={caseId}
-          sessionId={open.sessionId}
-          seq={open.seq}
-          part={open.part}
-          hasVoice={open.hasVoice}
-          onClose={() => setOpen(null)}
-        />
       )}
     </>
   );
@@ -772,6 +746,71 @@ const closeWarnings = (detail: CaseDetail): string[] => {
 };
 
 /**
+ * 회차별 원본 보기 탭 — **원본을 여는 유일한 입구**다(2026-09-18 Q). 회차를 고르면 그 회차의
+ * 원본 드로어가 열리고, 수기와 녹음이 둘 다 있으면 드로어 안에서 오간다.
+ * 전용 화면(`/full`)으로 떠나지 않는다 — 목록을 남겨 두고 읽는 것이 드로어를 쓰는 이유다.
+ */
+function Fulls({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
+  const [open, setOpen] = useState<{ sessionId: number; seq: number; hasVoice: boolean } | null>(
+    null,
+  );
+  const done = detail.sessions.filter((x) => x.status === 'done');
+  if (done.length === 0) {
+    return (
+      <Card title="회차별 원본 보기">
+        <Empty>기록한 상담 없음</Empty>
+      </Card>
+    );
+  }
+  return (
+    <Card title="회차별 원본 보기">
+      {/* 최신순이다. 머리 타이포는 회차별 요약과 같다: 회차 크게, 날짜·종류는 작게. */}
+      {[...done].reverse().map((x) => (
+        <div className="wire-repeat-card" key={x.id}>
+          <Item
+            title={
+              <>
+                <span className="seq-head-no">{x.seq}회차</span>
+                <span className="seq-head-meta">{dateLabel(x.held_at)}</span>
+                {x.kind === 'intake' && <span className="seq-head-meta">인테이크</span>}
+              </>
+            }
+            desc={
+              <Meta
+                parts={[
+                  x.written ? '수기 있음' : '수기 미작성',
+                  x.voice.recordings > 0 && `녹음 ${x.voice.recordings}`,
+                  x.voice.recordings > 0 ? TRANSCRIPT_LABEL[x.voice.transcript] : undefined,
+                ]}
+              />
+            }
+            action={
+              <Button
+                onClick={() =>
+                  setOpen({ sessionId: x.id, seq: x.seq, hasVoice: x.voice.recordings > 0 })
+                }
+              >
+                원본 보기
+              </Button>
+            }
+          />
+        </div>
+      ))}
+      {open && (
+        <SessionOriginalDrawer
+          caseId={caseId}
+          sessionId={open.sessionId}
+          seq={open.seq}
+          part="written"
+          hasVoice={open.hasVoice}
+          onClose={() => setOpen(null)}
+        />
+      )}
+    </Card>
+  );
+}
+
+/**
  * 첫상담 기록 — 팀 목업 넷(2026-09-18 검토)이 모두 상단에 두는 카드다. 사례를 처음 열 때
  * "이 사람이 왜 왔나"가 인테이크에 있는데, 회차 목록을 훑어 1회차를 찾아야 했다.
  * 원문은 드로어가 그린다(두 벌로 만들지 않는다) — 여기는 그 입구다.
@@ -924,6 +963,7 @@ export function ParticipantInfoScreen({ caseId, initialTab = '당사자 정보' 
 
         {tab === '당사자 정보' && <Info detail={detail} caseId={caseId} />}
         {tab === '회차별 요약' && <Sessions detail={detail} caseId={caseId} />}
+        {tab === '회차별 원본 보기' && <Fulls detail={detail} caseId={caseId} />}
         {tab === '목표' && (
           <Goals
             key={`${detail.case.overall_goal ?? ''}|${detail.pending_next_goal?.text ?? ''}`}

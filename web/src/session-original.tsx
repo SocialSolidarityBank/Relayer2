@@ -4,7 +4,8 @@
 // 왜 모달이 아니라 드로어인가: 원본은 **옆의 회차 목록·요약과 대조하면서** 읽는 것이다. 팀 목업
 // 넷은 1,040px 모달이라 화면을 다 가려서 그 대조를 못 한다. 드로어는 회차 목록을 왼쪽에 남긴다.
 //
-// 한 회차에서 볼 것은 둘이라 **버튼도 둘**이다(목업 공통 배치): `상담 기록 보기` · `녹음 전사 보기`.
+// 입구는 `회차별 원본 보기` 탭 하나다(2026-09-18 Q — 요약 머리의 버튼 둘은 걷었다). 한 회차에서
+// 볼 것이 둘이면(수기·녹음) 드로어 **안에서** 오간다.
 // 인테이크 회차의 수기 기록은 인테이크 작성 화면을 잠근 채 그대로 보여 준다 — 구획·순서·라벨이
 // 작성할 때와 같아야 "처음에 적은 것"으로 읽힌다(2026-09-18 UI-3).
 import { useEffect, useRef, useState } from 'react';
@@ -37,28 +38,6 @@ const TRANSCRIBE_LABEL: Record<Recording['transcribe_state'], string> = {
 };
 
 export type OriginalPart = 'written' | 'voice';
-
-/** 회차 머리에 세우는 버튼 둘. 접힘 카드가 같이 열리지 않게 클릭을 막는다. */
-export function OriginalButtons({
-  onOpen,
-  hasVoice,
-}: {
-  onOpen: (part: OriginalPart) => void;
-  /** 녹음이 아예 없는 회차에서는 전사 버튼을 세우지 않는다. */
-  hasVoice: boolean;
-}) {
-  const open = (part: OriginalPart) => (event: React.MouseEvent) => {
-    event.stopPropagation();
-    event.preventDefault();
-    onOpen(part);
-  };
-  return (
-    <>
-      <Button onClick={open('written')}>상담 기록 보기</Button>
-      {hasVoice && <Button onClick={open('voice')}>녹음 전사 보기</Button>}
-    </>
-  );
-}
 
 function Written({ rec, caseId }: { rec: SessionRecord; caseId: number }) {
   const written =
