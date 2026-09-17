@@ -145,17 +145,21 @@ test('등록부터 회차 기록·이어받기까지 한 바퀴', async ({ page 
     .boundingBox();
   expect(bannerBox && listBox && bannerBox.y < listBox.y).toBeTruthy();
 
-  // ── 목표 탭: 전체 상담 목표 ─────────────────────────────────
+  // ── 목표 탭(2026-09-18 Q 개편): 전체·다음 상담 목표는 입력칸, 이력은 모달 ──────
   await page.getByRole('tab', { name: '목표' }).click();
-  await expect(page.locator('section.wire-card', { hasText: '전체 상담 목표' }).first()).toContainText(
-    OVERALL_GOAL,
-  );
-  // `회차별 오늘 상담 목표`는 **기록된 회차**만 싣는다. 3회차는 아직 예정이라 비어 있다 —
-  // 다음 회차로 넘긴 목표는 그 회차의 전문에서 확인한다(2026-09-17 Q — 15초 다시보기 폐지로
-  // '예정 회차의 오늘 목표'를 미리 보여 주던 자리가 사라졌다).
-  await expect(
-    page.locator('section.wire-card', { hasText: '회차별 오늘 상담 목표' }),
-  ).toContainText('이어받은 목표가 아직 없어요');
+  await expect(page.getByLabel('전체 상담 목표', { exact: true })).toHaveValue(OVERALL_GOAL);
+  // 2회차가 쓴 다음 상담 목표는 아직 어느 회차도 이어받지 않았으므로 여기서 고칠 수 있다.
+  await expect(page.getByLabel('다음 상담 목표', { exact: true })).toHaveValue(NEXT_GOAL);
+  await expect(page.locator('section.wire-card', { hasText: '다음 상담 목표' })).toContainText('2회차에서 정함');
+  // 지난 목표 모달: 이력 첫 줄은 `승인`. 회차별 오늘 상담 목표는 기록된 회차만 — 3회차는 예정이라 비어 있다.
+  await page.getByRole('button', { name: '지난 목표 보기' }).click();
+  const goalDialog = page.getByRole('dialog', { name: '지난 목표' });
+  await expect(goalDialog).toBeVisible();
+  await expect(goalDialog).toContainText(OVERALL_GOAL);
+  await expect(goalDialog).toContainText('승인');
+  await expect(goalDialog).toContainText('이어받은 목표가 아직 없어요');
+  await goalDialog.getByRole('button', { name: '닫기' }).click();
+  await expect(goalDialog).toBeHidden();
 
   // ── 회차별 원본 보기: 2회차가 넘긴 다음 상담 목표 ───────────
   await page.getByRole('tab', { name: '회차별 원본 보기' }).click();

@@ -170,6 +170,7 @@ export type CaseDetail = {
     voice: { recordings: number; transcript: SessionTranscriptState };
   }>;
   goal_revisions: Array<{ text: string | null; created_at: string }>;
+  pending_next_goal: { session_id: number; session_seq: number; text: string | null } | null;
   open_cards: Array<{ id: number; kind: string; text: string; source_session_seq?: number | null }>;
   closure: {
     closed_at: string;
@@ -194,6 +195,13 @@ export const listSchedules = (from: string, to: string) =>
 export const getBriefing = (caseId: number, seq?: number) =>
   json<Briefing>(`/cases/${caseId}/briefing${seq ? `?seq=${seq}` : ''}`);
 export const getCase = (caseId: number) => json<CaseView>(`/cases/${caseId}`);
+export const updateOverallGoal = (caseId: number, overallGoal: string | null) =>
+  json<{ ok: true }>(`/cases/${caseId}/goal`, { method: 'PATCH', body: JSON.stringify({ overall_goal: overallGoal }) });
+export const updateNextGoal = (sessionId: number, nextGoalText: string | null) =>
+  json<{ ok: true }>(`/sessions/${sessionId}/next-goal`, {
+    method: 'PATCH',
+    body: JSON.stringify({ next_goal_text: nextGoalText }),
+  });
 
 export type OutcomeInput = {
   card_id: number;

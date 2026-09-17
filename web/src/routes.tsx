@@ -133,6 +133,10 @@ export function Routes() {
     const full = path.match(/^#\/cases\/(\d+)\/sessions\/(\d+)\/full$/);
     if (full) return <SessionFullScreen caseId={Number(full[1])} sessionId={Number(full[2])} />;
 
+    // 목표 탭 직행(2026-09-18 UI-9). 기록 화면의 목표 카드 `수정`이 여기로 온다.
+    const goals = path.match(/^#\/cases\/(\d+)\/info\/goals$/);
+    if (goals) return <ParticipantInfoScreen caseId={Number(goals[1])} initialTab="목표" />;
+
     const byCase = path.match(/^#\/cases\/(\d+)\/(record|schedule|intake|info|close)$/);
     if (byCase) {
       const caseId = Number(byCase[1]);

@@ -308,6 +308,8 @@ export async function startSession(
 
 /** 이미 기록됨인 회차를 다시 시작하려 했다. 라우트는 409 로 답한다. */
 export class SessionAlreadyStarted extends Error {}
+/** 이미 다음 회차가 이어받은 목표를 고치려 했다. 라우트는 409 로 답한다. */
+export class GoalLocked extends Error {}
 
 /**
  * 상담 기록하기. 한 트랜잭션에서
@@ -520,6 +522,27 @@ async function setOverallGoal(tx: typeof sql, caseId: number, text: string | nul
   await tx`insert into goal_revisions (case_id, text) values (${caseId}, ${encryptText(text)})`;
 }
 
+/** 목표 탭에서 전체 상담 목표만 고친다(2026-09-18 Q). 이력은 setOverallGoal 이 남긴다. */
+export async function updateOverallGoal(caseId: number, text: string | null): Promise<void> {
+  await assertCaseOpen(caseId);
+  await sql.begin(async (tx) => {
+    await setOverallGoal(tx as unknown as typeof sql, caseId, text);
+  });
+}
+
+/**
+ * 목표 탭에서 다음 상담 목표만 고친다(2026-09-18 Q). 회차 저장(PATCH /sessions/:id)을 쓰면
+ * 열린 카드가 전부 unchecked 로 덮이므로 전용 경로다. **이미 다음 회차가 이어받았으면 거절한다** —
+ * 그때는 그 회차의 오늘 상담 목표이지 여기가 아니다(SPEC §4-2).
+ */
+export async function updateNextGoal(sessionId: number, text: string | null): Promise<void> {
+  const [s] = await sql<Session[]>`select * from sessions where id = ${sessionId}`;
+  if (!s) throw new NotFound('회차를 찾지 못했어요.');
+  if (s.status !== 'done') throw new GoalLocked('아직 기록하지 않은 회차예요.');
+  if (s.next_goal_consumed_by_session_id) throw new GoalLocked('다음 회차가 이미 이어받은 목표예요.');
+  await sql`update sessions set next_goal_text = ${encryptText(text)} where id = ${sessionId}`;
+}
+
 async function insertCards(
   tx: typeof sql,
   caseId: number,
@@ -697,6 +720,11 @@ export type CaseDetail = {
     ai_summary: ApprovedSummary | null;
   }>;
   goal_revisions: Array<{ text: string | null; created_at: string }>;
+  /**
+   * 아직 어느 회차도 이어받지 않은 다음 상담 목표(목표 탭에서 고칠 수 있는 유일한 회차 목표, 2026-09-18 Q).
+   * 마지막 기록 회차가 쓴 값이며, 다음 회차를 기록하는 순간 그 회차의 오늘 상담 목표가 되어 잠긴다.
+   */
+  pending_next_goal: { session_id: number; session_seq: number; text: string | null } | null;
   open_cards: Array<ReturnType<typeof openCards>[number] & { source_session_seq: number | null }>;
   closure: {
     closed_at: string;
@@ -783,6 +811,11 @@ export async function getCaseDetail(caseId: number): Promise<CaseDetail | null> 
       };
     }),
     goal_revisions: revisions,
+    pending_next_goal: (() => {
+      const last = sessions.filter((s) => s.status === 'done').sort((a, b) => b.seq - a.seq)[0];
+      if (!last || last.next_goal_consumed_by_session_id) return null;
+      return { session_id: last.id, session_seq: last.seq, text: decryptText(last.next_goal_text) };
+    })(),
     open_cards: openCards(cards, outcomes, sessions).map((c) => ({
       ...c,
       source_session_seq: sessions.find((s) => s.id === c.source_session_id)?.seq ?? null,
