@@ -304,6 +304,48 @@ body { margin: 0; }
   overflow: hidden;
   white-space: nowrap;
 }
-/* 등록 화면의 동의 항목은 체크가 접힌 머리에 선다. 머리 줄 안에서 라벨 여백만 손본다. */
+/* 등록 화면의 동의 항목은 체크가 접힌 머리에 선다. 머리 줄 안에서 라벨 여백만 손본다.
+   이식 `.wire-choice` 는 `align-items: flex-start`(여러 줄 라벨 기준)라 한 줄 머리에서는
+   체크가 3px 올라붙었다 — 가운데로 맞춘다(2026-09-18 Q). */
 .consent-head-check { display: inline-flex; min-width: 0; }
-.consent-head-check .wire-choice { gap: var(--space-2); }
+.consent-head-check .wire-choice { gap: var(--space-2); align-items: center; }
+
+/* 펼친 동의 머리는 두 테마 모두 파스텔 그라데이션이다. 이식 CSS 는 `.wire-card-title` 만
+   `--on-action` 으로 뒤집어서, 스스로 색을 선언한 체크 라벨(`--ink`)이 다크에서 흰 글씨로
+   남아 안 보였다(실측). 파스텔 면을 쓰는 머리에만 건다 — 회차 카드 머리는 배경이 투명해서
+   (실측: background none) 같이 뒤집으면 오히려 어두운 글자가 어두운 면에 얹힌다. */
+.wire-card-details[open] > .wire-card-summary .consent-head-check .wire-choice-text {
+  color: var(--on-action);
+}
+
+/* 한 행에 여러 입력(2026-09-18 Q). 좁은 화면에서는 한 열로 접힌다. */
+.form-row { display: grid; gap: var(--space-4) var(--space-5); min-width: 0; }
+.form-row > * { min-width: 0; }
+.form-row[data-cols='2'] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.form-row[data-cols='3'] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 767px) {
+  .form-row[data-cols='2'],
+  .form-row[data-cols='3'] { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* 숫자 올리고 내리는 위아래 꺽쇠. 입력칸 안 오른쪽에 붙는다(꺽쇠 선택창과 같은 자리).
+   이식 wire.css 는 `.wire-input-box .wire-chevron` 을 **절대 배치로 오른쪽에 못박는다**
+   (선택창 꺽쇠 하나만 있다고 본 규칙이다). 그대로 두면 위·아래 꺽쇠가 같은 좌표에 겹쳐
+   별표처럼 보였다(실측: 둘 다 y=440). 스테퍼 안에서만 흐름 배치로 되돌린다. */
+.number-stepper { position: absolute; right: var(--space-2); display: grid; gap: 2px; }
+.number-stepper > button {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--sub);
+  cursor: pointer;
+}
+.number-stepper .wire-chevron { position: static; inset: auto; top: 0; }
+.number-stepper > button:hover { color: var(--ink); }
+.number-stepper > button:focus-visible { outline: 2px solid var(--blue-deep); outline-offset: 1px; }
+.wire-input-box:has(.number-stepper) { position: relative; }
+.wire-input-box:has(.number-stepper) > input { padding-inline-end: var(--space-6); }
