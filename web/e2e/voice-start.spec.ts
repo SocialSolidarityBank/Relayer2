@@ -72,34 +72,27 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
   await page.getByRole('tab', { name: '회차별 요약' }).click();
   // 한 회차가 한 접힘 카드다(2026-09-17 Q). 기록 상태는 펼친 본문의 `기록 상태` 구역에 있다.
   const fold = page.locator('details', { hasText: '1회차' }).first();
-  await fold.locator('summary').click();
+  // 머리 가운데는 원본 버튼 자리다(2026-09-18 Q) — 펼침은 회차 글자를 누른다.
+  await fold.locator('.seq-head-no').click();
   await expect(fold).toContainText('수기 미작성');
   await expect(fold).toContainText('녹음 1');
   await expect(fold).toContainText('전사 건너뜀');
 
-  // ── 원문 보기 — `회차별 원본 보기` 탭이 그 입구다 ───────────
-  // 화면 이름과 구획(2026-09-17 Q): `상담 내용 원본 보기` · `상담 내용`·`음성 기록` 접힘 카드.
-  await page.getByRole('tab', { name: '회차별 원본 보기' }).click();
-  await page
-    .locator('.wire-repeat-card', { hasText: '1회차' })
-    .getByRole('button', { name: '원본 보기' })
-    .click();
-  await expect(page).toHaveURL(/\/full$/);
-  await expect(page.locator('.page-header')).toContainText('1회차');
-  await expect(page.locator('details', { hasText: '상담 내용' }).first()).toContainText(
-    '수기 미작성',
-  );
-  await expect(page.locator('audio')).toHaveCount(1);
-  await expect(page.locator('details', { hasText: '음성 기록' }).first()).toContainText(
-    '전사 건너뜀',
-  );
+  // ── 원본 드로어 — 회차 카드에서 수기·녹음을 각각 연다(2026-09-18 Q) ──
+  // 전용 탭과 `/full` 화면은 폐지했다. 회차 목록을 떠나지 않고 읽는다.
+  await fold.locator('summary').getByRole('button', { name: '상담 기록 보기' }).click();
+  const writtenDrawer = page.getByRole('dialog', { name: '1회차 상담 기록' });
+  await expect(writtenDrawer).toContainText('수기 미작성');
+  await writtenDrawer.getByRole('button', { name: '닫기' }).click();
+  await expect(writtenDrawer).toBeHidden();
 
-  // ── 뒤로 — 당사자 카드로 돌아온다 ───────────────────────────
-  // 원문 보기의 되돌이 버튼은 `당사자 정보`다(2026-09-17 Q — 당사자 카드가 머리로 올라갔다).
-  await page.getByRole('button', { name: '당사자 정보' }).click();
+  await fold.locator('summary').getByRole('button', { name: '녹음 전사 보기' }).click();
+  const voiceDrawer = page.getByRole('dialog', { name: '1회차 녹음 전사' });
+  await expect(voiceDrawer.locator('audio')).toHaveCount(1);
+  await expect(voiceDrawer).toContainText('전사 건너뜀');
+  await voiceDrawer.getByRole('button', { name: '닫기' }).click();
+
+  // ── 드로어를 닫으면 같은 회차 카드가 그대로 있다 ─────────────
   await expect(page.getByRole('heading', { name: NAME })).toBeVisible();
-  await page.getByRole('tab', { name: '회차별 요약' }).click();
-  const again = page.locator('details', { hasText: '1회차' }).first();
-  await again.locator('summary').click();
-  await expect(again).toContainText('녹음 1');
+  await expect(fold).toContainText('녹음 1');
 });

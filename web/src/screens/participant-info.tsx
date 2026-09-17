@@ -1,5 +1,6 @@
-// 당사자 정보 — **당사자 카드(HERO)가 머리**이고 그 아래 탭 4개가 화면을 가른다
-// (2026-09-17 Q): 당사자 정보 · 회차별 요약 · 회차별 원본 보기 · 목표.
+// 당사자 정보 — **당사자 카드(HERO)가 머리**이고 그 아래 탭 3개가 화면을 가른다
+// (2026-09-18 Q): 당사자 정보 · 회차별 요약 · 목표. 구 `회차별 원본 보기` 탭은 걷었다 —
+// 원본은 회차 카드에서 드로어로 열린다(한 회차를 보려고 탭을 옮겨 다니지 않는다).
 // 15초 다시보기는 폐지했다(2026-09-17 Q) — 화면·탭·버튼 어디에도 두지 않는다.
 import { useEffect, useState, type ReactNode } from 'react';
 import {
@@ -41,9 +42,10 @@ import {
   ParticipantHero,
 } from '../ui.tsx';
 import { ConsentLinkCard } from '../consent-link.tsx';
+import { OriginalButtons, SessionOriginalDrawer, type OriginalPart } from '../session-original.tsx';
 import { Dialog } from '../dialog.tsx';
 
-const TABS = ['당사자 정보', '회차별 요약', '회차별 원본 보기', '목표'] as const;
+const TABS = ['당사자 정보', '회차별 요약', '목표'] as const;
 type Tab = (typeof TABS)[number];
 
 const dateLabel = (iso: string | null): string => {
@@ -81,6 +83,7 @@ const AI_OFF_LABEL: Record<string, string> = {
  */
 function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
   const [risk, setRisk] = useState<Briefing['risk_signals'] | null>(null);
+  const [open, setOpen] = useState<{ sessionId: number; seq: number; part: OriginalPart } | null>(null);
   useEffect(() => {
     void getBriefing(caseId).then((b) => setRisk(b.risk_signals));
   }, [caseId]);
@@ -145,6 +148,12 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
               }
               action={
                 <>
+                  {/* 원본은 이 자리에서 **드로어로 열린다**(2026-09-18 Q 승인) — 구 `회차별 원본 보기`
+                      탭과 `상담 내용 원본 보기` 화면을 대체한다. 회차 목록을 떠나지 않고 대조한다. */}
+                  <OriginalButtons
+                    hasVoice={s.voice.recordings > 0}
+                    onOpen={(part) => setOpen({ sessionId: s.id, seq: s.seq, part })}
+                  />
                   {/* 이름이 상태를 말한다(2026-09-17 Q): 승인 전에는 검토, 승인 뒤에는 보기. */}
                   <Button
                     onClick={(event) => {
@@ -225,6 +234,15 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
             }`}
           />
         </Card>
+      )}
+      {open && (
+        <SessionOriginalDrawer
+          caseId={caseId}
+          sessionId={open.sessionId}
+          seq={open.seq}
+          part={open.part}
+          onClose={() => setOpen(null)}
+        />
       )}
     </>
   );
@@ -602,59 +620,6 @@ function Documents({ caseId }: { caseId: number }) {
 }
 
 /**
- * 회차별 원본 보기 탭 — 회차를 골라 **수기·음성 전문**으로 간다(2026-09-17 Q).
- * 전문 자체는 `상담 내용 원본 보기` 화면이 그린다. 두 벌로 만들지 않는다.
- */
-function Fulls({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
-  const done = detail.sessions.filter((s) => s.status === 'done');
-  if (done.length === 0) {
-    return (
-      <Card title="회차별 원본 보기">
-        <Empty>기록한 상담 없음</Empty>
-      </Card>
-    );
-  }
-  return (
-    <Card title="회차별 원본 보기">
-      {/* 최신순이다(2026-09-17 Q). 머리 타이포는 회차별 요약과 같다: 회차 크게, 날짜·종류는
-          작고 볼드 아님, 세로선 없이 여백으로 가른다. AI 가 만든 전사문이 있으면 `AI` 배지. */}
-      {[...done].reverse().map((s) => (
-        <div className="wire-repeat-card" key={s.id}>
-          <Item
-            title={
-              <>
-                <span className="seq-head-no">{s.seq}회차</span>
-                <span className="seq-head-meta">{dateLabel(s.held_at)}</span>
-                {s.kind === 'intake' && <span className="seq-head-meta">인테이크</span>}
-                {s.voice.transcript !== 'none' && s.voice.transcript !== 'skipped' && (
-                  <Badge tone="blue">AI</Badge>
-                )}
-              </>
-            }
-            desc={
-              <Meta
-                parts={[
-                  s.written ? '수기 있음' : '수기 미작성',
-                  s.voice.recordings > 0 && `녹음 ${s.voice.recordings}`,
-                  s.voice.recordings > 0 && TRANSCRIPT_LABEL[s.voice.transcript],
-                ]}
-              />
-            }
-            action={
-              <Button
-                onClick={() => (window.location.hash = `#/cases/${caseId}/sessions/${s.id}/full`)}
-              >
-                원본 보기
-              </Button>
-            }
-          />
-        </div>
-      ))}
-    </Card>
-  );
-}
-
-/**
  * 회차 정보(2026-09-17 Q). 구 `기본 정보` 카드는 걷었다 — 이름·연락처·이메일·가명·사업이
  * 당사자 카드(HERO)와 글자 하나까지 같은 값이었다.
  *
@@ -849,7 +814,6 @@ export function ParticipantInfoScreen({ caseId, initialTab = '당사자 정보' 
 
         {tab === '당사자 정보' && <Info detail={detail} caseId={caseId} />}
         {tab === '회차별 요약' && <Sessions detail={detail} caseId={caseId} />}
-        {tab === '회차별 원본 보기' && <Fulls detail={detail} caseId={caseId} />}
         {tab === '목표' && (
           <Goals
             key={`${detail.case.overall_goal ?? ''}|${detail.pending_next_goal?.text ?? ''}`}
