@@ -47,21 +47,14 @@ export function Routes() {
   }, []);
 
   /**
-   * 사례 메뉴는 **마지막으로 연 사례**를 계속 가리킨다.
+   * 기록·일정 등록 메뉴는 **늘 당사자를 고르는 자리**로 간다(2026-09-17 Q).
    *
-   * 주소에서만 읽으면 일정 화면에서 메뉴가 사라졌다가 사례에 들어가면 다섯 개가 튀어나온다.
-   * 실무자에게는 메뉴가 불안정한 것으로 읽히고, 무엇보다 **사례로 돌아갈 길이 없다**
-   * (`PLAN.md` §3 즉석 기록 항목이 남긴 자리).
-   *
-   * 기억은 화면 안에서만 산다. 새로 고치면 지워진다 — 어느 당사자를 보고 있었는지가
-   * 기기에 남을 이유가 없다. 훅은 조건부 return 앞에 둔다.
+   * 구 규칙(955896e)은 마지막으로 연 사례를 기억해 메뉴가 그 사례를 가리키게 했다.
+   * 사례로 돌아갈 길을 만들려던 것인데, 그 길은 `당사자 정보` 메뉴였고 그 항목은 오늘
+   * 빠졌다(당사자 목록 카드가 그 입구다). 남은 것은 **메뉴를 눌렀을 때 누구 것인지 묻지
+   * 않고 직전 사람의 기록 화면이 열리는 일**뿐이었다 — 새로 고치면 기억이 지워져 같은
+   * 메뉴가 어떤 날은 고르는 자리로, 어떤 날은 남의 기록으로 갔다.
    */
-  const fromHash = hash.match(/^#\/cases\/(\d+)\//)?.[1];
-  const [lastCase, setLastCase] = useState<string | undefined>(fromHash);
-  useEffect(() => {
-    if (fromHash) setLastCase(fromHash);
-  }, [fromHash]);
-  const caseId = fromHash ?? lastCase;
 
   // 당사자 열람은 로그인 앞에 선다. 링크와 코드로만 열리고, 실무자 화면과 섞이지 않는다.
   const asParticipant = hash.match(/^#\/access\/([A-Za-z0-9_-]+)$/);
@@ -211,10 +204,10 @@ export function Routes() {
             <ul className="navigation-list">
               {/* 보기가 묶음 맨 위다(2026-09-17 Q) — 로그인 도착지이자 하루를 여는 자리다. */}
               {link(HOME, '상담 일정 보기', 'upcoming')}
-              {link(caseId ? `#/cases/${caseId}/schedule` : '#/pick/schedule', '상담 일정 등록', 'calendar-plus')}
-              {/* 기록하기는 늘 선다. 사례를 안 열었으면 누구 것인지 고르는 자리로 보낸다 —
-                  메뉴에서 사라지면 "그 기능이 없다"로 읽힌다. */}
-              {link(caseId ? `#/cases/${caseId}/record` : '#/pick/record', '상담 기록하기', 'record')}
+              {link('#/pick/schedule', '상담 일정 등록', 'calendar-plus')}
+              {/* 둘 다 누구 것인지 먼저 묻는다 — 메뉴가 직전에 열었던 사람의 화면을
+                  바로 열면 남의 기록에 쓰게 된다. */}
+              {link('#/pick/record', '상담 기록하기', 'record')}
             </ul>
           </div>
 
