@@ -1,0 +1,19 @@
+/* 일정 등록 화면의 카드 배치와 저장 바. 날짜·시간 부품은 date-time-input.css가 맡는다. */
+.schedule-form { padding-bottom: var(--space-6); }
+.schedule-inputs { display: grid; gap: var(--space-6); min-width: 0; margin: 0; padding: 0; border: 0; }
+.schedule-inputs .wire-card-body { display: flex; flex-direction: column; gap: var(--space-5); }
+.schedule-inputs .wire-form-field { min-width: 0; }
+.schedule-inputs .wire-input-box { min-height: 44px; }
+.schedule-inputs .wire-input-box :is(input, select, textarea) { font-size: var(--text-md); }
+.schedule-inputs .wire-choice-group { flex-wrap: wrap; }
+.schedule-inputs .wire-choice { min-height: 44px; }
+.schedule-savebar { position: sticky; bottom: var(--space-4); z-index: 3; display: flex; justify-content: space-between; align-items: center; gap: var(--space-5); padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--panel); }
+.schedule-save-summary { min-width: 0; }
+.schedule-save-summary strong { display: block; font-size: var(--text-md); }
+.schedule-save-summary .panel-meta { margin: var(--space-1) 0 0; }
+.schedule-savebar .wire-button { flex-shrink: 0; min-height: 44px; padding-inline: var(--space-6); }
+.schedule-form :is(button, a, input, select, textarea) { scroll-margin-block: calc(var(--header-height) + var(--space-6)) 160px; }
+@media (max-width: 767px) {
+  .schedule-savebar { flex-direction: column; align-items: stretch; gap: var(--space-3); padding: var(--space-4); }
+  .schedule-savebar .wire-button { width: 100%; }
+}

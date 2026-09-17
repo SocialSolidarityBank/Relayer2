@@ -31,18 +31,12 @@ import {
   type Line,
 } from '../ui.tsx';
 import { METHODS } from '../vocab.ts';
+import { dateTimeFromIso, dateTimeToIso } from '../date-time.ts';
+import { DateTimeInput } from '../date-time-input.tsx';
 import { RecordingPanel, SessionAudio } from './session-audio.tsx';
 
-/** `datetime-local` 이 바로 먹는 지역시각 문자열. 지금 시각을 분 단위로 자른다. */
-function localNow(): string {
-  return toLocalInput(new Date().toISOString());
-}
-
-function toLocalInput(iso: string): string {
-  const d = new Date(iso);
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  return d.toISOString().slice(0, 16);
-}
+/** 지금 시각을 한국 시간의 날짜·시·분으로 표시하는 상담 일시 초깃값. */
+const nowDateTime = () => dateTimeFromIso(new Date().toISOString());
 
 /** 과제 결과 3종(2026-09-15 Q). 화면 말과 저장값을 한 곳에서 잇는다. */
 const TASK_RESULTS: ReadonlyArray<{ label: string; value: OutcomeInput }> = [
@@ -70,7 +64,7 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
   const [nextGoal, setNextGoal] = useState('');
   const [place, setPlace] = useState('');
   // 예정 회차가 없을 때 이 자리에서 바로 적는 일시·상담 방식.
-  const [heldAt, setHeldAt] = useState(localNow());
+  const [heldAt, setHeldAt] = useState(nowDateTime);
   const [method, setMethod] = useState<NewSessionInput['method']>('in_person');
   // 종결 상담(요구 5). 일정에서 미리 골랐으면 이어받고, 여기서 바꿀 수도 있다.
   const [isClosing, setIsClosing] = useState(false);
@@ -111,7 +105,7 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
         setEditing(rec);
         setMemo(rec.memo ?? '');
         setPlace(rec.place ?? '');
-        setHeldAt(rec.held_at ? toLocalInput(rec.held_at) : localNow());
+        setHeldAt(rec.held_at ? dateTimeFromIso(rec.held_at) : nowDateTime());
         setMethod((rec.method as NewSessionInput['method']) ?? 'in_person');
         setIsClosing(rec.is_closing);
         setNextGoal(rec.next_goal_text ?? '');
@@ -153,7 +147,7 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
       setPlace(planned?.place ?? '');
       setIsClosing(planned?.is_closing ?? false);
       setMethod((planned?.method as NewSessionInput['method']) ?? 'in_person');
-      setHeldAt(planned?.scheduled_at ? toLocalInput(planned.scheduled_at) : localNow());
+      setHeldAt(planned?.scheduled_at ? dateTimeFromIso(planned.scheduled_at) : nowDateTime());
     })().catch((failure: unknown) => {
       if (!live) return;
       setBriefing(null);
@@ -177,6 +171,7 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
     : view.sessions.filter((s) => s.status === 'planned').sort((a, b2) => a.seq - b2.seq)[0];
   const seq = session?.seq ?? Math.max(0, ...view.sessions.map((s) => s.seq)) + 1;
   const inPerson = method === 'in_person';
+  const heldAtIso = dateTimeToIso(heldAt);
 
   const setOutcome = (card_id: number, value: OutcomeInput | null) =>
     setOutcomes((prev) => {
@@ -218,6 +213,11 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
   };
 
   const save = async () => {
+    // 일시가 덜 골라진 채 저장하면 회차를 열거나 PATCH 하기 전에 막는다.
+    if (!heldAtIso) {
+      setError('상담 일시를 모두 골라 주세요.');
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -228,7 +228,7 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
       if (!targetId) targetId = session?.id ?? (await ensureSession());
 
       await recordSession(targetId, {
-        held_at: new Date(heldAt).toISOString(),
+        held_at: heldAtIso,
         method,
         is_closing: isClosing,
         memo,
@@ -366,14 +366,7 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
 
           {/* 일시·방식·장소는 한 묶음이다. 장소는 대면일 때만 나오고 방식 바로 아래에 붙는다(요구 14). */}
           <Card title="1. 오늘 상담 내용">
-            <Field label="상담 일시" htmlFor="held-at" required>
-              <input
-                id="held-at"
-                type="datetime-local"
-                value={heldAt}
-                onChange={(e) => setHeldAt(e.target.value)}
-              />
-            </Field>
+            <DateTimeInput idPrefix="held-at" value={heldAt} onChange={setHeldAt} disabled={saving} required />
             <ChoiceGroup legend="상담 방식">
               {METHODS.map((m) => (
                 <Choice
@@ -484,7 +477,7 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
             {error && <ErrorText>{error}</ErrorText>}
             <Button
               variant="primary"
-              disabled={(!memo.trim() && !startedId && !editing) || !heldAt || saving}
+              disabled={(!memo.trim() && !startedId && !editing) || !heldAtIso || saving}
               onClick={() => void save()}
             >
               {/* 고쳐 쓰기 화면에서도 저장 버튼은 `저장`이다. 들어올 때 누른 버튼과 이름이 같으면
