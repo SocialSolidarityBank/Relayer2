@@ -2,6 +2,7 @@
 // 15초 다시보기가 확인할 과제·오늘 물어볼 것·오늘 상담 목표를 출처 회차 번호와 함께 보여 준다.
 // 합성 자료만 쓴다. 실행마다 새 당사자를 만들어 이전 데이터에 기대지 않는다.
 import { expect, test, type Page } from '@playwright/test';
+import { pickDateTime } from './date-time.ts';
 
 const stamp = Date.now();
 const NAME = `E2E 합성${stamp}`;
@@ -32,26 +33,7 @@ const pickFromMenu = async (page: Page, kind: 'record' | 'schedule', name: strin
   await page.getByRole('link', { name: new RegExp(`^${name},.*${label}$`) }).click();
 };
 
-const pickScheduleAt = async (page: Page, value: string) => {
-  const [date, time] = value.split('T');
-  const [year, month] = date.split('-').map(Number);
-  const [hour, minute] = time.split(':').map(Number);
-  await page.getByRole('button', { name: /^상담 날짜 선택:/ }).click();
-  const dialog = page.getByRole('dialog', { name: '상담 날짜 선택', exact: true });
-  const shown = (await dialog.locator('.schedule-month-head strong').textContent())!.match(/(\d+)년 (\d+)월/)!;
-  const offset = (year - Number(shown[1])) * 12 + month - Number(shown[2]);
-  for (let n = 0; n < Math.abs(offset); n++) {
-    await dialog.getByRole('button', { name: offset > 0 ? '다음 달' : '이전 달', exact: true }).click();
-  }
-  const label = new Intl.DateTimeFormat('ko-KR', {
-    timeZone: 'Asia/Seoul', year: 'numeric', month: 'long', day: 'numeric', weekday: 'long',
-  }).format(new Date(`${date}T12:00:00+09:00`));
-  await dialog.getByRole('button', { name: label, exact: true }).click();
-  await dialog.getByRole('button', { name: '날짜 선택 완료', exact: true }).click();
-  await page.locator('#schedule-period').selectOption(hour < 12 ? '오전' : '오후');
-  await page.locator('#schedule-hour').selectOption(String(hour % 12 || 12));
-  await page.locator('#schedule-minute').selectOption(String(minute).padStart(2, '0'));
-};
+
 
 test('등록부터 15초 다시보기까지 한 바퀴', async ({ page }) => {
   // ── 로그인 ──────────────────────────────────────────────────
@@ -100,7 +82,7 @@ test('등록부터 15초 다시보기까지 한 바퀴', async ({ page }) => {
 
   // ── 상담 일정 등록(2회차) ───────────────────────────────────
   await expect(page.getByRole('heading', { name: '상담 일정 등록' })).toBeVisible();
-  await pickScheduleAt(page, '2026-10-01T10:00');
+  await pickDateTime(page, 'schedule', '2026-10-01T10:00');
   await page.getByRole('radio', { name: '대면' }).check();
   await page.locator('#place').fill('사회연대은행 상담실');
   await page.getByRole('button', { name: '일정 저장', exact: true }).click();
@@ -127,7 +109,7 @@ test('등록부터 15초 다시보기까지 한 바퀴', async ({ page }) => {
   // ── 3회차 일정 등록 ─────────────────────────────────────────
   await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
   await pickFromMenu(page, 'schedule', NAME);
-  await pickScheduleAt(page, '2026-10-08T10:00');
+  await pickDateTime(page, 'schedule', '2026-10-08T10:00');
   await page.getByRole('radio', { name: '전화' }).check();
   await page.getByRole('button', { name: '일정 저장', exact: true }).click();
 
@@ -196,7 +178,7 @@ test('예정 회차가 없어도 상담 기록하기에서 일시를 적고 기�
   await expect(page.getByRole('heading', { name: '상담 일정 등록' })).toBeVisible();
   await pickFromMenu(page, 'record', name);
 
-  await page.locator('#held-at').fill('2026-09-20T14:00');
+  await pickDateTime(page, 'held-at', '2026-09-20T14:00');
   await page.getByRole('radio', { name: '전화' }).check();
   await page.locator('#memo').fill('예고 없이 전화가 와서 그 자리에서 상담함');
   await page.getByRole('button', { name: '저장' }).click();
@@ -228,7 +210,7 @@ test('상담 종결은 회차를 만들지 않고 미완료 과제를 그대로 
   // 예정 없이 2회차를 기록하면서 과제를 하나 남긴다
   await expect(page.getByRole('heading', { name: '상담 일정 등록' })).toBeVisible();
   await pickFromMenu(page, 'record', name);
-  await page.locator('#held-at').fill('2026-09-20T14:00');
+  await pickDateTime(page, 'held-at', '2026-09-20T14:00');
   await page.locator('#memo').fill('서류를 떼어 오기로 함');
   await page.getByRole('textbox', { name: '수행할 과제' }).fill(task);
   await page.getByRole('button', { name: '추가' }).first().click();
@@ -288,7 +270,7 @@ test('종결 상담으로 저장하면 종결 화면으로 이어진다', async 
 
   // 일정 등록에서 종결 상담으로 잡는다
   await expect(page.getByRole('heading', { name: '상담 일정 등록' })).toBeVisible();
-  await pickScheduleAt(page, '2026-10-01T10:00');
+  await pickDateTime(page, 'schedule', '2026-10-01T10:00');
   await page.getByRole('checkbox', { name: '종결 상담' }).check();
   await page.getByRole('button', { name: '일정 저장', exact: true }).click();
 
@@ -402,7 +384,7 @@ test('회차를 고쳐 쓰고, 적어만 둔 줄도 저장된다', async ({ page
     .locator('section.wire-card')
     .filter({ has: page.getByRole('heading', { name: '확인할 과제' }) });
   await expect(rail).toContainText(task); // 적어만 둔 줄이 저장돼 올라왔다
-  await page.locator('#held-at').fill('2026-10-01T10:00');
+  await pickDateTime(page, 'held-at', '2026-10-01T10:00');
   await page.locator('#memo').fill('처음 적은 상담 내용');
   await rail.getByRole('radio', { name: '진행 전' }).check();
   await page.getByRole('button', { name: '저장' }).click();
@@ -537,7 +519,7 @@ test('자유 글을 저장하고 다시 열면 그대로 읽힌다', async ({ pa
 
   await expect(page.getByRole('heading', { name: '상담 일정 등록' })).toBeVisible();
   await pickFromMenu(page, 'record', name);
-  await page.locator('#held-at').fill('2026-10-05T10:00');
+  await pickDateTime(page, 'held-at', '2026-10-05T10:00');
   await page.locator('#memo').fill(memo);
   await page.getByRole('button', { name: '저장' }).click();
   await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
@@ -572,7 +554,7 @@ test('당사자는 링크와 코드로 자기 일정만 본다', async ({ page, 
 
   // 앞으로의 일정 하나
   await expect(page.getByRole('heading', { name: '상담 일정 등록' })).toBeVisible();
-  await pickScheduleAt(page, '2026-12-01T10:00');
+  await pickDateTime(page, 'schedule', '2026-12-01T10:00');
   await page.getByRole('button', { name: '일정 저장', exact: true }).click();
 
   // 실무자가 열람 링크를 만든다
@@ -635,7 +617,7 @@ test('외부 LLM 동의가 없으면 AI 정리를 하지 않는다', async ({ pa
   // 예정 없이 2회차를 기록한다
   await expect(page.getByRole('heading', { name: '상담 일정 등록' })).toBeVisible();
   await pickFromMenu(page, 'record', name);
-  await page.locator('#held-at').fill('2026-10-05T10:00');
+  await pickDateTime(page, 'held-at', '2026-10-05T10:00');
   await page.locator('#memo').fill('연체 2건 확인. 서류는 다음 주에 떼기로 함.');
   await page.getByRole('button', { name: '저장' }).click();
   await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();

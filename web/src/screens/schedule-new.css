@@ -1,48 +1,19 @@
-/* 승인된 A안. 공용 카드·입력칸·버튼은 그대로 쓰고 배치와 달력만 정의한다. */
+/* 일정 등록 화면의 카드 배치와 저장 바. 날짜·시간 부품은 date-time-input.css가 맡는다. */
 .schedule-form { padding-bottom: var(--space-6); }
 .schedule-inputs { display: grid; gap: var(--space-6); min-width: 0; margin: 0; padding: 0; border: 0; }
 .schedule-inputs .wire-card-body { display: flex; flex-direction: column; gap: var(--space-5); }
-.schedule-datetime-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6); align-items: end; }
-.schedule-time-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
 .schedule-inputs .wire-form-field { min-width: 0; }
 .schedule-inputs .wire-input-box { min-height: 44px; }
 .schedule-inputs .wire-input-box :is(input, select, textarea) { font-size: var(--text-md); }
 .schedule-inputs .wire-choice-group { flex-wrap: wrap; }
 .schedule-inputs .wire-choice { min-height: 44px; }
-.schedule-date-open { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); width: 100%; min-height: 42px; border: 0; padding: 0; background: transparent; color: var(--ink); font: inherit; font-size: var(--text-md); text-align: left; cursor: pointer; }
-.schedule-date-open .wire-chevron { flex-shrink: 0; }
-.schedule-date-dialog { width: min(420px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; padding: var(--space-6); border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--panel); color: var(--ink); }
-.schedule-date-dialog::backdrop { background: rgb(0 0 0 / 40%); }
-.schedule-date-dialog h2 { margin: 0 0 var(--space-5); font-size: var(--text-lg); }
-.schedule-month-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-4); }
-.schedule-month-head strong { font-size: var(--text-lg); white-space: nowrap; }
-.schedule-month-actions { display: flex; gap: var(--space-1); }
-.schedule-month-actions button { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-control); color: var(--ink); background: var(--panel); font: inherit; cursor: pointer; }
-.schedule-date-grid { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 2px; }
-.schedule-date-grid th { padding: var(--space-2) 0; font-size: var(--text-sm); font-weight: 500; color: var(--sub); }
-.schedule-date-grid td { padding: 0; vertical-align: top; }
-.schedule-date-grid td button { width: 100%; min-height: 56px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 2px; padding: var(--space-1) 0; border: 1px solid transparent; border-radius: var(--radius-control); background: transparent; color: var(--ink); font: inherit; cursor: pointer; }
-.schedule-date-grid td button:hover { background: var(--muted); }
-.schedule-date-grid button[aria-current="date"] { border-color: var(--sub); }
-.schedule-date-grid button[aria-pressed="true"] { background: var(--ink); color: var(--panel); font-weight: 600; }
-.schedule-date-grid small { font-size: 11px; line-height: 1.1; }
-.schedule-date-dialog > .panel-meta { margin: var(--space-4) 0; }
-.schedule-date-dialog .wire-form-actions { margin-top: var(--space-5); }
-.schedule-date-dialog .wire-button { min-height: 44px; }
 .schedule-savebar { position: sticky; bottom: var(--space-4); z-index: 3; display: flex; justify-content: space-between; align-items: center; gap: var(--space-5); padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--panel); }
 .schedule-save-summary { min-width: 0; }
 .schedule-save-summary strong { display: block; font-size: var(--text-md); }
 .schedule-save-summary .panel-meta { margin: var(--space-1) 0 0; }
 .schedule-savebar .wire-button { flex-shrink: 0; min-height: 44px; padding-inline: var(--space-6); }
 .schedule-form :is(button, a, input, select, textarea) { scroll-margin-block: calc(var(--header-height) + var(--space-6)) 160px; }
-.schedule-date-dialog button:focus-visible, .schedule-date-open:focus-visible { outline: 2px solid var(--blue-deep); outline-offset: 3px; }
 @media (max-width: 767px) {
-  .schedule-datetime-row { grid-template-columns: minmax(0, 1fr); }
-  .schedule-time-fields { gap: var(--space-2); }
   .schedule-savebar { flex-direction: column; align-items: stretch; gap: var(--space-3); padding: var(--space-4); }
   .schedule-savebar .wire-button { width: 100%; }
-  .schedule-date-dialog { padding: var(--space-4); }
-  .schedule-month-head strong { font-size: var(--text-md); }
-  .schedule-month-actions { gap: 0; }
-  .schedule-date-grid { border-spacing: 0; }
 }

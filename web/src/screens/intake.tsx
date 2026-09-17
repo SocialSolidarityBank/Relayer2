@@ -19,6 +19,8 @@ import {
   type IntakeQuestionGroup,
 } from '../intake-questions.ts';
 import { METHODS } from '../vocab.ts';
+import { EMPTY_DATE_TIME, dateTimeFromIso, dateTimeToIso } from '../date-time.ts';
+import { DateTimeInput } from '../date-time-input.tsx';
 import {
   Button,
   Card,
@@ -41,16 +43,8 @@ const EXCLUSIVE_OPTIONS = [NOT_APPLICABLE_OPTION, '무응답'];
 
 type Answers = Record<string, string | string[]>;
 
-/** `datetime-local` 이 바로 먹는 지역시각 문자열. 지금 시각을 분 단위로 자른다. */
-function localNow(): string {
-  return toLocalInput(new Date().toISOString());
-}
-
-function toLocalInput(iso: string): string {
-  const d = new Date(iso);
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  return d.toISOString().slice(0, 16);
-}
+/** 지금 시각을 한국 시간의 날짜·시·분으로 표시하는 상담 일시 초깃값. */
+const nowDateTime = () => dateTimeFromIso(new Date().toISOString());
 
 /** 글이 길어지면 칸이 아래로 늘어난다(요청 7). 불러온 글도 처음부터 다 보이게 한다. */
 function grow(el: HTMLTextAreaElement | null) {
@@ -184,7 +178,7 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
   const [taskDraft, setTaskDraft] = useState<Line>({ text: '' });
   const [questionDraft, setQuestionDraft] = useState<Line>({ text: '' });
   // 실제로 진행한 상담의 일시·방식·장소. 선호 상담 방식(detail)과 다른 값이다.
-  const [heldAt, setHeldAt] = useState(localNow());
+  const [heldAt, setHeldAt] = useState(nowDateTime);
   const [method, setMethod] = useState<ConsultationMethod | ''>('');
   const [place, setPlace] = useState('');
   const [saving, setSaving] = useState(false);
@@ -204,7 +198,7 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
     setQuestions([]);
     setTaskDraft({ text: '' });
     setQuestionDraft({ text: '' });
-    setHeldAt(localNow());
+    setHeldAt(nowDateTime());
     setMethod('');
     setPlace('');
     setWritten(false);
@@ -217,7 +211,7 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
       setAnswers(withLegacyMapping(intake.detail ?? {}, intake.memo));
       setTasks(intake.cards.filter((c) => c.kind === 'promise').map((c) => ({ text: c.text })));
       setQuestions(intake.cards.filter((c) => c.kind === 'question').map((c) => ({ text: c.text })));
-      setHeldAt(intake.held_at ? toLocalInput(intake.held_at) : localNow());
+      setHeldAt(intake.held_at ? dateTimeFromIso(intake.held_at) : nowDateTime());
       setMethod(intake.method ?? '');
       setPlace(intake.place ?? '');
     })().catch((failure: unknown) => {
@@ -259,6 +253,18 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
   );
 
   const save = async () => {
+    // 일시를 건드렸는데 덜 골랐으면 지금 시각으로 억지로 채우지 않고 막는다.
+    // 아예 비어 있으면 held_at 을 보내지 않아 예전 값이 남는다.
+    const heldAtTouched =
+      heldAt.date !== EMPTY_DATE_TIME.date ||
+      heldAt.period !== EMPTY_DATE_TIME.period ||
+      heldAt.hour !== EMPTY_DATE_TIME.hour ||
+      heldAt.minute !== EMPTY_DATE_TIME.minute;
+    const heldAtIso = dateTimeToIso(heldAt);
+    if (heldAtTouched && !heldAtIso) {
+      setError('상담 일시를 모두 골라 주세요.');
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -273,7 +279,7 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
           ...withDraft(tasks, taskDraft).map((t) => ({ kind: 'promise', text: t.text, section: 'promise' })),
         ],
       };
-      if (heldAt) body.held_at = new Date(heldAt).toISOString();
+      if (heldAtIso) body.held_at = heldAtIso;
       // 방식을 고르지 않았으면 보내지 않는다 — 고쳐 쓰기에서 예전 값을 지우지 않는다.
       if (method && INTAKE_METHODS.some((m) => m.key === method)) {
         body.method = method;
@@ -299,14 +305,7 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
       <div className="wire-container">
         {/* 1. 실제로 진행한 상담의 일시·방식·장소. 장소는 대면일 때만 나온다(요청 2). */}
         <Card title="상담 일시와 상담 방식">
-          <FormField label="상담 일시" htmlFor="held-at">
-            <input
-              id="held-at"
-              type="datetime-local"
-              value={heldAt}
-              onChange={(e) => setHeldAt(e.target.value)}
-            />
-          </FormField>
+          <DateTimeInput idPrefix="held-at" value={heldAt} onChange={setHeldAt} disabled={saving} required={false} />
           <ChoiceGroup legend="상담 방식">
             {INTAKE_METHODS.map((m) => (
               <Choice

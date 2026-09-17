@@ -4,7 +4,8 @@ import { getCase, planSession } from '../api.ts';
 import type { CaseView, NewSessionInput } from '../api.ts';
 import { Button, Card, Choice, ChoiceGroup, ErrorText, Field, PageHeader } from '../ui.tsx';
 import { METHODS } from '../vocab.ts';
-import { ScheduleDatePicker } from './schedule-date-picker.tsx';
+import { DateTimeInput } from '../date-time-input.tsx';
+import { dateTimeToIso, EMPTY_DATE_TIME } from '../date-time.ts';
 import './schedule-new.css';
 
 const scheduleFormatter = new Intl.DateTimeFormat('ko-KR', {
@@ -14,10 +15,7 @@ const scheduleFormatter = new Intl.DateTimeFormat('ko-KR', {
 
 export function ScheduleNewScreen({ caseId }: { caseId: number }) {
   const [view, setView] = useState<CaseView | null>(null);
-  const [date, setDate] = useState('');
-  const [period, setPeriod] = useState('오후');
-  const [hour, setHour] = useState('');
-  const [minute, setMinute] = useState('00');
+  const [at, setAt] = useState(EMPTY_DATE_TIME);
   const [method, setMethod] = useState<NewSessionInput['method']>('in_person');
   const [place, setPlace] = useState('');
   const [memo, setMemo] = useState('');
@@ -34,9 +32,7 @@ export function ScheduleNewScreen({ caseId }: { caseId: number }) {
     return () => { live = false; };
   }, [caseId]);
 
-  const scheduledAt = date && hour
-    ? new Date(`${date}T${String(Number(hour) % 12 + (period === '오후' ? 12 : 0)).padStart(2, '0')}:${minute}:00+09:00`).toISOString()
-    : null;
+  const scheduledAt = dateTimeToIso(at);
   const save = async () => {
     if (!scheduledAt || savingRef.current) return;
     savingRef.current = true;
@@ -67,25 +63,7 @@ export function ScheduleNewScreen({ caseId }: { caseId: number }) {
     <form className="wire-container schedule-form" onSubmit={e => { e.preventDefault(); void save(); }}>
       <fieldset className="schedule-inputs" disabled={saving} aria-label="상담 일정 입력">
         <Card title="언제 상담하나요?">
-          <div className="schedule-datetime-row">
-            <ScheduleDatePicker value={date} onChange={setDate} />
-            <div className="schedule-time-fields">
-              <Field label="오전·오후" htmlFor="schedule-period" control="select">
-                <select id="schedule-period" value={period} onChange={e => setPeriod(e.target.value)}><option>오전</option><option>오후</option></select>
-              </Field>
-              <Field label="시" htmlFor="schedule-hour" control="select" required>
-                <select id="schedule-hour" required value={hour} onChange={e => setHour(e.target.value)}>
-                  <option value="">선택</option>
-                  {Array.from({ length: 12 }, (_, i) => <option key={i} value={String(i + 1)}>{i + 1}시</option>)}
-                </select>
-              </Field>
-              <Field label="분" htmlFor="schedule-minute" control="select">
-                <select id="schedule-minute" value={minute} onChange={e => setMinute(e.target.value)}>
-                  {Array.from({ length: 60 }, (_, i) => <option key={i} value={String(i).padStart(2, '0')}>{String(i).padStart(2, '0')}분</option>)}
-                </select>
-              </Field>
-            </div>
-          </div>
+          <DateTimeInput idPrefix="schedule" value={at} onChange={setAt} disabled={saving} />
         </Card>
         <Card title="상담 내용">
           <ChoiceGroup legend="상담 방식">

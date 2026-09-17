@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Button, Chevron, Field } from '../ui.tsx';
+import { Button, Chevron, Field } from './ui.tsx';
 
 const dayFormatter = new Intl.DateTimeFormat('ko-KR', {
   year: 'numeric', month: 'long', day: 'numeric', weekday: 'long',
@@ -8,7 +8,12 @@ const todayFormatter = new Intl.DateTimeFormat('sv-SE', {
   timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit',
 });
 
-export function ScheduleDatePicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+export function DatePicker({ id, value, onChange, required = true }: {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+}) {
   const today = todayFormatter.format(new Date());
   const [pending, setPending] = useState(value);
   const [month, setMonth] = useState(() => new Date(`${value || today}T12:00:00`));
@@ -22,9 +27,9 @@ export function ScheduleDatePicker({ value, onChange }: { value: string; onChang
   const label = value ? dayFormatter.format(new Date(`${value}T12:00:00`)) : '날짜를 선택해 주세요';
 
   return <>
-    <Field label="날짜" htmlFor="schedule-date" required>
-      <button id="schedule-date" type="button" className="schedule-date-open" ref={trigger}
-        aria-label={`상담 날짜 선택: ${label}`} aria-haspopup="dialog" aria-expanded={open} aria-controls="schedule-date-dialog"
+    <Field label="날짜" htmlFor={id} required={required}>
+      <button id={id} type="button" className="schedule-date-open" ref={trigger}
+        aria-label={`상담 날짜 선택: ${label}`} aria-haspopup="dialog" aria-expanded={open} aria-controls={`${id}-dialog`}
         onClick={() => {
           setPending(value);
           setMonth(new Date(`${value || today}T12:00:00`));
@@ -35,9 +40,9 @@ export function ScheduleDatePicker({ value, onChange }: { value: string; onChang
         <Chevron />
       </button>
     </Field>
-    <dialog id="schedule-date-dialog" ref={dialog} className="schedule-date-dialog" aria-labelledby="schedule-date-title"
+    <dialog id={`${id}-dialog`} ref={dialog} className="schedule-date-dialog" aria-labelledby={`${id}-title`}
       onClose={() => { setOpen(false); trigger.current?.focus(); }}>
-      <h2 id="schedule-date-title">상담 날짜 선택</h2>
+      <h2 id={`${id}-title`}>상담 날짜 선택</h2>
       <div className="schedule-month-head">
         <strong aria-live="polite">{year}년 {m + 1}월</strong>
         <div className="schedule-month-actions">
@@ -66,7 +71,7 @@ export function ScheduleDatePicker({ value, onChange }: { value: string; onChang
         <Button onClick={() => dialog.current?.close()}>취소</Button>
         <Button variant="primary" disabled={!pending} onClick={() => { onChange(pending); dialog.current?.close(); }}>날짜 선택 완료</Button>
       </div>
-      <p className="panel-meta">날짜만 적용해요. 일정은 ‘일정 저장’을 눌러야 해요.</p>
+      <p className="panel-meta">날짜만 적용해요. 내용은 화면의 저장 버튼을 눌러야 저장돼요.</p>
     </dialog>
   </>;
 }

@@ -1,6 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
+import { expectDateTime, pickDateTime } from './date-time.ts';
 
 const api = process.env.PLAYWRIGHT_API_PREFIX ?? '/api';
+// 브라우저가 한국이 아니어도 화면은 한국 시간으로 저장돼야 한다 — 다른 시간대에서 돌려 본다.
+test.use({ timezoneId: 'America/Los_Angeles' });
 
 async function register(page: Page) {
   await page.goto('/');
@@ -29,7 +32,7 @@ test('피드백 인테이크의 조건부 입력과 실제 상담정보가 생�
     ]);
   const actual = page.getByRole('group', { name: '상담 방식', exact: true });
   await actual.getByRole('radio', { name: '대면', exact: true }).check();
-  await page.getByLabel('상담 일시', { exact: false }).fill('2026-09-15T14:20');
+  await pickDateTime(page, 'held-at', '2026-09-15T14:20');
   await page.getByLabel('상담 장소', { exact: false }).fill('합성 상담실');
   await page.getByRole('group', { name: '선호 상담 방식', exact: true }).getByRole('radio', { name: '전화', exact: true }).check();
   await expect(actual.getByRole('radio', { name: '대면', exact: true })).toBeChecked();
@@ -73,18 +76,18 @@ test('피드백 인테이크의 조건부 입력과 실제 상담정보가 생�
     detail: { difficulty_areas: ['경제'], need_economy_detail: '보존할 과거 응답' },
   } })).ok()).toBe(true);
   await page.goto(`/#/cases/${caseId}/intake`);
-  await expect(page.getByLabel('상담 일시', { exact: false })).toHaveValue('2026-09-15T14:20');
+  await expectDateTime(page, 'held-at', '2026-09-15T14:20');
   await expect(history).toHaveValue(longText);
   await actual.getByRole('radio', { name: '기타(이메일, SNS 등)', exact: true }).check();
   await expect(page.getByLabel('상담 장소', { exact: false })).toHaveCount(0);
-  await page.getByLabel('상담 일시', { exact: false }).fill('2026-09-16T10:30');
+  await pickDateTime(page, 'held-at', '2026-09-16T10:30');
   await page.getByRole('button', { name: '저장', exact: true }).click();
   await expect(page.getByRole('heading', { name: '15초 다시보기', exact: true })).toBeVisible();
   const edited = await (await page.request.get(`${api}/cases/${caseId}/intake`)).json();
   expect(edited.session_id).toBe(saved.session_id);
   expect(edited.method).toBe('other');
   expect(edited.place).toBeNull();
-  expect(edited.held_at).not.toBe(saved.held_at);
+  expect(new Date(edited.held_at).toISOString()).toBe('2026-09-16T01:30:00.000Z');
   expect(edited.detail.need_economy_detail).toBe('보존할 과거 응답');
 });
 
