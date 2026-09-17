@@ -1,6 +1,6 @@
 // 로그인 — 베타는 실무자·관리자만 들어온다. 당사자는 로그인하지 않는다(GLOSSARY §3).
-import { useState } from 'react';
-import { login } from '../api.ts';
+import { useEffect, useState } from 'react';
+import { login, signupOpen } from '../api.ts';
 import { Button, Card, ErrorText, Field, FormActions, PageHeader } from '../ui.tsx';
 
 export function LoginScreen({ onDone }: { onDone: () => void }) {
@@ -8,6 +8,13 @@ export function LoginScreen({ onDone }: { onDone: () => void }) {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 새 배포(활성 관리자 0명)에서만 첫 가입 문이 보인다. 그 뒤로는 초대 링크뿐이다(2026-09-17 Q).
+  const [signupAvailable, setSignupAvailable] = useState(false);
+  useEffect(() => {
+    void signupOpen()
+      .then((r) => setSignupAvailable(r.open))
+      .catch(() => setSignupAvailable(false));
+  }, []);
 
   const submit = async () => {
     setBusy(true);
@@ -55,6 +62,15 @@ export function LoginScreen({ onDone }: { onDone: () => void }) {
             </Button>
           </FormActions>
         </Card>
+        {signupAvailable && (
+          <Card title="아직 관리자가 없어요" hint="새 기관이면 첫 관리자 계정을 만들어 시작해요.">
+            <FormActions>
+              <a className="wire-button" data-variant="primary" href="#/signup">
+                <span className="wire-button-text">기관 만들고 시작하기</span>
+              </a>
+            </FormActions>
+          </Card>
+        )}
       </div>
     </>
   );

@@ -95,7 +95,8 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-export type Me = { id: number; name: string; role: 'worker' | 'admin' };
+/** `onboarded` 가 거짓이면 관리자는 #/onboarding 에 머문다(서버 잠금은 없다 — 안내용 리다이렉트). */
+export type Me = { id: number; name: string; role: 'worker' | 'admin'; onboarded: boolean };
 
 export const getMe = () => json<Me>('/me');
 export const login = (email: string, password: string) =>
@@ -112,6 +113,7 @@ export type ParticipantRow = {
   pseudonym: string;
   /** 배정된 사람에게만 온다. 아니면 null — 가명만 보인다. */
   name: string | null;
+  program_id: number;
   program_name: string;
   status: 'open' | 'closed';
   assignees: Assignee[];
@@ -142,6 +144,7 @@ export type CaseDetail = {
   case: {
     id: number;
     participant_id: number;
+    program_id: number;
     program_name: string;
     status: 'open' | 'closed';
     overall_goal: string | null;
@@ -392,7 +395,7 @@ export type NewCaseInput = {
   name: string;
   phone?: string;
   email?: string;
-  program_name: string;
+  program_id: number;
   sessions_planned?: number;
 };
 
@@ -501,7 +504,20 @@ export type Profile = {
   contact_email: string | null;
 };
 export type Org = { name: string; reg_no: string | null; address: string | null; phone: string | null };
-export type Program = { id: number; name: string; retired_at: string | null; cases: number };
+export type OrgView = Org & { slug: string | null; onboarded: boolean };
+export type Program = {
+  id: number;
+  name: string;
+  starts_on: string | null;
+  ends_on: string | null;
+  description: string | null;
+  retired_at: string | null;
+  cases: number;
+  open_cases: number;
+};
+export type ProgramInput = { name: string; starts_on: string | null; ends_on: string | null; description: string | null };
+/** 종료를 막은 이유 — 열린 사례·예정 회차 수. 화면이 이 숫자를 보여 주고 확인을 받는다. */
+export type RetireWarning = { open_cases: number; planned_sessions: number };
 export type Worker = {
   id: number;
   name: string;
@@ -532,7 +548,8 @@ export type RequestRow = {
   decision: string | null;
 };
 export type Connections = {
-  ai: { connected: boolean; provider: string; model: string; env: string };
+  /** `source` 는 키의 출처다(db=화면에서 넣음, env=서버 환경 변수). 값은 오지 않는다. */
+  ai: { connected: boolean; provider: string; model: string; env: string; source: 'db' | 'env' | null };
   stt: { connected: boolean; provider: string; region: string | null; env: string };
   db: { connected: boolean; checked_at: string; env: string };
 };
@@ -542,15 +559,38 @@ export const saveProfile = (body: { name: string; phone: string | null; contact_
   json<Profile>('/settings/profile', { method: 'PATCH', body: JSON.stringify(body) });
 export const deactivateMe = () => json<{ ok: true }>('/settings/deactivate', { method: 'POST' });
 
-export const getOrg = () => json<Org>('/settings/org');
-export const saveOrg = (body: Org) => json<Org>('/settings/org', { method: 'PUT', body: JSON.stringify(body) });
+export const getOrg = () => json<OrgView>('/settings/org');
+export const saveOrg = (body: Org) => json<OrgView>('/settings/org', { method: 'PUT', body: JSON.stringify(body) });
 
 export const listPrograms = (all = false) => json<Program[]>(`/settings/programs${all ? '?all=1' : ''}`);
-export const addProgram = (name: string) =>
-  json<Program[]>('/settings/programs', { method: 'POST', body: JSON.stringify({ name }) });
-export const retireProgram = (id: number) => json<Program[]>(`/settings/programs/${id}`, { method: 'DELETE' });
+export const addProgram = (body: ProgramInput) =>
+  json<Program>('/settings/programs', { method: 'POST', body: JSON.stringify(body) });
+export const updateProgram = (id: number, body: Partial<ProgramInput>) =>
+  json<Program>(`/settings/programs/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+/**
+ * 사업 종료. 열린 사례·예정 회차가 있으면 서버가 409 로 건수를 돌려준다 — 그때 `warning` 으로 온다.
+ * `confirm` 으로 다시 부르면 종료한다.
+ */
+export const retireProgram = async (id: number, confirm = false): Promise<{ ok: true } | { warning: RetireWarning }> => {
+  const res = await fetch(`${BASE}/settings/programs/${id}${confirm ? '?confirm=1' : ''}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  });
+  if (res.status === 409) return { warning: (await res.json()) as RetireWarning };
+  if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error ?? `HTTP ${res.status}`);
+  return { ok: true };
+};
+export const reopenProgram = (id: number) => json<{ ok: true }>(`/settings/programs/${id}/reopen`, { method: 'POST' });
 
-export const listWorkers = () => json<Worker[]>('/settings/workers');
+/** `programId` 를 주면 그 사업의 열린 사례를 맡은 실무자만. */
+export const listWorkers = (programId?: number) =>
+  json<Worker[]>(`/settings/workers${programId ? `?program=${programId}` : ''}`);
+export const setWorkerRole = (id: number, role: 'worker' | 'admin') =>
+  json<{ ok: true }>(`/settings/workers/${id}/role`, { method: 'PUT', body: JSON.stringify({ role }) });
+export const completeOnboarding = () => json<{ ok: true }>('/settings/onboarding/complete', { method: 'POST' });
+/** 키 값은 보내기만 하고 되돌려받지 않는다. `null` 이면 지운다. */
+export const setAiKey = (key: string | null) =>
+  json<{ ok: true }>('/settings/ai-key', { method: 'PUT', body: JSON.stringify({ key }) });
 export type WorkerCase = { id: number; pseudonym: string; program_name: string; status: string };
 export const workerCases = (id: number) => json<WorkerCase[]>(`/settings/workers/${id}/cases`);
 /** 배정 화면의 사례 목록. 가명·사업·담당 이름만 오고 임상 내용은 안 온다(관리자도 무권한). */
@@ -602,3 +642,8 @@ export const signUpWithInvite = (
   token: string,
   body: { email: string; password: string; name: string },
 ) => json<{ ok: true }>(`/auth/invite/${token}`, { method: 'POST', body: JSON.stringify(body) });
+
+/** 기관을 여는 첫 가입. 활성 관리자가 없을 때만 열린다 — 그 뒤는 초대 링크뿐이다. */
+export const signupOpen = () => json<{ open: boolean }>('/auth/signup');
+export const signup = (body: { org_name: string; slug: string; email: string; password: string; name: string }) =>
+  json<{ ok: true }>('/auth/signup', { method: 'POST', body: JSON.stringify(body) });

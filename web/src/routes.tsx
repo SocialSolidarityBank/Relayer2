@@ -19,6 +19,8 @@ import { RecordScreen } from './screens/record.tsx';
 import { ReviewScreen } from './screens/review.tsx';
 import { ScheduleNewScreen } from './screens/schedule-new.tsx';
 import { SessionFullScreen } from './screens/session-full.tsx';
+import { SignupScreen } from './screens/signup.tsx';
+import { OnboardingScreen } from './screens/onboarding.tsx';
 
 const HOME = '#/schedule';
 
@@ -68,6 +70,16 @@ export function Routes() {
       </div>
     );
 
+  // 기관을 여는 첫 가입(2026-09-17 Q). 로그인 앞이고, 이미 들어와 있으면 볼 일이 없다.
+  if (hash === '#/signup' && !me)
+    return (
+      <div className="wire-shell">
+        <div className="page-content">
+          <SignupScreen onDone={() => void getMe().then(setMe)} />
+        </div>
+      </div>
+    );
+
   if (asParticipant)
     return (
       <div className="wire-shell">
@@ -100,12 +112,37 @@ export function Routes() {
   const [path, rawQuery = ''] = hash.split('?');
   const query = new URLSearchParams(rawQuery);
 
+  /**
+   * 마법사 가두기(2026-09-17 Q). 기관이 준비를 마치기 전(`onboarded:false`)에는 관리자를
+   * #/onboarding 에 붙들어 둔다 — 서버 잠금은 없고 안내용 리다이렉트다. 실무자는 그냥 쓴다.
+   * 마쳤는데 #/onboarding 이면 당사자 등록으로 보낸다 — 마법사의 완료 도착지이자, 다시 들어와도 같은 곳이다.
+   */
+  if (me.role === 'admin' && !me.onboarded && path !== '#/onboarding') {
+    window.location.hash = '#/onboarding';
+    return null;
+  }
+  if (path === '#/onboarding' && me.onboarded) {
+    window.location.hash = '#/participants/new';
+    return null;
+  }
+  // 로그인한 채 가입 주소로 오면 홈으로.
+  if (path === '#/signup') {
+    window.location.hash = HOME;
+    return null;
+  }
   const screen = (() => {
     if (path === HOME) {
       const focus = Number(query.get('case'));
       return <HomeScreen focusCaseId={Number.isFinite(focus) && focus > 0 ? focus : null} />;
     }
-    if (path === '#/participants') return <ParticipantsScreen />;
+    // 완료는 `onboarded` 만 바꾼다. 주소는 위 가두기 규칙이 당사자 등록으로 옮긴다 — 주소와 상태를
+    // 따로 바꾸면 그 사이 렌더가 "안 마쳤는데 다른 주소"를 보고 마법사로 되돌린다(2026-09-17 실측).
+    if (path === '#/onboarding')
+      return <OnboardingScreen me={me} onDone={() => setMe({ ...me, onboarded: true })} />;
+    if (path === '#/participants') {
+      const programId = Number(query.get('program'));
+      return <ParticipantsScreen initialProgramId={Number.isInteger(programId) && programId > 0 ? programId : null} />;
+    }
     // 사례를 안 고른 채 상담 기록하기·상담 일정 등록을 누르면 여기로 온다.
     if (path === '#/pick/record') return <ParticipantsScreen pickFor="record" />;
     if (path === '#/pick/schedule') return <ParticipantsScreen pickFor="schedule" />;
