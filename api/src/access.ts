@@ -11,15 +11,15 @@ export class NotFound extends Error {}
 /** 사례는 있으나 맡은 사람이 아니다. 라우트는 403 으로 답한다. */
 export class AccessDenied extends Error {}
 
-/** 사례가 종결됐다. 새 녹음·전사를 받지 않는다. 라우트는 409 로 답한다. */
+/** 사례가 종결됐다. 새 기록·일정·녹음을 받지 않는다. 라우트는 409 로 답한다. */
 export class CaseClosed extends Error {}
 
-/** 종결 사례에는 새 음성 처리를 하지 않는다(2026-09-16 Q). 재생·열람은 이 문을 지나지 않는다. */
+/** 종결 사례에는 새 쓰기를 하지 않는다(2026-09-16 Q). 재생·열람·저장된 회차 고쳐 쓰기는 이 문을 지나지 않는다. */
 export async function assertCaseOpen(caseId: number): Promise<void> {
   const [row] = await sql<Array<{ status: string }>>`
     select status from support_cases where id = ${caseId}`;
   if (!row) throw new NotFound('사례 없음');
-  if (row.status === 'closed') throw new CaseClosed('종결된 상담, 녹음·전사 불가');
+  if (row.status === 'closed') throw new CaseClosed('종결된 상담, 새 기록·일정·녹음 불가');
 }
 
 

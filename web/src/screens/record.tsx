@@ -187,6 +187,36 @@ export function RecordScreen({
   if (!briefing || !view) return <p className="empty">불러오는 중</p>;
   if (editingId && !editing) return <p className="empty">불러오는 중</p>;
 
+  // 종결 사례에는 새 기록을 열지 않는다(2026-09-18 검수). 저장된 회차 고쳐 쓰기는 서버가
+  // 허용하므로(recordSession 은 assertCaseOpen 을 지나지 않는다) 수정 모드는 그대로 둔다.
+  if (detail?.case.status === 'closed' && !editingId) {
+    return (
+      <>
+        <ParticipantHero
+          name={briefing.participant_card.name}
+          pseudonym={briefing.participant_card.pseudonym}
+          details={[
+            ['당사자 ID', briefing.participant_card.pseudonym],
+            ['참여 사업', briefing.participant_card.program_name],
+            ['연락처', detail.participant.phone ?? ''],
+            ['이메일', detail.participant.email ?? ''],
+          ]}
+        />
+        <div className="wire-container">
+          <Card
+            title="상담 종결"
+            tone="warn"
+            action={
+              <Button onClick={() => (window.location.hash = `#/cases/${caseId}/info`)}>당사자 정보</Button>
+            }
+          >
+            <Empty>종결된 상담, 새 기록 불가</Empty>
+          </Card>
+        </div>
+      </>
+    );
+  }
+
   // 예정 회차가 있으면 그것을 기록한다. 없으면 여기서 일시·상담 방식을 적고 회차를 만든다.
   // 일정을 미리 잡지 않고 만난 상담(갑작스러운 방문·전화)이 기록되지 못하면 안 된다.
   const session = editing

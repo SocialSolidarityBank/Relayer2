@@ -143,6 +143,9 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
                   {risks.length > 0 && <Badge>위험 신호 {risks.length}</Badge>}
                 </>
               }
+              // 접힌 머리에도 내용 한 줄을 둔다(2026-09-18) — 펼치기 전에 무슨 회차인지 안다.
+              // AI 요약이 있으면 그것, 없으면 회차 한 줄(`s.line`)이다.
+              desc={s.ai_summary?.summary ?? s.line}
               action={
                 <>
                   {/* 이름이 상태를 말한다(2026-09-17 Q): 승인 전에는 검토, 승인 뒤에는 보기. */}

@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getCaseDetail, listSchedules } from '../api.ts';
 import type { ScheduleRow } from '../api.ts';
-import { calendarPeriod, calendarTime, koreanDay, shiftPeriod } from '../calendar.ts';
+import { calendarPeriod, calendarTime, koreanDay, shiftPeriod, WEEKDAYS } from '../calendar.ts';
 import type { CalendarTime, CalendarView } from '../calendar.ts';
 import { DatePicker } from '../date-picker.tsx';
 import { Button, Card, Chevron, Empty, ErrorText, Fold, FormActions, Meta, PageHeader, Select } from '../ui.tsx';
@@ -11,7 +11,7 @@ import '../date-time-input.css';
 import './home.css';
 
 const VIEWS = [{ key: 'month', label: '월간' }, { key: 'week', label: '주간' }, { key: 'day', label: '일간' }] as const;
-const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일'];
+
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const dayFormatter = new Intl.DateTimeFormat('ko-KR', { timeZone: 'UTC', year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
 const shortDayFormatter = new Intl.DateTimeFormat('ko-KR', { timeZone: 'UTC', month: 'numeric', day: 'numeric', weekday: 'short' });
@@ -156,6 +156,16 @@ export function HomeScreen({ focusCaseId = null }: { focusCaseId?: number | null
     : upcoming === null
       ? null
       : upcomingEvents.slice(0, upcomingShown);
+  // 가입 직후에는 어디에도 일정이 없고 빈 달력만 보면 다음 할 일을 모른다(2026-09-18).
+  // 당사자 목록은 이 화면이 부르지 않으므로 **일정 0건**을 그 신호로 쓴다.
+  const noSchedules = rows?.length === 0 && upcoming?.length === 0;
+  const registerAction = noSchedules && (
+    <FormActions>
+      <a className="wire-button" data-variant="secondary" href="#/participants/new">
+        <span className="wire-button-text">당사자 등록</span>
+      </a>
+    </FormActions>
+  );
   const upcomingHint =
     upcoming === null
       ? undefined
@@ -194,7 +204,7 @@ export function HomeScreen({ focusCaseId = null }: { focusCaseId?: number | null
       </div>
       {error ? <Card><ErrorText>{error}</ErrorText><Button onClick={() => setRetry(n => n + 1)}>다시 불러오기</Button></Card> : <>
         {!rows && <p role="status" className="panel-meta">일정 불러오는 중</p>}
-        {rows?.length === 0 && <Empty>표시된 기간에 예정된 상담 없음</Empty>}
+        {rows?.length === 0 && <><Empty>표시된 기간에 예정된 상담 없음</Empty>{registerAction}</>}
         <div aria-busy={rows === null}>
           <Card className="sc-calendar">
             {view === 'month' ? <table className="sc-month-grid" aria-label="월간 상담 일정">
@@ -256,7 +266,10 @@ export function HomeScreen({ focusCaseId = null }: { focusCaseId?: number | null
             {listed === null ? (
               <Empty>일정 불러오는 중</Empty>
             ) : listed.length === 0 ? (
-              <Empty>{dayPicked ? '선택한 날짜에 상담 일정 없음' : '예정된 상담 없음'}</Empty>
+              <>
+                <Empty>{dayPicked ? '선택한 날짜에 상담 일정 없음' : '예정된 상담 없음'}</Empty>
+                {!dayPicked && registerAction}
+              </>
             ) : (
               <>
                 {listed.map(({ row, time }) => {

@@ -153,7 +153,7 @@ test('월간이 기본이고 기간 이동·주간·일간·다시보기가 실�
   await page.getByRole('combobox', { name: '일정 보기', exact: true }).selectOption('week');
   const week = page.locator('.sc-time-grid');
   await expect(week).toHaveAttribute('aria-label', '주간 상담 일정');
-  // 앵커는 10-01 — 그 주(9-27~10-03)에는 10-14 일정이 없다.
+  // 앵커는 10-01 — 그 주(월~일, 9-28~10-04)에는 10-14 일정이 없다.
   await expect(event(week, s1)).toHaveCount(0);
   await toolbar.getByRole('button', { name: '다음 기간', exact: true }).click();
   await toolbar.getByRole('button', { name: '다음 기간', exact: true }).click();
