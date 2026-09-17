@@ -3,38 +3,91 @@
 // 서버 계약은 그대로 쓴다. 목록에 없는 연락처를 얻으려고 상담 상세를 미리 읽지 않는다.
 import { useEffect, useMemo, useState } from 'react';
 import { listParticipants, type ParticipantRow } from '../api.ts';
-import { Badge, Card, Empty, PageHeader } from '../ui.tsx';
+import { Badge, Card, Empty, PageHeader, Select } from '../ui.tsx';
+import './participants.css';
 
 const scheduleDate = new Intl.DateTimeFormat('ko-KR', {
   month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
 });
 const displayName = (row: ParticipantRow) => (row.can_access && row.name) || row.pseudonym;
+const workersOf = (row: ParticipantRow) => row.assignees.map((a) => a.name);
 
 /** 무엇을 하러 왔는가. 메뉴에서 사례 없이 눌렀을 때 붙는다. */
 export type PickFor = 'record' | 'schedule' | null;
 
+/**
+ * 제목은 **사이드바 메뉴와 같은 이름**이다(2026-09-17 Q). `누구의 일정을 잡을까요` 같은
+ * 질문형 제목은 이 두 화면에만 있던 말투였다 — 누구를 고르는 자리라는 건 목록이 말한다.
+ */
 const PURPOSE: Record<Exclude<PickFor, null>, { title: string; go: string; label: string }> = {
-  record: { title: '누구의 상담을 기록할까요', go: 'record', label: '상담 기록하기' },
-  schedule: { title: '누구의 일정을 잡을까요', go: 'schedule', label: '상담 일정 등록' },
+  record: { title: '상담 기록하기', go: 'record', label: '상담 기록하기' },
+  schedule: { title: '상담 일정 등록', go: 'schedule', label: '상담 일정 등록' },
 };
+
+/** 상태 걸개는 하나의 선택창이다 — 배정·진행·종결이 서로 배타적인 자리다. */
+const STATUS = [
+  { key: 'all', label: '상태 전체' },
+  { key: 'need_assign', label: '배정 필요' },
+  { key: 'open', label: '진행 중' },
+  { key: 'closed', label: '종결' },
+] as const;
+const SORTS = [
+  { key: 'name', label: '가나다순' },
+  { key: 'date_asc', label: '다음 상담 이른 순' },
+  { key: 'date_desc', label: '다음 상담 늦은 순' },
+] as const;
 
 export function ParticipantsScreen({ pickFor = null }: { pickFor?: PickFor }) {
   const [rows, setRows] = useState<ParticipantRow[] | null>(null);
   const [q, setQ] = useState('');
+  const [status, setStatus] = useState<string>('all');
+  const [program, setProgram] = useState('all');
+  const [worker, setWorker] = useState('all');
+  const [sort, setSort] = useState<string>('name');
 
   useEffect(() => {
-    void listParticipants().then((data) =>
-      setRows(data.sort((a, b) => displayName(a).localeCompare(displayName(b), 'ko'))),
-    );
+    void listParticipants().then(setRows);
   }, []);
+
+  // 걸개 선택창의 값은 목록이 만든다 — 없는 사업·없는 실무자를 고르게 두지 않는다.
+  const { programs, workers } = useMemo(() => {
+    const programs = new Set<string>();
+    const workers = new Set<string>();
+    for (const row of rows ?? []) {
+      programs.add(row.program_name);
+      for (const name of workersOf(row)) workers.add(name);
+    }
+    const ko = (a: string, b: string) => a.localeCompare(b, 'ko');
+    return { programs: [...programs].sort(ko), workers: [...workers].sort(ko) };
+  }, [rows]);
 
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    if (!needle) return rows ?? [];
-    return (rows ?? []).filter((r) =>
-      [displayName(r), r.pseudonym, r.program_name].some((v) => v.toLowerCase().includes(needle)),
+    const picked = (rows ?? []).filter((row) => {
+      if (needle && ![displayName(row), row.pseudonym, row.program_name, ...workersOf(row)]
+        .some((v) => v.toLowerCase().includes(needle))) return false;
+      if (status === 'need_assign' && row.can_access) return false;
+      if (status === 'open' && row.status !== 'open') return false;
+      if (status === 'closed' && row.status !== 'closed') return false;
+      if (program !== 'all' && row.program_name !== program) return false;
+      if (worker === 'none' && row.assignees.length > 0) return false;
+      if (worker !== 'all' && worker !== 'none' && !workersOf(row).includes(worker)) return false;
+      return true;
+    });
+    // 다음 상담이 없는 사람은 날짜 정렬에서 뒤로 보낸다 — 빈 값이 맨 앞에 서면 목록이 뒤집힌다.
+    const byName = (a: ParticipantRow, b: ParticipantRow) => displayName(a).localeCompare(displayName(b), 'ko');
+    const byDate = (a: ParticipantRow, b: ParticipantRow, dir: 1 | -1) => {
+      if (!a.next_scheduled_at || !b.next_scheduled_at) {
+        if (a.next_scheduled_at) return -1;
+        if (b.next_scheduled_at) return 1;
+        return byName(a, b);
+      }
+      return dir * a.next_scheduled_at.localeCompare(b.next_scheduled_at);
+    };
+    return picked.sort((a, b) =>
+      sort === 'date_asc' ? byDate(a, b, 1) : sort === 'date_desc' ? byDate(a, b, -1) : byName(a, b),
     );
-  }, [rows, q]);
+  }, [rows, q, status, program, worker, sort]);
 
   const purpose = pickFor ? PURPOSE[pickFor] : null;
 
@@ -42,25 +95,40 @@ export function ParticipantsScreen({ pickFor = null }: { pickFor?: PickFor }) {
     <>
       <PageHeader
         title={purpose ? purpose.title : '당사자 목록'}
-        meta={rows ? `${rows.length}명` : undefined}
+        meta={rows ? (shown.length === rows.length ? `${rows.length}명` : `${shown.length}명 / 전체 ${rows.length}명`) : undefined}
       />
-      <div className="wire-container">
-        {/* 카드의 이름은 `Card title`(16/600 --ink)이다(2026-09-17 Q 제목 위계 점검).
-            구 구조는 `찾기`를 폼 라벨(14/600 --sub)로 두고 카드 제목을 비워, 같은 자리에서
-            카드마다 글자 크기가 달랐다. 입력의 접근성 이름은 `aria-label`이 갖는다 —
-            보이는 라벨을 한 번 더 두면 같은 말이 두 줄로 쌓인다. */}
-        <Card title="찾기">
-          <div className="wire-input-box">
+      <div className="wire-container participant-search-layout">
+        {/* 업무 바 한 줄: 왼쪽은 검색칸(라벨 없이 `aria-label` 만), 오른쪽은 걸개와 정렬이다
+            (2026-09-17 Q — 구 `찾기` 카드 제목과 전폭 입력칸을 걷었다). */}
+        <div className="work-toolbar participant-toolbar">
+          <div className="wire-input-box participant-toolbar-search">
             <input
               id="q"
               type="search"
               aria-label="찾기"
-              placeholder="이름 · 가명 · 사업 이름"
+              placeholder="이름 · 가명 · 사업 이름 · 실무자"
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
           </div>
-        </Card>
+          <div className="participant-toolbar-actions">
+            <Select id="filter-status" aria-label="상태 걸개" value={status} onChange={setStatus}>
+              {STATUS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+            </Select>
+            <Select id="filter-program" aria-label="사업명 걸개" value={program} onChange={setProgram}>
+              <option value="all">사업 전체</option>
+              {programs.map((name) => <option key={name} value={name}>{name}</option>)}
+            </Select>
+            <Select id="filter-worker" aria-label="담당 실무자 걸개" value={worker} onChange={setWorker}>
+              <option value="all">실무자 전체</option>
+              <option value="none">미배정</option>
+              {workers.map((name) => <option key={name} value={name}>{name}</option>)}
+            </Select>
+            <Select id="sort-order" aria-label="정렬" value={sort} onChange={setSort}>
+              {SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+            </Select>
+          </div>
+        </div>
 
         {rows === null && <Empty>불러오는 중이에요.</Empty>}
         {rows !== null && shown.length === 0 && (
@@ -72,17 +140,16 @@ export function ParticipantsScreen({ pickFor = null }: { pickFor?: PickFor }) {
         <div className="participant-row-list">
           {shown.map((row) => {
             const name = displayName(row);
-            const fields: Array<[string, string]> = [
-              ['참여 사업', row.program_name],
-              ['담당자', row.assignees.map((a) => a.name).join(', ') || '미배정'],
-            ];
-            // 권한 때문에 비워 온 회차·일정은 '기록 없음'으로 바꾸지 않는다.
-            if (row.can_access) {
-              fields.push(
-                ['상담 기록', row.last_session_seq ? `${row.last_session_seq}회차까지 기록` : '기록 없음'],
-                ['다음 상담', row.next_scheduled_at ? scheduleDate.format(new Date(row.next_scheduled_at)) : '예정 없음'],
-              );
-            }
+            // 한 행에 다 넣는다(2026-09-17 Q): 이름 · 아이디 · 담당 실무자 · 사업명 회차.
+            // 권한 때문에 비워 온 회차는 '기록 없음'으로 바꾸지 않는다 — 아예 말하지 않는다.
+            const meta = [
+              name === row.pseudonym ? null : row.pseudonym,
+              workersOf(row).join(', ') || '미배정',
+              row.can_access && row.last_session_seq
+                ? `${row.program_name} ${row.last_session_seq}회차`
+                : row.program_name,
+              row.can_access && row.next_scheduled_at ? scheduleDate.format(new Date(row.next_scheduled_at)) : null,
+            ].filter(Boolean).join(' · ');
             const card = (
               <article className="surface-card participant-card" data-variant="list">
                 <header className="participant-card-header">
@@ -92,7 +159,7 @@ export function ParticipantsScreen({ pickFor = null }: { pickFor?: PickFor }) {
                         {name}
                       </span>
                     </span>
-                    {name !== row.pseudonym && <span className="participant-card-id">{row.pseudonym}</span>}
+                    <span className="participant-card-id" title={meta}>{meta}</span>
                   </span>
                   <span className="participant-card-badges">
                     {!row.can_access && <Badge>배정 필요</Badge>}
@@ -101,14 +168,6 @@ export function ParticipantsScreen({ pickFor = null }: { pickFor?: PickFor }) {
                     </Badge>
                   </span>
                 </header>
-                <div className="participant-card-fields">
-                  {fields.map(([label, value]) => (
-                    <div className="wire-field-row" data-compact="true" data-size="sm" data-tone="sub" key={label}>
-                      <span className="wire-field-label">{label}</span>
-                      <span className="wire-field-value">{value}</span>
-                    </div>
-                  ))}
-                </div>
               </article>
             );
             return (

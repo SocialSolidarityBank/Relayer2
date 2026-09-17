@@ -62,7 +62,8 @@ test('등록부터 회차 기록·이어받기까지 한 바퀴', async ({ page 
   });
   await expect(participantMenu.getByRole('link', { name: '상담 기록하기' })).toHaveCount(0);
   await scheduleMenu.getByRole('link', { name: '상담 기록하기' }).click();
-  await expect(page.getByRole('heading', { name: '누구의 상담을 기록할까요' })).toBeVisible();
+  // 고르는 화면의 제목은 사이드바 메뉴와 같은 이름이다(2026-09-17 Q).
+  await expect(page.getByRole('heading', { name: '상담 기록하기', level: 1, exact: true })).toBeVisible();
   await page.goto('/#/participants/new');
   await page.locator('#name').fill(NAME);
   await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
@@ -184,7 +185,8 @@ test('등록부터 회차 기록·이어받기까지 한 바퀴', async ({ page 
   await page.getByRole('link', { name: '당사자 목록', exact: true }).click();
   await page.locator('#q').fill(NAME);
   const row = page.getByRole('link', { name: new RegExp(NAME) });
-  await expect(row.getByText('2회차까지 기록', { exact: true })).toBeVisible();
+  // 목록 카드는 한 행 요약이다(2026-09-17 Q) — 회차는 사업명 뒤에 붙는다.
+  await expect(row.locator('.participant-card-id')).toContainText('2회차');
   await row.click();
   // 당사자 카드가 머리다 — 제목이 사람 이름이다(2026-09-17 Q).
   await expect(page.getByRole('heading', { name: NAME })).toBeVisible();

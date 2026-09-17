@@ -1,0 +1,46 @@
+/* 당사자 목록·고르기 화면(2026-09-17 Q). 업무 바와 행 카드는 이식 CSS 를 그대로 쓰고
+   이 화면에만 필요한 폭·자리만 정한다. */
+
+/* 검색칸은 업무 바의 절반이다. 이식 기본(`flex:1 1 360px; max-width:540px`)은 오른쪽에
+   걸개 넷이 서면 자리를 다 먹으므로 자라지 않게 못 박는다. */
+.participant-toolbar { flex-wrap: wrap; row-gap: var(--space-3); }
+.participant-toolbar-search { flex: 0 1 340px; }
+.participant-toolbar-actions { flex: 1 1 auto; justify-content: flex-end; flex-wrap: wrap; }
+/* 걸개·정렬 선택창은 알약 높이의 고정 폭이다. 폭을 안 박으면 `wire-input-box` 가 남은
+   자리를 다 먹어 넷이 한 줄씩 쌓였다(1440 실측 587px). 사업명만 한 단 넓다. */
+.participant-toolbar-actions > .wire-input-box { flex: 0 0 150px; min-height: var(--pill-height); min-width: 0; }
+.participant-toolbar-actions > .wire-input-box:has(#filter-program) { flex-basis: 210px; }
+
+/* 행 카드는 한 행이다: 이름 + 12px 요약 + 배지. 정보 격자(`participant-card-fields`)는
+   걷었으므로 카드 높이는 머리 한 줄이다. */
+.participant-row-list .participant-card { gap: 0; padding: var(--space-4) var(--space-5); }
+.participant-row-list .participant-card-header { align-items: center; gap: var(--space-4); }
+.participant-row-list .participant-card-identity {
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+  column-gap: var(--space-3);
+}
+/* 요약은 12px 한 줄이고, 길면 자연스럽게 말줄임한다(전체는 `title`). */
+.participant-row-list .participant-card-id { font-size: var(--text-badge); }
+/* 배지 자리를 고정한다(2026-09-17 Q): `배정 필요` 가 붙는 카드와 안 붙는 카드가 같은 x 에서
+   시작해야 하고, 이름·요약이 길어져도 배지가 밀리지 않아야 한다. 두 배지 폭(실측 124px)을
+   늘 예약하고 오른쪽 정렬한다. */
+.participant-row-list .participant-card-badges {
+  flex: 0 0 var(--participant-badge-slot, 124px);
+  justify-content: flex-end;
+}
+
+@media (max-width: 767px) {
+  .participant-toolbar-search { flex-basis: 100%; }
+  .participant-toolbar-actions { justify-content: flex-start; gap: var(--space-2); }
+  /* 좁은 화면에서는 걸개가 두 칸씩 선다 — 고정 폭이면 넷이 네 줄로 쌓여 툴바가 238px 이 됐다. */
+  .participant-toolbar-actions > .wire-input-box,
+  .participant-toolbar-actions > .wire-input-box:has(#filter-program) { flex: 1 1 calc(50% - var(--space-2)); }
+  /* 좁은 화면에서는 이름과 요약이 두 줄로 서고 배지는 오른쪽 위에 남는다.
+     이식 CSS 의 `[data-variant="list"]` 규칙과 특이도를 맞춰야 한다 — 안 맞추면 한 줄로 붙어
+     요약이 `finch-147 · 시험 관…` 에서 잘렸다(390 실측). */
+  .participant-row-list .participant-card[data-variant="list"] .participant-card-identity {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 2px;
+  }
+  .participant-row-list .participant-card-header { align-items: flex-start; }
+}
