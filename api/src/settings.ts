@@ -125,8 +125,9 @@ export async function bootstrapOrg(input: {
   name: string;
 }): Promise<{ userId: number } | { error: string; status: 403 | 409 }> {
   const passwordHash = await hashPassword(input.password);
+  let result: { userId: number } | { error: string; status: 403 | 409 };
   try {
-    return await sql.begin(async (tx) => {
+    result = await sql.begin(async (tx) => {
       await lockOrg(tx as unknown as typeof sql);
       if ((await activeAdmins(tx as unknown as typeof sql)) > 0) {
         return { error: '이미 관리자가 있는 기관이에요. 초대 링크로 들어와 주세요.', status: 403 } as const;
@@ -139,13 +140,17 @@ export async function bootstrapOrg(input: {
         update organization set name = ${input.org_name}, slug = ${input.slug},
           updated_at = now(), updated_by = ${user.id}
         where id = 1`;
-      await audit({ actorId: user.id, action: 'org.bootstrap', fields: ['name', 'slug', `user=${user.id}`] });
       return { userId: user.id };
     });
   } catch {
     // 같은 아이디가 이미 있다(실무자·당사자 계정). 유일 제약이 막는다.
     return { error: '이미 쓰는 아이디예요.', status: 409 };
   }
+  // 감사는 커밋 뒤에. audit_log.actor_id 가 users 를 가리키는 FK 라 트랜잭션 안에서 쓰면 다른 연결이 그 사람을 못 본다.
+  if ('userId' in result) {
+    await audit({ actorId: result.userId, action: 'org.bootstrap', fields: ['name', 'slug', `user=${result.userId}`] });
+  }
+  return result;
 }
 
 /** 마법사 완료. 한 번 찍힌 시각은 다시 찍지 않는다. */
@@ -530,8 +535,9 @@ export async function signUpWithInvite(input: {
    *
    * 이제 한 트랜잭션에서 초대 행을 `for update` 로 잡고, 소비에 성공한 요청만 계정을 만든다.
    */
+  let result: { userId: number; inviteId: number; role: string } | { error: string };
   try {
-    return await sql.begin(async (tx) => {
+    result = await sql.begin(async (tx) => {
       // 관리자 초대는 관리자 수를 바꾼다 — 가입·역할 변경·탈퇴와 같은 잠금을 잡는다.
       await lockOrg(tx as unknown as typeof sql);
       const [invite] = await tx<Array<{ id: number; role: 'worker' | 'admin' }>>`
@@ -547,17 +553,20 @@ export async function signUpWithInvite(input: {
         returning id`;
       await tx`
         update invites set accepted_at = now(), accepted_by = ${user.id} where id = ${invite.id}`;
-      await audit({
-        actorId: user.id,
-        action: 'invite.accept',
-        fields: [`invite=${invite.id}`, `role=${invite.role}`],
-      });
-      return { userId: user.id };
+      return { userId: user.id, inviteId: invite.id, role: invite.role };
     });
   } catch {
     // 같은 아이디를 동시에 만들면 유일 제약에 걸린다. 초대는 롤백되어 다시 쓸 수 있다.
     return { error: '이미 쓰는 아이디예요.' };
   }
+  if ('error' in result) return result;
+  // 감사는 커밋 뒤에(2026-09-17 수정). 트랜잭션 안에서 쓰면 actor_id FK 가 아직 없는 사람을 가리켜 조용히 버려졌다.
+  await audit({
+    actorId: result.userId,
+    action: 'invite.accept',
+    fields: [`invite=${result.inviteId}`, `role=${result.role}`],
+  });
+  return { userId: result.userId };
 }
 
 // ── 배정 요청(실무자) ──────────────────────────────────────────────────────
