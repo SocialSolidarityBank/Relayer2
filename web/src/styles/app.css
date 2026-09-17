@@ -266,3 +266,44 @@ body { margin: 0; }
   .wire-card-details:has(.seq-head-no) > .wire-card-summary > .wire-card-summary-right { margin-left: auto; }
   .wire-item-title:has(.seq-head-no) { flex: 1 1 100%; }
 }
+
+/* 필수 표시는 배지가 아니라 **별표**다(2026-09-18 Q — 배지 금지 규칙과 같은 결).
+   이식 `Field` 의 `필수` 배지는 마크업을 그대로 두고 껍데기만 벗긴다: 글자는 접근성용으로
+   화면에서만 숨기고(`clip-path`), 그 자리에 risk 색 `*` 를 찍는다. 부품(`ui.tsx`)은
+   건드리지 않는다 — 다른 레인이 같은 파일을 고치는 중이다. */
+.wire-required-marker {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.wire-required-marker .wire-badge-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.wire-required-marker::before,
+.wire-required-mark::before {
+  content: '*';
+  color: var(--risk);
+  font-size: var(--text-md);
+  font-weight: 600;
+  line-height: 1;
+}
+/* 접힘 카드 제목처럼 `Field` 밖에서 필수를 알릴 자리(당사자 등록의 동의 항목).
+   글자 `필수` 는 접근성용으로 남기고 화면에는 별표만 보인다. */
+.wire-required-mark { margin-left: 2px; }
+.wire-required-mark-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+/* 등록 화면의 동의 항목은 체크가 접힌 머리에 선다. 머리 줄 안에서 라벨 여백만 손본다. */
+.consent-head-check { display: inline-flex; min-width: 0; }
+.consent-head-check .wire-choice { gap: var(--space-2); }
