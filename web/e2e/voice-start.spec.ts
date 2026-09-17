@@ -37,14 +37,14 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
   await page.getByRole('checkbox', { name: /음성 원본 보유기간/ }).check();
   await page.locator('#program').selectOption({ index: 1 });
   await page.getByRole('button', { name: '등록하고 인테이크 쓰기' }).click();
-  await expect(page.getByRole('heading', { name: '인테이크 작성하기' })).toBeVisible();
+  await expect(page).toHaveURL(/\/intake$/);
   const caseId = page.url().match(/#\/cases\/(\d+)\/intake/)?.[1];
   expect(caseId).toBeTruthy();
 
   // ── 상담 기록하기 — 녹음 시작이 곧 회차 ─────────────────────
   // 인테이크는 건너뛴다 — 시작 경로가 만드는 회차가 1회차다.
   await page.goto(`/#/cases/${caseId}/record`);
-  await expect(page.getByRole('heading', { name: '상담 기록하기' })).toBeVisible();
+  await expect(page).toHaveURL(/\/record$/);
   await expect(page.locator('.page-header')).toContainText('1회차');
 
   await page.getByRole('button', { name: '녹음 시작' }).click();
@@ -82,7 +82,7 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
     .locator('.wire-repeat-card', { hasText: '1회차' })
     .getByRole('button', { name: '전문 보기' })
     .click();
-  await expect(page.getByRole('heading', { name: '상담 내용 원문 보기' })).toBeVisible();
+  await expect(page).toHaveURL(/\/full$/);
   await expect(page.locator('.page-header')).toContainText('1회차');
   await expect(page.locator('details', { hasText: '수기 기록' }).first()).toContainText(
     '수기 미작성',
@@ -93,7 +93,8 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
   );
 
   // ── 뒤로 — 당사자 카드로 돌아온다 ───────────────────────────
-  await page.getByRole('button', { name: '회차별 요약' }).click();
+  // 원문 보기의 되돌이 버튼은 `당사자 정보`다(2026-09-17 Q — 당사자 카드가 머리로 올라갔다).
+  await page.getByRole('button', { name: '당사자 정보' }).click();
   await expect(page.getByRole('heading', { name: NAME })).toBeVisible();
   await page.getByRole('tab', { name: '회차별 요약' }).click();
   await expect(page.locator('.wire-repeat-card', { hasText: '1회차' })).toContainText('녹음 1');

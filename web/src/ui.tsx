@@ -137,10 +137,11 @@ export function PageHeader({
  * 당사자 중심 화면의 머리 — **여기가 이 사람의 카드다**(CCC `ParticipantHeroCard`, D38).
  * 이식 CSS(`wire.css:269-293`)를 그대로 쓰고 새 클래스를 만들지 않는다.
  *
- * 구분선 **위에는 이름과 행동만**, 아래는 라벨/값 정보 격자다(내부 폭 760 초과 3열, 그 아래
- * 80px 라벨 행). 정보가 없으면 구분선과 아래 영역을 만들지 않는다. **배지를 두지 않는다** —
- * 상태도 라벨/값이다(CCC 2026-09-08 Q). 이름이 없으면 가명이 이름 자리를 대신하고, 이름이
- * 있으면 가명은 정보 격자의 값으로 내려간다.
+ * 구분선 **위에는 이름과 행동만**, 아래는 라벨/값 정보 격자다(내부 폭 760 초과 4열, 그 아래
+ * 80px 라벨 행). 값이 칸보다 길면 **한 줄로 잘라 말줄임**하고 전체는 `title` 로 남긴다
+ * (2026-09-17 Q — 카드 장폭이 넓어 4열이 들어간다). 값이 없는 항목은 호출부가 빈 값을 주면
+ * 자동으로 빠진다. **배지를 두지 않는다** — 상태도 라벨/값이다(CCC 2026-09-08 Q).
+ * 이름이 없으면 가명이 이름 자리를 대신하고, 이름이 있으면 가명은 정보 격자의 값으로 내려간다.
  *
  * 제목은 `h1` 이다 — 이 화면의 주제가 화면 용도가 아니라 **사람**이다(DESIGN.md §4).
  * 스크롤을 따라오지 않는다(sticky 는 셸과 기록 레일의 것이다).
@@ -175,9 +176,17 @@ export function ParticipantHero({
           <div className="participant-hero-info">
             <div className="participant-hero-details">
               {shown.map(([label, value]) => (
-                <div className="wire-field-row" data-layout="stack" data-size="sm" key={label}>
+                <div
+                  className="wire-field-row"
+                  data-layout="stack"
+                  data-size="sm"
+                  data-truncate="true"
+                  key={label}
+                >
                   <span className="wire-field-label">{label}</span>
-                  <span className="wire-field-value">{value}</span>
+                  <span className="wire-field-value" title={typeof value === 'string' ? value : undefined}>
+                    {value}
+                  </span>
                 </div>
               ))}
             </div>

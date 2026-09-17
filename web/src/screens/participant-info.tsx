@@ -576,19 +576,18 @@ export function ParticipantInfoScreen({ caseId }: { caseId: number }) {
   if (!detail) return <p className="empty">불러오는 중이에요.</p>;
 
   const done = detail.sessions.filter((s) => s.status === 'done');
-  const next = detail.sessions
-    .filter((s) => s.status === 'planned' && s.scheduled_at)
-    .sort((a, b) => (a.scheduled_at ?? '').localeCompare(b.scheduled_at ?? ''))[0];
-
-  // HERO 정보는 **이 화면이 이미 받는 값**만 쓴다. 연락처·이메일은 `당사자 정보` 탭의
-  // 기본 정보에 있고, 머리에 올리면 같은 개인정보가 화면마다 늘어난다.
+  // 당사자 카드 정보 넷(2026-09-17 Q): ID · 사업과 회차 · 연락처 · 이메일. 없는 값은 빠진다.
+  // 실무자가 동명이인을 구분하는 단서가 연락처·이메일이라 머리에 올린다.
   const heroDetails: Array<[string, string]> = [
     ['당사자 ID', detail.pseudonym],
-    ['참여 사업', detail.case.program_name],
-    ['상담 기록', done.length > 0 ? `${Math.max(...done.map((s) => s.seq))}회차까지 기록` : '아직 없음'],
-    ['다음 상담', next?.scheduled_at ? new Date(next.scheduled_at).toLocaleString('ko-KR') : '예정 없음'],
-    ['상태', detail.case.status === 'closed' ? '종결' : '진행 중'],
+    [
+      '참여 사업',
+      `${detail.case.program_name}${done.length > 0 ? ` · ${Math.max(...done.map((s) => s.seq))}회차까지 기록` : ' · 기록 없음'}`,
+    ],
+    ['연락처', detail.participant.phone ?? ''],
+    ['이메일', detail.participant.email ?? ''],
   ];
+
 
   return (
     <>

@@ -2,7 +2,7 @@
 // 미완료 과제는 보여 주기만 하고 자동으로 완료·중단 처리하지 않는다.
 import { useEffect, useState } from 'react';
 import { closeCase, getCaseDetail, type CaseDetail } from '../api.ts';
-import { Button, Card, Choice, ChoiceGroup, Empty, ErrorText, Field, FormActions, Item, PageHeader } from '../ui.tsx';
+import { Button, Card, Choice, ChoiceGroup, Empty, ErrorText, Field, FormActions, Item, ParticipantHero } from '../ui.tsx';
 
 // 종결 사유는 통합사례관리 종결 구분을 따른다. 없는 말을 지어내지 않는다.
 const REASONS = ['목표 달성', '타 기관 의뢰', '당사자 거부·중단', '연락 두절', '이사·전출', '기타'] as const;
@@ -36,10 +36,30 @@ export function CloseScreen({ caseId }: { caseId: number }) {
     }
   };
 
+  // 당사자 카드 정보 넷(2026-09-17 Q — ②ⓐ 모든 화면 같은 격자).
+  // 당사자 카드 정보 넷(2026-09-17 Q): ID · 사업과 회차 · 연락처 · 이메일.
+  const heroDetails: Array<[string, string]> = [
+    ['당사자 ID', detail.pseudonym],
+    [
+      '참여 사업',
+      `${detail.case.program_name}${lastSeq ? ` · 마지막 ${lastSeq}회차` : ' · 기록 없음'}`,
+    ],
+    ['연락처', detail.participant.phone ?? ''],
+    ['이메일', detail.participant.email ?? ''],
+  ];
+
+
   if (detail.closure)
     return (
       <>
-        <PageHeader title="상담 종결" meta={detail.participant.name ?? detail.pseudonym} />
+        <ParticipantHero
+          name={detail.participant.name}
+          pseudonym={detail.pseudonym}
+          details={heroDetails}
+          actions={
+            <Button onClick={() => (window.location.hash = `#/cases/${caseId}/info`)}>당사자 정보</Button>
+          }
+        />
         <div className="wire-container">
           <Card title="이미 종결한 사례예요">
             <Item title={detail.closure.close_reason} desc={new Date(detail.closure.closed_at).toLocaleString('ko-KR')} />
@@ -51,11 +71,13 @@ export function CloseScreen({ caseId }: { caseId: number }) {
 
   return (
     <>
-      <PageHeader
-        title="상담 종결"
-        meta={`${detail.participant.name ?? detail.pseudonym} · ${detail.case.program_name}${
-          lastSeq ? ` · 마지막 상담 ${lastSeq}회차` : ''
-        }`}
+      <ParticipantHero
+        name={detail.participant.name}
+        pseudonym={detail.pseudonym}
+        details={heroDetails}
+        actions={
+          <Button onClick={() => (window.location.hash = `#/cases/${caseId}/info`)}>당사자 정보</Button>
+        }
       />
       <div className="wire-container">
         <Card title="미완료 과제" hint="종결해도 완료나 중단으로 바꾸지 않아요. 남은 그대로 기록에 남아요.">

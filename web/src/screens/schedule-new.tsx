@@ -1,8 +1,8 @@
 // A안: 날짜 선택 완료와 일정 저장을 구분한다. 예정 회차를 만드는 API는 그대로 쓴다.
 import { useEffect, useRef, useState } from 'react';
-import { getCase, planSession } from '../api.ts';
-import type { CaseView, NewSessionInput } from '../api.ts';
-import { Button, Card, Choice, ChoiceGroup, ErrorText, Field, PageHeader } from '../ui.tsx';
+import { getCase, getCaseDetail, planSession } from '../api.ts';
+import type { CaseDetail, CaseView, NewSessionInput } from '../api.ts';
+import { Button, Card, Choice, ChoiceGroup, ErrorText, Field, ParticipantHero } from '../ui.tsx';
 import { METHODS } from '../vocab.ts';
 import { DateTimeInput } from '../date-time-input.tsx';
 import { dateTimeToIso, EMPTY_DATE_TIME } from '../date-time.ts';
@@ -15,6 +15,8 @@ const scheduleFormatter = new Intl.DateTimeFormat('ko-KR', {
 
 export function ScheduleNewScreen({ caseId }: { caseId: number }) {
   const [view, setView] = useState<CaseView | null>(null);
+  // 당사자 카드의 이름은 사례 상세가 준다(2026-09-17 Q 시안).
+  const [detail, setDetail] = useState<CaseDetail | null>(null);
   const [at, setAt] = useState(EMPTY_DATE_TIME);
   const [method, setMethod] = useState<NewSessionInput['method']>('in_person');
   const [place, setPlace] = useState('');
@@ -26,6 +28,7 @@ export function ScheduleNewScreen({ caseId }: { caseId: number }) {
 
   useEffect(() => {
     let live = true;
+    void getCaseDetail(caseId).then(d => { if (live) setDetail(d); }).catch(() => {});
     void getCase(caseId).then(data => { if (live) setView(data); }).catch(failure => {
       if (live) setError(failure instanceof Error ? failure.message : '당사자 정보를 불러오지 못했어요.');
     });
@@ -57,9 +60,19 @@ export function ScheduleNewScreen({ caseId }: { caseId: number }) {
   const nextSeq = view ? Math.max(0, ...view.sessions.map(s => s.seq)) + 1 : null;
 
   return <>
-    <PageHeader title="상담 일정 등록" meta={view
-      ? `${view.pseudonym} · ${view.case.program_name}${nextSeq ? ` · ${nextSeq}회차` : ''}`
-      : '불러오는 중이에요'} />
+    <ParticipantHero
+      name={detail?.participant.name ?? null}
+      pseudonym={view?.pseudonym ?? '확인 중'}
+      details={[
+        ['당사자 ID', view?.pseudonym ?? '확인 중'],
+        ['참여 사업', view ? `${view.case.program_name}${nextSeq ? ` · ${nextSeq}회차 잡기` : ''}` : '확인 중'],
+        ['연락처', detail?.participant.phone ?? ''],
+        ['이메일', detail?.participant.email ?? ''],
+      ]}
+      actions={
+        <Button onClick={() => (window.location.hash = `#/cases/${caseId}/info`)}>당사자 정보</Button>
+      }
+    />
     <form className="wire-container schedule-form" onSubmit={e => { e.preventDefault(); void save(); }}>
       <fieldset className="schedule-inputs" disabled={saving} aria-label="상담 일정 입력">
         <Card title="언제 상담하나요?">
