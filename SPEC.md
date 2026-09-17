@@ -256,7 +256,7 @@ case_closures(id, case_id UNIQUE, last_session_id, closed_at, close_reason,
 1. 상담 일시와 상담 방식
 2. 공적급여, 수급자 여부
 3. 상담 운영정보
-4. 상담 신청 사유
+4. 상담 신청 사유 및 필요 자원 연계
 5. 이전에 받은 지원
 6. 강점과 도와줄 사람
 7. 전체 상담 목표
@@ -273,9 +273,10 @@ case_closures(id, case_id UNIQUE, last_session_id, closed_at, close_reason,
 | 기타 공적급여 | 기존 자유 입력 유지. `welfare_other` |
 | 선호 상담 방식 | 실제 방식과 분리한 단일 선택. `preferred_counsel_method` |
 | 유입 경로·연락 가능 요일/시간대 | 무응답 선택지는 제거하고 해당 없음 유지. 기존 키 사용 |
-| 상담 신청 사유 | 빚과 연체·생활비와 긴급 자금·소득과 일자리와 창업·돈 관리와 신용 관리·기타 중 복수 선택 |
+| 상담신청 사유 | 경제·재무·부채·일자리·소득·주거·기타 중 복수 선택. `application_reason`(2026-09-17 최종 요청으로 09-16 다섯 선택지 교체. `주거`는 요청서 표기이며 욕구영역 `생활환경`과 다른 축) |
+| 필요 자원 연계 | 건강·의료·심리·정서·법률·행정·가족·안전·기타 중 복수 선택. `resource_link`(09-16에 글 칸으로 대체했다가 09-17 최종 요청으로 선택 문항 복원. 옛 저장값은 새 선택지와 안 맞아도 보존) |
 | 신청 배경 | 기존 입력 유지. `application_reason_detail`, 회차 memo에도 반영 |
-| 그 밖의 상황과 연계가 필요한 내용 | 새 자유 입력. `resource_link_detail` |
+| ~~그 밖의 상황과 연계가 필요한 내용~~ | 09-17 최종 요청에서 제외. `resource_link_detail` 저장값은 은퇴 문항으로 보존 |
 | 이전에 받은 지원·강점과 도와줄 사람 | 글 길이에 따라 늘어나는 textarea. 기존 키 유지 |
 | 전체 상담 목표 | `support_cases.overall_goal`; 질문지 JSON에 복제하지 않음 |
 | 수행할 과제·다음에 물어볼 것 | 각각 promise·question 카드 |

@@ -27,7 +27,7 @@ test('피드백 인테이크의 조건부 입력과 실제 상담정보가 생�
   const caseId = await register(page);
   await expect(page.locator('.wire-container > section.wire-card .wire-card-title, .wire-container > .card-grid > section.wire-card .wire-card-title'))
     .toHaveText([
-      '상담 일시와 상담 방식', /공적급여.*수급자 여부/, '상담 운영정보', '상담 신청 사유',
+      '상담 일시와 상담 방식', /공적급여.*수급자 여부/, '상담 운영정보', '상담 신청 사유 및 필요 자원 연계',
       '이전에 받은 지원', '강점과 도와줄 사람', '전체 상담 목표', '수행할 과제', '다음에 물어볼 것',
     ]);
   const actual = page.getByRole('group', { name: '상담 방식', exact: true });
@@ -47,10 +47,13 @@ test('피드백 인테이크의 조건부 입력과 실제 상담정보가 생�
   await expect(page.getByRole('checkbox', { name: '생계급여', exact: true })).toBeChecked();
   await expect(page.getByRole('checkbox', { name: '주거급여', exact: true })).toBeChecked();
 
-  const reason = page.getByRole('group', { name: '상담을 신청한 사유', exact: true });
-  await reason.getByRole('checkbox', { name: '빚과 연체', exact: true }).check();
-  await reason.getByRole('checkbox', { name: '돈 관리와 신용 관리', exact: true }).check();
-  await page.getByLabel('그 밖의 상황과 연계가 필요한 내용', { exact: true }).fill('합성 연계 내용');
+  const reason = page.getByRole('group', { name: '상담신청 사유', exact: true });
+  await reason.getByRole('checkbox', { name: '부채', exact: true }).check();
+  await reason.getByRole('checkbox', { name: '주거', exact: true }).check();
+  const resource = page.getByRole('group', { name: '필요 자원 연계', exact: true });
+  await resource.getByRole('checkbox', { name: '법률·행정', exact: true }).check();
+  await resource.getByRole('checkbox', { name: '가족', exact: true }).check();
+  await expect(page.getByLabel('그 밖의 상황과 연계가 필요한 내용', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('radio', { name: '무응답', exact: true })).toHaveCount(0);
   await expect(page.getByRole('checkbox', { name: '무응답', exact: true })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: '현재 어려움 관련 영역', exact: true })).toHaveCount(0);
@@ -70,6 +73,8 @@ test('피드백 인테이크의 조건부 입력과 실제 상담정보가 생�
   expect(saved.place).toBe('합성 상담실');
   expect(saved.detail.preferred_counsel_method).toBe('전화');
   expect(saved.detail.welfare_benefit_type).toEqual(expect.arrayContaining(['생계급여', '주거급여']));
+  expect(saved.detail.application_reason).toEqual(expect.arrayContaining(['부채', '주거']));
+  expect(saved.detail.resource_link).toEqual(expect.arrayContaining(['법률·행정', '가족']));
 
   // Retired answers are not rendered, but editing the new form must not erase them.
   expect((await page.request.put(`${api}/cases/${caseId}/intake`, { data: {

@@ -90,14 +90,22 @@ export const INTAKE_GROUPS: readonly IntakeQuestionGroup[] = [
     ],
   },
   {
-    title: '상담 신청 사유',
+    // 2026-09-17 최종 요청(docs/intake_final.md §5): 사유 다섯 선택지 교체 + 필요 자원 연계 복수 선택 부활.
+    title: '상담 신청 사유 및 필요 자원 연계',
     questions: [
       {
         key: 'application_reason',
-        label: '상담을 신청한 사유',
+        label: '상담신청 사유',
         kind: 'multi',
-        // 2026-09-16 요청의 다섯 선택지 그대로다.
-        options: ['빚과 연체', '생활비와 긴급 자금', '소득과 일자리와 창업', '돈 관리와 신용 관리', '기타'],
+        // `주거`는 요청서 그대로다. 욕구영역(`area`)의 국가 표준명 `생활환경`과는 다른 축이라 섞지 않는다.
+        options: ['경제·재무', '부채', '일자리·소득', '주거', '기타'],
+      },
+      {
+        // 구 `resource_link` 키 재사용. 선택값은 라벨 문자열이라 옛 답은 새 선택지와 안 맞아도 그대로 보존한다.
+        key: 'resource_link',
+        label: '필요 자원 연계',
+        kind: 'multi',
+        options: ['건강·의료', '심리·정서', '법률·행정', '가족', '안전', '기타'],
       },
       {
         key: 'application_reason_detail',
@@ -105,12 +113,8 @@ export const INTAKE_GROUPS: readonly IntakeQuestionGroup[] = [
         kind: 'text',
         hint: '예: 가족 간병으로 근로시간이 줄어 생활비와 카드대금 연체가 발생함.',
       },
-      {
-        // 구 `필요 자원 연계`(resource_link) 선택 문항을 대체하는 새 글 칸(요청 5-3).
-        key: 'resource_link_detail',
-        label: '그 밖의 상황과 연계가 필요한 내용',
-        kind: 'text',
-      },
+      // 09-16 요청의 `그 밖의 상황과 연계가 필요한 내용`(resource_link_detail) 글 칸은 09-17 요청에서 빠졌다.
+      // 화면에서만 빼고 저장된 답은 다른 은퇴 문항처럼 detail 에 그대로 남는다.
     ],
   },
   {
