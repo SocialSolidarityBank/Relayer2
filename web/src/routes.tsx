@@ -8,7 +8,6 @@ import { AccessScreen } from './screens/access.tsx';
 import { ApiFailureBanner, BackLink } from './ui.tsx';
 import { InviteScreen } from './screens/invite.tsx';
 import { SettingsScreen, visibleGroups } from './screens/settings.tsx';
-import { BriefingScreen } from './screens/briefing.tsx';
 import { CloseScreen } from './screens/close.tsx';
 import { HomeScreen } from './screens/home.tsx';
 import { IntakeScreen } from './screens/intake.tsx';
@@ -123,10 +122,9 @@ export function Routes() {
     const full = hash.match(/^#\/cases\/(\d+)\/sessions\/(\d+)\/full$/);
     if (full) return <SessionFullScreen caseId={Number(full[1])} sessionId={Number(full[2])} />;
 
-    const byCase = hash.match(/^#\/cases\/(\d+)\/(briefing|record|schedule|intake|info|close)$/);
+    const byCase = hash.match(/^#\/cases\/(\d+)\/(record|schedule|intake|info|close)$/);
     if (byCase) {
       const caseId = Number(byCase[1]);
-      if (byCase[2] === 'briefing') return <BriefingScreen caseId={caseId} />;
             // `key` 로 갈아 끼운다. 고쳐 쓰기와 새 기록이 같은 부품이라 상태가 새면 남의 회차를 덮는다.
       if (byCase[2] === 'record') return <RecordScreen key={`new-${caseId}`} caseId={caseId} />;
       if (byCase[2] === 'intake') return <IntakeScreen caseId={caseId} />;

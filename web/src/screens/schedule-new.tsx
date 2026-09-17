@@ -46,7 +46,7 @@ export function ScheduleNewScreen({ caseId }: { caseId: number }) {
         plan_memo: memo.trim() || undefined,
         is_closing: isClosing,
       });
-      window.location.hash = `#/cases/${caseId}/briefing`;
+      window.location.hash = `#/cases/${caseId}/info`;
     } catch (e) {
       setError(e instanceof Error ? e.message : '저장하지 못했어요.');
     } finally {

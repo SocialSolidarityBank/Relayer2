@@ -66,15 +66,22 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
   await expect(page.getByText('전사 건너뜀')).toBeVisible();
 
   // ── 회차별 요약 — 수기 미작성·녹음 1·전사 상태 ──────────────
+  // 당사자 정보는 당사자 카드(HERO) + 탭 4개다(2026-09-17 Q). 기본 탭은 `당사자 정보`.
   await page.goto(`/#/cases/${caseId}/info`);
+  await expect(page.getByRole('heading', { name: NAME })).toBeVisible();
+  await page.getByRole('tab', { name: '회차별 요약' }).click();
   const row = page.locator('.wire-repeat-card', { hasText: '1회차' });
   await expect(row).toContainText('수기 미작성');
   await expect(row).toContainText('녹음 1');
   await expect(row).toContainText('전사 건너뜀');
 
-  // ── 원문 보기 — 수기 미작성·재생·전사 상태 ──────────────────
+  // ── 원문 보기 — `회차별 전문 보기` 탭이 그 입구다 ───────────
   // 화면 이름과 구획(2026-09-17 Q): `상담 내용 원문 보기` · `수기 기록`·`음성 기록` 접힘 카드.
-  await row.getByRole('button', { name: '전문 보기' }).click();
+  await page.getByRole('tab', { name: '회차별 전문 보기' }).click();
+  await page
+    .locator('.wire-repeat-card', { hasText: '1회차' })
+    .getByRole('button', { name: '전문 보기' })
+    .click();
   await expect(page.getByRole('heading', { name: '상담 내용 원문 보기' })).toBeVisible();
   await expect(page.locator('.page-header')).toContainText('1회차');
   await expect(page.locator('details', { hasText: '수기 기록' }).first()).toContainText(
@@ -85,8 +92,9 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
     '전사 건너뜀',
   );
 
-  // ── 뒤로 — 회차별 요약으로 돌아온다 ─────────────────────────
+  // ── 뒤로 — 당사자 카드로 돌아온다 ───────────────────────────
   await page.getByRole('button', { name: '회차별 요약' }).click();
-  await expect(page.getByRole('heading', { name: '당사자 정보' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: NAME })).toBeVisible();
+  await page.getByRole('tab', { name: '회차별 요약' }).click();
   await expect(page.locator('.wire-repeat-card', { hasText: '1회차' })).toContainText('녹음 1');
 });

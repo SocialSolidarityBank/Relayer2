@@ -82,7 +82,7 @@ test('피드백 인테이크의 조건부 입력과 실제 상담정보가 생�
   await expect(page.getByLabel('상담 장소', { exact: false })).toHaveCount(0);
   await pickDateTime(page, 'held-at', '2026-09-16T10:30');
   await page.getByRole('button', { name: '저장', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '15초 다시보기', exact: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
   const edited = await (await page.request.get(`${api}/cases/${caseId}/intake`)).json();
   expect(edited.session_id).toBe(saved.session_id);
   expect(edited.method).toBe('other');
@@ -107,7 +107,7 @@ test('상담 기록은 다섯 구획이고 인테이크의 전체 목표를 덮�
   await page.locator('#memo').fill('합성 상담 기록');
   await page.locator('#next-goal').fill('다음 상담에서 확인할 목표');
   await page.getByRole('button', { name: '저장', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '15초 다시보기', exact: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
   const result = await (await page.request.get(`${api}/cases/${caseId}/intake`)).json();
   expect(result.overall_goal).toBe('보존할 전체 상담 목표');
   const view = await (await page.request.get(`${api}/cases/${caseId}`)).json();
@@ -116,7 +116,7 @@ test('상담 기록은 다섯 구획이고 인테이크의 전체 목표를 덮�
   await expect(page.locator('#place')).toHaveValue('이전 상담 장소');
   await page.locator('#place').fill('');
   await page.getByRole('button', { name: '저장', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '15초 다시보기', exact: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
   const cleared = await (await page.request.get(`${api}/sessions/${session.id}`)).json();
   expect(cleared.place).toBeNull();
 });
@@ -139,7 +139,7 @@ test('과거 수급과 복수 선호를 새 단일 응답으로 추정하지 않
   await expect(page.locator('input[name="preferred_counsel_method"]:checked')).toHaveCount(0);
   await page.getByLabel('신청 배경', { exact: true }).fill('');
   await page.getByRole('button', { name: '저장', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '15초 다시보기', exact: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
   const saved = await (await page.request.get(`${api}/cases/${caseId}/intake`)).json();
   expect(saved.memo).toBeNull();
   expect(saved.detail).toMatchObject(legacy);

@@ -242,7 +242,7 @@ export function RecordScreen({ caseId, sessionId: editingId }: { caseId: number;
         ],
         outcomes: Object.values(outcomes),
       });
-      window.location.hash = isClosing ? `#/cases/${caseId}/close` : `#/cases/${caseId}/briefing`;
+      window.location.hash = isClosing ? `#/cases/${caseId}/close` : `#/cases/${caseId}/info`;
     } catch (e) {
       setError(e instanceof Error ? e.message : '저장하지 못했어요.');
     } finally {

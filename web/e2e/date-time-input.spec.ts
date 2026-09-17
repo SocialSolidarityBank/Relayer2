@@ -53,7 +53,7 @@ test('인테이크 일시는 한국 시간으로 저장되고 다시 열면 그�
   // 오후 12시 정각 — 12시제 경계(정오)도 오후 12시로 저장돼야 한다.
   await pickDateTime(page, 'held-at', '2026-10-05T12:00');
   await page.getByRole('button', { name: '저장', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
   const edited = await (await page.request.get(`${api}/cases/${caseId}/intake`)).json();
   expect(edited.session_id).toBe(saved.session_id);
   expect(new Date(edited.held_at).toISOString()).toBe('2026-10-05T03:00:00.000Z');
@@ -89,7 +89,7 @@ test('기록 고쳐 쓰기는 저장된 일시를 한국 시간으로 다시 세
   // 다른 내용만 고칠 때는 화면에 없는 초·밀리초까지 원래 시각을 유지한다.
   await page.locator('#memo').fill('일시는 그대로 두고 내용만 수정');
   await page.getByRole('button', { name: '저장', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
   const sameTime = await (await page.request.get(`${api}/sessions/${sessionId}`)).json();
   expect(new Date(sameTime.held_at).toISOString()).toBe('2026-10-19T15:05:37.500Z');
   await page.goto(`/#/cases/${caseId}/sessions/${sessionId}/edit`);
@@ -98,7 +98,7 @@ test('기록 고쳐 쓰기는 저장된 일시를 한국 시간으로 다시 세
   // 고쳐 저장하면 새 일시가 한국 시간으로 반영된다.
   await pickDateTime(page, 'held-at', '2026-10-21T13:45');
   await page.getByRole('button', { name: '저장', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '15초 다시보기' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
   const edited = await (await page.request.get(`${api}/sessions/${sessionId}`)).json();
   expect(new Date(edited.held_at).toISOString()).toBe('2026-10-21T04:45:00.000Z');
 });

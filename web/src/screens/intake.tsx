@@ -230,7 +230,7 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
     return (
       <p className="empty">
         이 사례에는 이미 다른 회차가 있어요. 인테이크는 첫 회차예요.{' '}
-        <a href={`#/cases/${caseId}/briefing`}>15초 다시보기</a>로 가세요.
+        <a href={`#/cases/${caseId}/info`}>당사자 정보</a>로 가세요.
       </p>
     );
 
@@ -286,8 +286,8 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
         body.place = method === 'in_person' ? place.trim() || null : null;
       }
       await saveIntake(caseId, body);
-      // 처음 쓴 것이면 일정 잡기로, 고쳐 쓴 것이면 보던 자리(15초 다시보기)로 돌아간다.
-      window.location.hash = written ? `#/cases/${caseId}/briefing` : `#/cases/${caseId}/schedule`;
+      // 처음 쓴 것이면 일정 잡기로, 고쳐 쓴 것이면 보던 자리(당사자 정보)로 돌아간다.
+      window.location.hash = written ? `#/cases/${caseId}/info` : `#/cases/${caseId}/schedule`;
     } catch (e) {
       setError(e instanceof Error ? e.message : '저장하지 못했어요.');
     } finally {
