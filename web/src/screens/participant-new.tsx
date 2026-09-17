@@ -1,8 +1,25 @@
 // 당사자 등록 — 당사자 + PII 금고 + 참여 사업 하나를 한 번에 만든다(GLOSSARY §2).
 // 정본 화면 이름이다. `사례 등록`이라는 이름은 존재하지 않는다.
 import { useEffect, useState } from 'react';
-import { createCase, getConsentCopy, listPrograms, type ConsentCopy, type Program } from '../api.ts';
-import { Button, Card, Choice, ConsentDetail, ErrorText, Field, FormActions, PageHeader } from '../ui.tsx';
+import {
+  createCase,
+  getConsentCopy,
+  issueAccess,
+  listPrograms,
+  type ConsentCopy,
+  type Program,
+} from '../api.ts';
+import {
+  Button,
+  Card,
+  Choice,
+  DataRows,
+  ErrorText,
+  Field,
+  Fold,
+  FormActions,
+  PageHeader,
+} from '../ui.tsx';
 
 
 
@@ -32,11 +49,19 @@ export function ParticipantNewScreen() {
   // **문안은 서버에서 받는다** — 화면이 복사해 두면 서버가 바뀌어도 옛 글로 동의를 받는다(2026-09-16 검수).
   const [copies, setCopies] = useState<ConsentCopy[]>([]);
   const [granted, setGranted] = useState<Record<string, boolean>>({});
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState<'intake' | 'link' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * 등록하고 **동의 링크**를 만드는 길(2026-09-18 Q). 실무자가 대신 적어 넣은 경우에
+   * 나머지 동의는 당사자가 링크로 준다. 링크와 확인 코드는 **발급 응답에만 있다** —
+   * 화면을 떠나면 다시 볼 수 없어서 여기서 바로 보여 준다.
+   */
+  const [issued, setIssued] = useState<{ caseId: number; token: string; code: string } | null>(null);
+  // 등록에 필요한 것: 이름 · 사업 · 사례를 열 수 있게 하는 개인정보 수집·이용 동의.
+  const ready = Boolean(name.trim() && program.trim() && granted.personal_data_collection_use);
 
-  const save = async () => {
-    setSaving(true);
+  const save = async (then: 'intake' | 'link') => {
+    setSaving(then);
     setError(null);
     try {
       const created = await createCase({
@@ -51,21 +76,27 @@ export function ParticipantNewScreen() {
           decision: granted[c.domain] ? ('grant' as const) : ('decline' as const),
         })),
       });
-      // 정본 문구: '등록했어요. 이제 첫 상담을 기록할 수 있어요.'
-      window.location.hash = `#/cases/${created.case_id}/intake`;
+      if (then === 'intake') {
+        // 정본 문구: '등록했어요. 이제 첫 상담을 기록할 수 있어요.'
+        window.location.hash = `#/cases/${created.case_id}/intake`;
+        return;
+      }
+      const access = await issueAccess(created.case_id);
+      setIssued({ caseId: created.case_id, token: access.token, code: access.code });
     } catch (e) {
-      setError(e instanceof Error ? e.message : '저장하지 못했어요.');
+      setError(e instanceof Error ? e.message : '등록하지 못했어요.');
     } finally {
-      setSaving(false);
+      setSaving(null);
     }
   };
 
   return (
     <>
-      <PageHeader title="당사자 등록" meta="당사자 한 명과 참여 사업 하나를 엽니다" />
+      {/* 제목 아래 설명 줄은 두지 않는다(2026-09-18 Q, §13). 무엇을 만드는지는 카드가 말한다. */}
+      <PageHeader title="당사자 등록" />
 
       <div className="wire-container">
-        <Card title="당사자" hint="이름·연락처·이메일은 금고에 따로 보관해요. 상담 기록에는 남지 않아요.">
+        <Card title="당사자">
           <Field label="이름" htmlFor="name" required>
             <input id="name" type="text" value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
@@ -77,16 +108,17 @@ export function ParticipantNewScreen() {
           </Field>
         </Card>
 
-        <Card title="참여 사업" hint="한 상담은 사업 하나만 다뤄요. 다른 사업은 사례를 따로 열어요.">
+        <Card title="참여 사업">
           <Field
             label="사업"
             htmlFor="program"
             required
             control="select"
+            // 상태는 남기고 설명은 걷는다 — 사업이 하나도 없으면 여기서 막히기 때문이다.
             hint={
               programs !== null && programs.length === 0
                 ? '아직 사업이 없어요. 관리자가 설정 › 기관 정보 관리에서 먼저 만들어야 해요.'
-                : '설정 › 기관 정보 관리에서 관리자가 목록을 관리해요.'
+                : undefined
             }
           >
             <select id="program" value={program} onChange={(e) => setProgram(e.target.value)}>
@@ -98,7 +130,7 @@ export function ParticipantNewScreen() {
               ))}
             </select>
           </Field>
-          <Field label="예정 회차 수" htmlFor="planned" hint="선택, 예: 6">
+          <Field label="예정 회차 수" htmlFor="planned">
             <input
               id="planned"
               type="text"
@@ -120,32 +152,92 @@ export function ParticipantNewScreen() {
           </Card>
         )}
 
-        <Card title="동의">
-          {copies.map((c) => (
-            <div className="wire-repeat-card" key={c.domain}>
-              <Choice
-                type="checkbox"
-                label={`${c.label}${c.required ? ' (필수)' : ''}`}
-                hint={c.body}
-                checked={!!granted[c.domain]}
-                onChange={() => setGranted((prev) => ({ ...prev, [c.domain]: !prev[c.domain] }))}
-              />
-              <ConsentDetail copy={c} />
-            </div>
-          ))}
-        </Card>
+        {/* 동의는 **항목마다 상위 접힘 카드 하나**다(2026-09-18 Q). 묶음 카드(`동의`)를 걷고
+            이중 접힘(`자세히 보기`)도 걷었다.
+            이 화면에서는 **체크가 접힌 머리에 선다** — 등록에서 할 일은 동의를 받는 것이고
+            문안 전체는 필요할 때만 펼친다(당사자 정보 탭은 이미 받은 동의를 읽는 자리라
+            체크가 본문 아래다). 체크를 눌러도 카드가 접히거나 펼쳐지지 않는다. */}
+        {copies.map((c) => (
+          <Fold
+            key={c.domain}
+            group="consents"
+            title={
+              <>
+                <span
+                  className="consent-head-check"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <Choice
+                    type="checkbox"
+                    label={c.label}
+                    checked={!!granted[c.domain]}
+                    onChange={() => setGranted((prev) => ({ ...prev, [c.domain]: !prev[c.domain] }))}
+                  />
+                </span>
+                {c.required && (
+                  <span className="wire-required-mark">
+                    <span className="wire-required-mark-label">필수</span>
+                  </span>
+                )}
+              </>
+            }
+            desc={<span title={c.body}>{c.body}</span>}
+          >
+            <DataRows
+              rows={[
+                ['동의문', c.body],
+                ['무엇을 받나', c.items.join(' · ')],
+                ['왜 받나', c.purpose_text],
+                ['얼마나 두나', c.retention_text],
+                ...(c.recipient ? ([['어디로 가나', c.recipient]] as Array<[string, string]>) : []),
+                ['거부할 수 있나', c.refusal_text],
+                ['문안 판', `${c.version}, 지문 ${c.hash}`],
+              ]}
+            />
+          </Fold>
+        ))}
 
+        {/* 동의 링크를 만들었으면 링크와 확인 코드를 여기서 바로 전한다. 코드는 지금 한 번만 보인다. */}
+        {issued && (
+          <Card
+            title="개인정보 및 민감정보 처리 동의 링크"
+            action={
+              <Button onClick={() => (window.location.hash = `#/cases/${issued.caseId}/intake`)}>
+                인테이크 쓰기
+              </Button>
+            }
+          >
+            <DataRows
+              rows={[
+                ['링크', `${window.location.origin}/#/access/${issued.token}`],
+                ['확인 코드', issued.code],
+              ]}
+            />
+            <p className="panel-meta">이 화면을 닫으면 코드는 다시 볼 수 없어요. 지금 전해 주세요.</p>
+          </Card>
+        )}
+
+        {/* 만드는 화면이라 `등록`이다(2026-09-18 Q — `저장`은 이미 있는 것을 고칠 때 쓴다).
+            두 길: 바로 인테이크를 쓰거나, 남은 동의를 당사자에게 링크로 받는다. */}
         <FormActions>
           {error && <ErrorText>{error}</ErrorText>}
-          <Button
-            variant="primary"
-            disabled={
-              !name.trim() || !program.trim() || !granted.personal_data_collection_use || saving
-            }
-            onClick={() => void save()}
-          >
-            {saving ? '저장 중…' : '등록하고 인테이크 쓰기'}
-          </Button>
+          {!issued && (
+            <>
+              <Button
+                disabled={!ready || saving !== null}
+                onClick={() => void save('link')}
+              >
+                {saving === 'link' ? '등록 중…' : '등록하고 동의 링크 만들기'}
+              </Button>
+              <Button
+                variant="primary"
+                disabled={!ready || saving !== null}
+                onClick={() => void save('intake')}
+              >
+                {saving === 'intake' ? '등록 중…' : '등록하고 인테이크 쓰기'}
+              </Button>
+            </>
+          )}
         </FormActions>
       </div>
     </>
