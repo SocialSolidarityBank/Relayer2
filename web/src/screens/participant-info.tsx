@@ -82,11 +82,12 @@ const AI_OFF_LABEL: Record<string, string> = {
  * 카드 안 카드를 만들지 않는다: 핵심 요약 · 지난 회차와 불일치 · 위험 신호 · 상태.
  */
 function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
-  const [risk, setRisk] = useState<Briefing['risk_signals'] | null>(null);
+  const [brief, setBrief] = useState<Briefing | null>(null);
   const [open, setOpen] = useState<{ sessionId: number; seq: number; part: OriginalPart } | null>(null);
   useEffect(() => {
-    void getBriefing(caseId).then((b) => setRisk(b.risk_signals));
+    void getBriefing(caseId).then(setBrief);
   }, [caseId]);
+  const risk = brief?.risk_signals ?? null;
 
 
   const done = detail.sessions.filter((s) => s.status === 'done');
@@ -126,6 +127,18 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
           const risks = (risk?.items ?? []).filter((r) => r.source_session_seq === s.seq);
           const transcriptLabel =
             s.voice.recordings > 0 ? TRANSCRIPT_LABEL[s.voice.transcript] : undefined;
+          // 확인필요·완료는 브리핑의 과제·질문을 **그 회차가 낳은 것**으로 갈라 담는다
+          // (`source_session_seq`). 서버를 새로 부르지 않는다 — 이미 받은 자료다.
+          const mine = <T extends { source_session_seq: number }>(rows: T[]) =>
+            rows.filter((r) => r.source_session_seq === s.seq);
+          const pending = [
+            ...mine(brief?.open_tasks?.items ?? []).map((item) => ({ kind: 'task', item })),
+            ...mine(brief?.today_questions ?? []).map((item) => ({ kind: 'question', item })),
+          ];
+          const settled = [
+            ...mine(brief?.closed_tasks ?? []).map((item) => ({ kind: 'task', item })),
+            ...mine(brief?.closed_questions ?? []).map((item) => ({ kind: 'question', item })),
+          ];
           const state = [
             s.line,
             s.written === false && '수기 미작성',
@@ -177,9 +190,13 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
                 </>
               }
             >
-              <div className="seq-sections">
+              {/* 팀 목업 넷(2026-09-18 검토)이 공통으로 쓰는 **네 구역**이다: 핵심 · 변화 ·
+                  확인필요 · 완료·해결. 1440에서는 2×2, 767 이하는 한 열로 내려온다.
+                  목업의 이모지(🔵🟠🟢) 대신 계열색 제목을 쓴다(§6 라벨 색: 변화=블루,
+                  확인필요=코랄, 완료=민트, AI 산출=라벤더). */}
+              <div className="seq-sections" data-cols="2">
                 {risks.length > 0 && (
-                  <section className="seq-section">
+                  <section className="seq-section is-wide">
                     <h3 className="seq-section-title is-risk">위험 신호</h3>
                     {risks.map((r) => (
                       <p className="wire-item-title" key={r.card_id}>
@@ -192,30 +209,61 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
                     </p>
                   </section>
                 )}
-                {s.ai_summary ? (
-                  <section className="seq-section">
-                    <h3 className="seq-section-title">
-                      핵심 요약 <Badge tone="blue">AI</Badge>
-                    </h3>
-                    <p className="seq-section-note">원본에서 핵심 문장만 AI가 정리한 요약본</p>
-                    <p className="wire-item-desc">{s.ai_summary.summary}</p>
-                    {s.ai_summary.changes.length > 0 && (
-                      <p className="wire-item-desc">달라진 것: {s.ai_summary.changes.join(', ')}</p>
-                    )}
-                  </section>
-                ) : null}
-                {s.ai_summary && (
-                  <section className="seq-section">
-                    <h3 className="seq-section-title">지난 회차와 불일치</h3>
-                    {s.ai_summary.fact_changes.length === 0 ? (
-                      <p className="seq-section-note">어긋나는 사실 없음</p>
-                    ) : (
-                      <FactChanges items={s.ai_summary.fact_changes} />
-                    )}
-                  </section>
-                )}
+                <section className="seq-section">
+                  <h3 className="seq-section-title is-ai">
+                    이번 상담의 핵심 <Badge tone="blue">AI</Badge>
+                  </h3>
+                  {s.ai_summary ? (
+                    <>
+                      <p className="seq-section-note">원본에서 핵심 문장만 AI가 정리한 요약본</p>
+                      <p className="wire-item-desc">{s.ai_summary.summary}</p>
+                    </>
+                  ) : (
+                    <p className="seq-section-note">AI 정리 없음</p>
+                  )}
+                </section>
+                <section className="seq-section">
+                  <h3 className="seq-section-title is-change">확인된 변화</h3>
+                  {s.ai_summary && s.ai_summary.changes.length > 0 && (
+                    <p className="wire-item-desc">{s.ai_summary.changes.join(', ')}</p>
+                  )}
+                  {s.ai_summary && s.ai_summary.fact_changes.length > 0 ? (
+                    <FactChanges items={s.ai_summary.fact_changes} />
+                  ) : (
+                    s.ai_summary != null &&
+                    s.ai_summary.changes.length === 0 && <p className="seq-section-note">달라진 사실 없음</p>
+                  )}
+                  {!s.ai_summary && <p className="seq-section-note">AI 정리 없음</p>}
+                </section>
+                <section className="seq-section">
+                  <h3 className="seq-section-title is-warn">확인필요</h3>
+                  {pending.length === 0 ? (
+                    <p className="seq-section-note">확인할 것 없음</p>
+                  ) : (
+                    pending.map((i) => (
+                      <p className="wire-item-desc" key={`${i.kind}-${i.item.card_id}`}>
+                        {i.item.text}
+                        {i.item.last_result === 'unchecked' && (
+                          <span className="seq-section-note">지난 회차 미확인</span>
+                        )}
+                      </p>
+                    ))
+                  )}
+                </section>
+                <section className="seq-section">
+                  <h3 className="seq-section-title">완료·해결</h3>
+                  {settled.length === 0 ? (
+                    <p className="seq-section-note">완료된 것 없음</p>
+                  ) : (
+                    settled.map((i) => (
+                      <p className="wire-item-desc" key={`${i.kind}-${i.item.card_id}`}>
+                        {i.item.text}
+                      </p>
+                    ))
+                  )}
+                </section>
                 {state.some(Boolean) && (
-                  <section className="seq-section">
+                  <section className="seq-section is-wide">
                     <h3 className="seq-section-title">기록 상태</h3>
                     <p className="wire-item-desc"><Meta parts={state} /></p>
                   </section>
@@ -710,12 +758,61 @@ const closeWarnings = (detail: CaseDetail): string[] => {
   return lines;
 };
 
+/**
+ * 첫상담 기록 — 팀 목업 넷(2026-09-18 검토)이 모두 상단에 두는 카드다. 사례를 처음 열 때
+ * "이 사람이 왜 왔나"가 인테이크에 있는데, 회차 목록을 훑어 1회차를 찾아야 했다.
+ * 원문은 드로어가 그린다(두 벌로 만들지 않는다) — 여기는 그 입구다.
+ */
+function FirstRecord({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
+  const [open, setOpen] = useState(false);
+  const intake = detail.sessions.find((x) => x.kind === 'intake' && x.status === 'done');
+  return (
+    <Card title="첫상담 기록">
+      {intake ? (
+        <Item
+          title={`${intake.seq}회차 인테이크`}
+          desc={dateLabel(intake.held_at)}
+          action={<Button onClick={() => setOpen(true)}>상담 기록 보기</Button>}
+        />
+      ) : (
+        <Item
+          title="인테이크 없음"
+          action={
+            <Button
+              variant="primary"
+              onClick={() => (window.location.hash = `#/cases/${caseId}/intake`)}
+            >
+              인테이크 작성하기
+            </Button>
+          }
+        />
+      )}
+      {open && intake && (
+        <SessionOriginalDrawer
+          caseId={caseId}
+          sessionId={intake.id}
+          seq={intake.seq}
+          part="written"
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </Card>
+  );
+}
+
 /** 정보 — 회차 현황과 동의·문서·열람·종결. */
 function Info({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
   const [asking, setAsking] = useState(false);
   return (
     <>
-      <SessionStatus detail={detail} />
+      {/* 상단은 두 칸이다(2026-09-18 Q — 팀 목업 구성): 왼쪽이 이 사례의 회차 현황,
+          오른쪽이 처음 적은 기록으로 가는 입구. 좁은 화면에서는 한 열로 내려온다. */}
+      {/* 등높이로 펴지 않는다(`data-align="start"`) — 왼쪽은 접힘 카드라 접힌 동안 머리 한 줄이
+          카드 면 전체여야 한다(클릭 표적 계약). 늘리면 머리 아래 90px 빈 면이 생겼다(실측). */}
+      <div className="card-grid" data-align="start">
+        <SessionStatus detail={detail} />
+        <FirstRecord detail={detail} caseId={caseId} />
+      </div>
       <Consents caseId={caseId} />
 
       <Documents caseId={caseId} />

@@ -312,12 +312,28 @@ body { margin: 0; }
   white-space: normal;
 }
 
-/* 펼친 회차 본문은 **테두리 없는 텍스트 구역**들이다 — 카드 안 카드를 만들지 않는다. */
+/* 옆에 선 카드끼리 높이를 맞추지 않는 줄(2026-09-18). 접힘 카드가 있는 줄이 그렇다 —
+   접힌 카드는 머리 한 줄이 카드 면 전체라 늘리면 아래가 빈다. */
+.card-grid[data-align='start'] { align-items: start; }
+
+/* 펼친 회차 본문은 **테두리 없는 텍스트 구역**들이다 — 카드 안 카드를 만들지 않는다.
+   네 구역(핵심·변화·확인필요·완료)은 팀 목업 넷의 2×2 배치를 따른다(2026-09-18 Q).
+   위험 신호·기록 상태는 한 줄을 다 쓴다(`is-wide`) — 하나는 경고, 하나는 꼬리다. */
 .seq-sections { display: grid; gap: var(--space-5); min-width: 0; }
+.seq-sections[data-cols='2'] { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+.seq-sections[data-cols='2'] > .is-wide { grid-column: 1 / -1; }
+@media (max-width: 767px) {
+  .seq-sections[data-cols='2'] { grid-template-columns: minmax(0, 1fr); }
+}
 .seq-section { display: grid; gap: var(--space-1); min-width: 0; }
 .seq-section > p { margin: 0; }
 .seq-section-title { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: var(--text-sm); font-weight: 600; color: var(--mint-deep); }
 .seq-section-title.is-risk { color: var(--risk); }
+/* 계열색은 §6 라벨 색 그대로다: AI 산출=라벤더, 변화=블루(시간 축), 주목·경고=코랄.
+   목업의 이모지(🔵🟠🟢)는 쓰지 않는다 — 색이 이미 그 일을 한다. */
+.seq-section-title.is-ai { color: var(--lavender-deep); }
+.seq-section-title.is-change { color: var(--blue-deep); }
+.seq-section-title.is-warn { color: var(--discrepancy); }
 .seq-section-note { margin: 0; font-size: var(--text-detail); color: var(--sub); }
 
 @media (max-width: 767px) {
@@ -325,7 +341,14 @@ body { margin: 0; }
      위는 회차·날짜·배지, 아래는 행동과 꺽쇠다. */
   .wire-card-details:has(.seq-head-no) > .wire-card-summary { flex-wrap: wrap; row-gap: var(--space-2); }
   .wire-card-details:has(.seq-head-no) > .wire-card-summary > .wire-card-title { flex: 1 1 100%; }
-  .wire-card-details:has(.seq-head-no) > .wire-card-summary > .wire-card-summary-right { margin-left: auto; }
+  /* 원본 버튼 둘이 들어오면서 행동이 넷이다(2026-09-18) — 390에서 한 줄에 485px 필요해
+     카드(291px)를 넘어 잘렸다(실측). 행동 묶음 자체도 줄바꿈시킨다. */
+  .wire-card-details:has(.seq-head-no) > .wire-card-summary > .wire-card-summary-right {
+    margin-left: auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    row-gap: var(--space-2);
+  }
   .wire-item-title:has(.seq-head-no) { flex: 1 1 100%; }
 }
 
