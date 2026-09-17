@@ -104,8 +104,13 @@ body { margin: 0; }
 .participant-hero-card { align-items: stretch; }
 /* 정보 격자는 **4열**이다(2026-09-17 Q — 카드 장폭 1031px 에 3열은 칸이 남는다). 이식 기본은
    3열이고(`wire.css:283`) CCC 도 브리핑 화면만 4열로 넓혔다 — 릴레이어는 당사자 카드 전부가
-   4열이다. 760px 이하는 이식 컨테이너 쿼리가 80px 라벨 행으로 접는다(그 규칙은 그대로다). */
-.participant-hero-details { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+   4열이다.
+   **조건을 반드시 달아 둔다**: `app.css` 는 `wire.css` 보다 뒤라 조건 없이 쓰면 760 이하의
+   이식 컨테이너 쿼리(80px 라벨 + 값 한 열)까지 덮는다 — 390 화면에서 4열이 65.75px 로 쪼개져
+   값 열이 0px 이 되고 라벨만 남았다(2026-09-17 실측, PR #22 의 결함). */
+@container (min-width: 761px) {
+  .participant-hero-details { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
 
 .wire-choice-hint { display: block; margin-top: var(--space-1); font-size: var(--text-sm); font-weight: 400; color: var(--sub); }
 

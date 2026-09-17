@@ -3,6 +3,10 @@
 .schedule-inputs { display: grid; gap: var(--space-6); min-width: 0; margin: 0; padding: 0; border: 0; }
 .schedule-inputs .wire-card-body { display: flex; flex-direction: column; gap: var(--space-5); }
 .schedule-inputs .wire-form-field { min-width: 0; }
+/* `필수` 배지는 걷는다(2026-09-17 Q — 배지 금지, 값으로 말한다). 입력칸의 `required` 는 남기고
+   표시만 끈다: 저장 버튼이 일시가 빌 때 이미 막혀 있고, 라벨 행 높이는 배지 유무와 무관하다
+   (`wire.css` 가 22px 를 늘 예약한다). 다른 화면의 배지는 그 화면 차례에 함께 정리한다. */
+.schedule-inputs .wire-required-marker { display: none; }
 .schedule-inputs .wire-input-box { min-height: 44px; }
 .schedule-inputs .wire-input-box :is(input, select, textarea) { font-size: var(--text-md); }
 .schedule-inputs .wire-choice-group { flex-wrap: wrap; }

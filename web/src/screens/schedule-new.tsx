@@ -49,7 +49,8 @@ export function ScheduleNewScreen({ caseId }: { caseId: number }) {
         plan_memo: memo.trim() || undefined,
         is_closing: isClosing,
       });
-      window.location.hash = `#/cases/${caseId}/info`;
+      // 일정을 잡은 다음 자리는 일정 목록이다(2026-09-17 Q) — 잇달아 잡는 일이 많다.
+      window.location.hash = '#/schedule';
     } catch (e) {
       setError(e instanceof Error ? e.message : '저장하지 못했어요.');
     } finally {
@@ -70,12 +71,15 @@ export function ScheduleNewScreen({ caseId }: { caseId: number }) {
         ['이메일', detail?.participant.email ?? ''],
       ]}
       actions={
-        <Button onClick={() => (window.location.hash = `#/cases/${caseId}/info`)}>당사자 정보</Button>
+        <>
+          <Button onClick={() => (window.location.hash = `#/cases/${caseId}/info`)}>당사자 정보</Button>
+          <Button onClick={() => (window.location.hash = `#/cases/${caseId}/record`)}>상담 기록하기</Button>
+        </>
       }
     />
     <form className="wire-container schedule-form" onSubmit={e => { e.preventDefault(); void save(); }}>
       <fieldset className="schedule-inputs" disabled={saving} aria-label="상담 일정 입력">
-        <Card title="언제 상담하나요?">
+        <Card title="상담 일시">
           <DateTimeInput idPrefix="schedule" value={at} onChange={setAt} disabled={saving} />
         </Card>
         <Card title="상담 내용">
@@ -94,9 +98,11 @@ export function ScheduleNewScreen({ caseId }: { caseId: number }) {
         </Card>
       </fieldset>
       <footer className="schedule-savebar" aria-busy={saving}>
+        {/* 저장 전 상태(`아직 저장하지 않았어요`)와 `한국 시간`은 걷었다(2026-09-17 Q) —
+            당연한 상태고, 시간대는 입력 카드가 이미 말한다. 고른 일시와 사고만 남긴다. */}
         <div className="schedule-save-summary" aria-live="polite">
           <strong>{scheduledAt ? scheduleFormatter.format(new Date(scheduledAt)) : '날짜와 시간을 선택해 주세요.'}</strong>
-          <p className="panel-meta">{saving ? '일정을 저장하고 있어요.' : '아직 저장하지 않았어요.'} · 한국 시간</p>
+          {saving && <p className="panel-meta">일정을 저장하고 있어요.</p>}
           {error && <ErrorText>{error}</ErrorText>}
         </div>
         <Button type="submit" variant="primary" disabled={!scheduledAt || saving}>{saving ? '저장 중…' : '일정 저장'}</Button>
