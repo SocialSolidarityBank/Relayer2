@@ -1,5 +1,5 @@
-// 수기·음성 전문 보기(2026-09-16 인계). 회차별 요약의 `전문 보기`가 여기로 온다.
-// 읽기 전용이다 — 편집·승인은 상담 기록하기가 담당한다.
+// 상담 내용 원문 보기(2026-09-16 인계 · 이름은 2026-09-17 Q — 구 `수기·음성 전문`).
+// 회차별 요약의 `전문 보기`가 여기로 온다. 읽기 전용이다 — 편집·승인은 상담 기록하기가 담당한다.
 import { useEffect, useRef, useState } from 'react';
 import { getSessionRecord, type SessionRecord } from '../api.ts';
 import {
@@ -10,7 +10,7 @@ import {
   type Recording,
   type Transcript,
 } from '../speech-api.ts';
-import { Badge, Button, Card, Empty, ErrorText, Item, PageHeader } from '../ui.tsx';
+import { Badge, Button, Empty, ErrorText, Fold, Item, PageHeader } from '../ui.tsx';
 import { METHOD_LABEL } from '../vocab.ts';
 import { fmtBytes, fmtMs } from './session-audio.tsx';
 
@@ -87,15 +87,18 @@ export function SessionFullScreen({ caseId, sessionId }: { caseId: number; sessi
   return (
     <>
       <PageHeader
-        title="수기·음성 전문"
+        title="상담 내용 원문 보기"
         meta={`${rec.seq}회차 · ${dateLabel(rec.held_at)} · ${METHOD_LABEL[rec.method ?? ''] ?? rec.method ?? '방법 없음'}`}
+        actions={
+          <Button onClick={() => (window.location.hash = `#/cases/${caseId}/info`)}>
+            회차별 요약
+          </Button>
+        }
       />
       <div className="wire-container">
-        <Button onClick={() => (window.location.hash = `#/cases/${caseId}/info`)}>
-          회차별 요약으로
-        </Button>
-
-        <Card title="수기 기록">
+        {/* 두 구획 모두 접힌다(2026-09-17 Q). 기본은 펼침이다 — 읽으러 온 화면에서 본문을
+            한 번 더 눌러 열게 하지 않는다. 긴 전사문만 접어 둘 수 있으면 된다. */}
+        <Fold title="수기 기록" open>
           {!written ? (
             <Empty>수기 미작성</Empty>
           ) : (
@@ -111,9 +114,9 @@ export function SessionFullScreen({ caseId, sessionId }: { caseId: number; sessi
               ))}
             </>
           )}
-        </Card>
+        </Fold>
 
-        <Card title="음성">
+        <Fold title="음성 기록" open>
           {voiceError && <ErrorText>{voiceError}</ErrorText>}
           {recordings.length === 0 ? (
             <Empty>올라온 녹음이 없어요.</Empty>
@@ -174,7 +177,7 @@ export function SessionFullScreen({ caseId, sessionId }: { caseId: number; sessi
               )}
             </>
           )}
-        </Card>
+        </Fold>
       </div>
     </>
   );

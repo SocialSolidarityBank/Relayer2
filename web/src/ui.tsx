@@ -108,13 +108,27 @@ export function FactChanges({ items }: { items: Array<{ topic: string; before: {
   );
 }
 
-export function PageHeader({ title, meta }: { title: string; meta?: ReactNode }) {
+/**
+ * 화면 제목 줄. `actions` 를 주면 이식한 `.page-actions` 슬롯에 담아 제목과 **같은 행에서
+ * 세로 가운데·오른쪽 끝**에 세운다(2026-09-17 Q). 767 이하에서는 이식 규칙이 제목 아래
+ * 오른쪽으로 내린다.
+ */
+export function PageHeader({
+  title,
+  meta,
+  actions,
+}: {
+  title: string;
+  meta?: ReactNode;
+  actions?: ReactNode;
+}) {
   return (
     <header className="page-header">
       <div>
         <h1 className="wire-page-title">{title}</h1>
         {meta && <p className="panel-meta">{meta}</p>}
       </div>
+      {actions && <div className="page-actions">{actions}</div>}
     </header>
   );
 }

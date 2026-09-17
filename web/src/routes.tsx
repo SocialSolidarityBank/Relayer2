@@ -90,6 +90,11 @@ export function Routes() {
     return (
       <div className="wire-shell">
         <div className="page-content">
+          {/* 로그인 화면은 늘 `상담 일정 보기` 주소에서 뜬다 — 자리를 되돌리는 일은 **로그아웃
+              쪽**이 한다(아래 하단 버튼). 로그인 응답이 온 뒤에 주소를 바꾸면, 그 사이에 사람이
+              (또는 시험이) 다른 화면으로 옮겨 간 것을 뒤늦게 낚아챈다(2026-09-17 실측 — 로그인
+              직후 당사자 등록으로 간 동선이 일정으로 튕겼다). 세션이 끊겨 다시 로그인하는
+              경우에는 보던 주소가 남아 있어 그 자리로 돌아간다. */}
           <LoginScreen onDone={() => void getMe().then(setMe)} />
         </div>
       </div>
@@ -204,8 +209,9 @@ export function Routes() {
           <div className="navigation-group">
             <p className="navigation-section-title">일정</p>
             <ul className="navigation-list">
-              {link(caseId ? `#/cases/${caseId}/schedule` : '#/pick/schedule', '상담 일정 등록', 'calendar-plus')}
+              {/* 보기가 묶음 맨 위다(2026-09-17 Q) — 로그인 도착지이자 하루를 여는 자리다. */}
               {link(HOME, '상담 일정 보기', 'upcoming')}
+              {link(caseId ? `#/cases/${caseId}/schedule` : '#/pick/schedule', '상담 일정 등록', 'calendar-plus')}
               {/* 기록하기는 늘 선다. 사례를 안 열었으면 누구 것인지 고르는 자리로 보낸다 —
                   메뉴에서 사라지면 "그 기능이 없다"로 읽힌다. */}
               {link(caseId ? `#/cases/${caseId}/record` : '#/pick/record', '상담 기록하기', 'record')}
@@ -217,7 +223,8 @@ export function Routes() {
             <ul className="navigation-list">
               {link('#/participants', '당사자 목록', 'participants')}
               {link('#/participants/new', '당사자 등록', 'participant-add')}
-              {caseId && link(`#/cases/${caseId}/info`, '당사자 정보', 'participants')}
+              {/* `당사자 정보`는 메뉴에 두지 않는다(2026-09-17 Q). 한 사람을 가리키는 자리라
+                  묶음의 다른 두 항목(목록·등록)과 층이 다르고, 목록 카드가 곧 그 입구다. */}
             </ul>
           </div>
 
@@ -262,7 +269,14 @@ export function Routes() {
             className="header-icon-button"
             aria-label="로그아웃"
             title="로그아웃"
-            onClick={() => void logout().then(() => setMe(null))}
+            onClick={() =>
+              void logout().then(() => {
+                // 다음 사람이 남의 화면 주소에서 시작하지 않게 자리를 `상담 일정 보기`로 돌린다
+                // (2026-09-17 Q — 로그인 뒤 도착지가 여기다).
+                window.location.hash = HOME;
+                setMe(null);
+              })
+            }
           >
             <NavIcon name="logout" />
           </button>
