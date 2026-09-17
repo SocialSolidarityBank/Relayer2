@@ -32,7 +32,7 @@ export const pickDateTime = async (page: Page, idPrefix: string, value: string) 
   await page.locator(`#${idPrefix}-minute`).selectOption(String(minute).padStart(2, '0'));
 };
 
-/** 저장된 ISO 가 화면에 한국 시간으로 그대로 올라왔는지 본다(고쳐 쓰기 수화 검증). */
+/** 저장된 ISO 가 화면에 한국 시간으로 그대로 올라왔는지 본다(수정 수화 검증). */
 export const expectDateTime = async (page: Page, idPrefix: string, value: string) => {
   const [date, time] = value.split('T');
   const [hour, minute] = time.split(':').map(Number);

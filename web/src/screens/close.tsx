@@ -2,6 +2,7 @@
 // 미완료 과제는 보여 주기만 하고 자동으로 완료·중단 처리하지 않는다.
 import { useEffect, useState } from 'react';
 import { closeCase, getCaseDetail, type CaseDetail } from '../api.ts';
+import { OWNER_LABEL } from '../api.ts';
 import { Button, Card, Choice, ChoiceGroup, Empty, ErrorText, Field, FormActions, Item, ParticipantHero } from '../ui.tsx';
 
 // 종결 사유는 통합사례관리 종결 구분을 따른다. 없는 말을 지어내지 않는다.
@@ -88,7 +89,7 @@ export function CloseScreen({ caseId }: { caseId: number }) {
               <Item
                 key={c.id}
                 title={c.text}
-                desc={c.source_session_seq ? `${c.source_session_seq}회차에서 시작` : '출처 회차 없음'}
+                desc={`${c.source_session_seq ? `${c.source_session_seq}회차에서 시작` : '출처 회차 없음'} · ${OWNER_LABEL[c.owner]}`}
               />
             ))
           )}

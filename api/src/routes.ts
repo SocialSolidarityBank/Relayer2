@@ -32,7 +32,7 @@ import {
   COPY_VERSION,
   copyHash,
 } from './consent.ts';
-import { LIFE_AREAS } from './domain/types.ts';
+import { CARD_OWNERS, LIFE_AREAS } from './domain/types.ts';
 import * as service from './service.ts';
 import * as settings from './settings.ts';
 import { sql } from './db.ts';
@@ -61,6 +61,7 @@ const cardInput = z.object({
   area: area.optional(),
   risk_type: z.string().optional(),
   quote: z.string().optional(),
+  owner: z.enum(CARD_OWNERS).optional(),
 });
 
 const outcomeInput = z.object({
@@ -79,7 +80,7 @@ app.onError((err, c) => {
   if (err instanceof AccessDenied) return c.json({ error: err.message }, 403);
   if (err instanceof service.ConsentRequired) return c.json({ error: err.message }, 409);
   // 종결 사례에 새 녹음·전사를 보내는 것도 상태 충돌이다.
-  if (err instanceof CaseClosed || err instanceof service.SessionAlreadyStarted) {
+  if (err instanceof CaseClosed || err instanceof service.SessionAlreadyStarted || err instanceof service.GoalLocked) {
     return c.json({ error: err.message }, 409);
   }
   // AI 는 없어도 제품이 돌아간다. 없는 것을 있는 것처럼 답하지 않는다.
@@ -331,6 +332,21 @@ app.patch('/sessions/:id', async (c) => {
     })
     .parse(await c.req.json());
   return c.json(await service.recordSession(sessionId, { ...body, actorId: c.get('actor').id }));
+});
+
+// 목표 탭 전용(2026-09-18 Q). 회차 저장을 거치지 않으므로 카드 결과를 건드리지 않는다.
+app.patch('/cases/:id/goal', async (c) => {
+  const caseId = await caseAccess(c.req.param('id'), c.get('actor').id);
+  const body = z.object({ overall_goal: z.string().nullable() }).parse(await c.req.json());
+  await service.updateOverallGoal(caseId, body.overall_goal?.trim() || null);
+  return c.json({ ok: true });
+});
+
+app.patch('/sessions/:id/next-goal', async (c) => {
+  const sessionId = await sessionAccess(c.req.param('id'), c.get('actor').id);
+  const body = z.object({ next_goal_text: z.string().nullable() }).parse(await c.req.json());
+  await service.updateNextGoal(sessionId, body.next_goal_text?.trim() || null);
+  return c.json({ ok: true });
 });
 
 const consentInput = z.object({

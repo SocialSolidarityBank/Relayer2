@@ -367,6 +367,7 @@ export function Field({
   hint,
   control = 'input',
   required,
+  hideLabel,
   children,
 }: {
   label: string;
@@ -374,14 +375,18 @@ export function Field({
   hint?: ReactNode;
   control?: 'input' | 'textarea' | 'select';
   required?: boolean;
+  /** 카드 제목이 이미 같은 말을 하면 라벨 행을 빼고 입력의 `aria-label` 로만 남긴다(2026-09-18 UI-8). */
+  hideLabel?: boolean;
   children: ReactNode;
 }) {
   return (
     <div className="wire-form-field">
-      <label className="wire-form-label" htmlFor={htmlFor}>
-        {label}
-        {required && <span className="wire-badge wire-required-marker"><span className="wire-badge-label">필수</span></span>}
-      </label>
+      {!hideLabel && (
+        <label className="wire-form-label" htmlFor={htmlFor}>
+          {label}
+          {required && <span className="wire-badge wire-required-marker"><span className="wire-badge-label">필수</span></span>}
+        </label>
+      )}
       <div className="wire-input-box" data-control={control}>
         {children}
         {/* select 는 네이티브 화살표를 끈다(wire.css). 꺽쇠가 없으면 입력칸으로 보인다. */}
@@ -466,7 +471,7 @@ export function Choice({
   );
 }
 
-export type Line = { text: string; area?: string };
+export type Line = { text: string; area?: string; owner?: 'participant' | 'worker' };
 
 /** 적어만 두고 `추가`를 누르지 않은 줄도 저장에 포함한다(2026-09-15 Q: 추가는 저장이 아니다). */
 export const withDraft = (lines: Line[], draft: Line): Line[] =>
@@ -482,6 +487,8 @@ export function LineList({
   draft,
   onDraft,
   onChange,
+  readOnly,
+  ownerToggle,
 }: {
   /** id 는 공백 없는 슬러그다. 라벨을 그대로 쓰면 유효하지 않은 id 가 된다. */
   id: string;
@@ -493,14 +500,38 @@ export function LineList({
   draft: Line;
   onDraft: (next: Line) => void;
   onChange: (next: Line[]) => void;
+  /** 원본 보기(2026-09-18 UI-3): 적힌 줄만 보이고 입력칸·추가·삭제는 없다. */
+  readOnly?: boolean;
+  /** 입력칸과 추가 버튼 사이에 서는 수행 주체 토글(2026-09-18 UI-2). 과제 목록만 준다. */
+  ownerToggle?: ReactNode;
 }) {
+  if (readOnly) {
+    return lines.length === 0 ? (
+      <Empty>없음</Empty>
+    ) : (
+      <>
+        {lines.map((line, i) => (
+          <div className="wire-repeat-card" key={`${line.text}-${i}`}>
+            <Item
+              title={`${withArea ? `${LIFE_AREAS.find((a) => a.key === line.area)?.label} · ` : ''}${line.text}`}
+              desc={line.owner ? (line.owner === 'worker' ? '담당 실무자' : '당사자') : undefined}
+            />
+          </div>
+        ))}
+      </>
+    );
+  }
   const area = draft.area ?? LIFE_AREAS[0].key;
   const setArea = (key: string) => onDraft({ ...draft, area: key });
   const setDraft = (text: string) => onDraft({ ...draft, text });
   const add = () => {
     if (!draft.text.trim()) return;
-    onChange([...lines, withArea ? { text: draft.text.trim(), area } : { text: draft.text.trim() }]);
-    onDraft({ text: '', area });
+    const line: Line = { text: draft.text.trim() };
+    if (withArea) line.area = area;
+    if (draft.owner) line.owner = draft.owner;
+    onChange([...lines, line]);
+    // 주체는 다음 줄에도 유지된다 — 실무자 일을 연달아 적을 때 매번 고르지 않게(2026-09-18 Q).
+    onDraft({ text: '', area, owner: draft.owner });
   };
   return (
     <>
@@ -536,13 +567,15 @@ export function LineList({
             />
           </div>
         </div>
+        {ownerToggle}
         <Button onClick={add}>추가</Button>
       </div>
       {lines.map((line, i) => (
         <div className="wire-repeat-card" key={`${line.text}-${i}`}>
           <Item
             title={`${withArea ? `${LIFE_AREAS.find((a) => a.key === line.area)?.label} | ` : ''}${line.text}`}
-            action={<Button onClick={() => onChange(lines.filter((_, j) => j !== i))}>지우기</Button>}
+            desc={line.owner ? (line.owner === 'worker' ? '담당 실무자' : '당사자') : undefined}
+            action={<Button onClick={() => onChange(lines.filter((_, j) => j !== i))}>삭제</Button>}
           />
         </div>
       ))}

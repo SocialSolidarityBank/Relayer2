@@ -1,5 +1,5 @@
 // 당사자 정보 — **당사자 카드(HERO)가 머리**이고 그 아래 탭 4개가 화면을 가른다
-// (2026-09-17 Q): 당사자 정보 · 회차별 요약 · 회차별 전문 보기 · 목표.
+// (2026-09-17 Q): 당사자 정보 · 회차별 요약 · 회차별 원본 보기 · 목표.
 // 15초 다시보기는 폐지했다(2026-09-17 Q) — 화면·탭·버튼 어디에도 두지 않는다.
 import { useEffect, useState, type ReactNode } from 'react';
 import {
@@ -13,6 +13,8 @@ import {
   listDocuments,
   recordConsent,
   revokeAccess,
+  updateNextGoal,
+  updateOverallGoal,
   uploadDocument,
   type AccessState,
   type Briefing,
@@ -37,8 +39,9 @@ import {
   Item,
   ParticipantHero,
 } from '../ui.tsx';
+import { Dialog } from '../dialog.tsx';
 
-const TABS = ['당사자 정보', '회차별 요약', '회차별 전문 보기', '목표'] as const;
+const TABS = ['당사자 정보', '회차별 요약', '회차별 원본 보기', '목표'] as const;
 type Tab = (typeof TABS)[number];
 
 const dateLabel = (iso: string | null): string => {
@@ -138,7 +141,7 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
     <>
       {/* 이 탭은 **이 사례의 지금 상태와 회차 기록**이다(2026-09-17 Q — 15초 다시보기 폐지로
           다시 정의). 맨 위가 위험 신호, 그 아래가 회차 목록이다. 목표는 `목표` 탭, 전문은
-          `회차별 전문 보기` 탭, 확인할 과제·오늘 물어볼 것은 상담 기록하기의 레일이 갖는다. */}
+          `회차별 원본 보기` 탭, 확인할 과제·오늘 물어볼 것은 상담 기록하기의 레일이 갖는다. */}
       <RiskBanner caseId={caseId} />
       <Card title="회차별 요약" hint="회차 줄은 기록 상태예요. 승인한 AI 정리는 아래 접힌 카드에 있어요.">
         {done.map((s) => {
@@ -159,7 +162,7 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
                 }
                 action={
                 <>
-                  {/* 원문은 `회차별 전문 보기` 탭이 유일한 입구다(2026-09-17 Q). 요약 줄에서
+                  {/* 원문은 `회차별 원본 보기` 탭이 유일한 입구다(2026-09-17 Q). 요약 줄에서
                       수기 본문을 펼치던 `원문 보기`는 그 탭의 부분집합이라 걷었다 —
                       요약은 상태와 AI 정리, 전문은 원문이다(§4 탭별 성격). */}
                   <Button
@@ -169,13 +172,13 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
                   </Button>
                   {s.kind === 'intake' ? (
                     <Button onClick={() => (window.location.hash = `#/cases/${caseId}/intake`)}>
-                      고쳐 쓰기
+                      수정
                     </Button>
                   ) : (
                     <Button
                       onClick={() => (window.location.hash = `#/cases/${caseId}/sessions/${s.id}/edit`)}
                     >
-                      고쳐 쓰기
+                      수정
                     </Button>
                   )}
                 </>
@@ -220,41 +223,115 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
   );
 }
 
-/** 목표 — 전체 상담 목표와 그 수정 이력, 회차별 오늘 상담 목표. */
-function Goals({ detail }: { detail: CaseDetail }) {
+/**
+ * 목표 — 고칠 수 있는 건 둘뿐이다(2026-09-18 Q): 전체 상담 목표(이력 남김)와 아직 이어받지 않은
+ * 다음 상담 목표. 지난 회차의 오늘 상담 목표는 그 회차 기록 당시 기준이라 읽기만 한다.
+ * 이력과 회차별 목표는 `지난 목표 보기` 모달로 뺀다 — AI·전사 비교 기준이라 남기되 탭을 어지럽히지 않는다.
+ */
+function Goals({ detail, reload }: { detail: CaseDetail; reload: () => Promise<void> }) {
+  const [overall, setOverall] = useState(detail.case.overall_goal ?? '');
+  const [next, setNext] = useState(detail.pending_next_goal?.text ?? '');
+  const [saving, setSaving] = useState<'overall' | 'next' | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const withGoal = detail.sessions.filter((s) => s.today_goal_text);
   const history = detail.goal_revisions;
+  const pending = detail.pending_next_goal;
+
+  const save = async (which: 'overall' | 'next') => {
+    setSaving(which);
+    setError(null);
+    try {
+      if (which === 'overall') await updateOverallGoal(detail.case.id, overall.trim() || null);
+      else if (pending) await updateNextGoal(pending.session_id, next.trim() || null);
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '저장하지 못했어요.');
+    } finally {
+      setSaving(null);
+    }
+  };
+
   return (
     <>
-      <Card title="전체 상담 목표">
-        {detail.case.overall_goal ? (
-          <p className="wire-item-title">{detail.case.overall_goal}</p>
+      <Card title="전체 상담 목표" hint="고치면 이전 문구는 이력에 남아요. 비워 두어도 괜찮아요.">
+        <Field label="전체 상담 목표" htmlFor="goal-overall" hideLabel>
+          <input
+            id="goal-overall"
+            type="text"
+            aria-label="전체 상담 목표"
+            value={overall}
+            onChange={(e) => setOverall(e.target.value)}
+          />
+        </Field>
+        <FormActions>
+          <Dialog id="goal-history" title="지난 목표" trigger="지난 목표 보기">
+            <Card title="전체 상담 목표 이력">
+              {history.length === 0 ? (
+                <Empty>아직 이력이 없어요.</Empty>
+              ) : (
+                history.map((r, i) => (
+                  <Item
+                    key={`${r.created_at}-${i}`}
+                    title={r.text ?? '(비움)'}
+                    desc={`${dateLabel(r.created_at)}, ${i === 0 ? '승인' : '수정'}`}
+                  />
+                ))
+              )}
+            </Card>
+            <Card title="회차별 오늘 상담 목표">
+              {withGoal.length === 0 ? (
+                <Empty>이어받은 목표가 아직 없어요.</Empty>
+              ) : (
+                withGoal.map((s) => (
+                  <Item key={s.id} title={s.today_goal_text ?? ''} desc={`${s.seq}회차 | ${dateLabel(s.held_at)}`} />
+                ))
+              )}
+            </Card>
+          </Dialog>
+          <Button
+            variant="primary"
+            disabled={saving !== null || overall.trim() === (detail.case.overall_goal ?? '').trim()}
+            onClick={() => void save('overall')}
+          >
+            {saving === 'overall' ? '저장 중…' : '저장'}
+          </Button>
+        </FormActions>
+      </Card>
+
+      <Card
+        title="다음 상담 목표"
+        hint={
+          pending
+            ? `${pending.session_seq}회차에서 정함, 다음 회차를 기록하면 그 회차의 오늘 상담 목표가 되고 잠겨요.`
+            : '마지막 회차를 기록할 때 적어요. 지금은 고칠 목표가 없어요.'
+        }
+      >
+        {pending ? (
+          <>
+            <Field label="다음 상담 목표" htmlFor="goal-next" hideLabel>
+              <input
+                id="goal-next"
+                type="text"
+                aria-label="다음 상담 목표"
+                value={next}
+                onChange={(e) => setNext(e.target.value)}
+              />
+            </Field>
+            <FormActions>
+              <Button
+                variant="primary"
+                disabled={saving !== null || next.trim() === (pending.text ?? '').trim()}
+                onClick={() => void save('next')}
+              >
+                {saving === 'next' ? '저장 중…' : '저장'}
+              </Button>
+            </FormActions>
+          </>
         ) : (
-          <Empty>아직 정하지 않았어요. 비워 두어도 괜찮아요.</Empty>
+          <Empty>아직 없어요.</Empty>
         )}
       </Card>
-      <Card title="전체 상담 목표 이력" hint="고쳐도 지난 회차에 찍힌 당시 목표는 그대로예요.">
-        {history.length === 0 ? (
-          <Empty>아직 이력이 없어요.</Empty>
-        ) : (
-          history.map((r, i) => (
-            <Item
-              key={`${r.created_at}-${i}`}
-              title={r.text ?? '(비움)'}
-              desc={`${dateLabel(r.created_at)}${i === 0 ? ', 처음 정함' : ', 고침'}`}
-            />
-          ))
-        )}
-      </Card>
-      <Card title="회차별 오늘 상담 목표">
-        {withGoal.length === 0 ? (
-          <Empty>이어받은 목표가 아직 없어요.</Empty>
-        ) : (
-          withGoal.map((s) => (
-            <Item key={s.id} title={s.today_goal_text ?? ''} desc={`${s.seq}회차 | ${dateLabel(s.held_at)}`} />
-          ))
-        )}
-      </Card>
+      {error && <ErrorText>{error}</ErrorText>}
     </>
   );
 }
@@ -527,20 +604,20 @@ function Documents({ caseId }: { caseId: number }) {
 }
 
 /**
- * 회차별 전문 보기 탭 — 회차를 골라 **수기·음성 전문**으로 간다(2026-09-17 Q).
- * 전문 자체는 `상담 내용 원문 보기` 화면이 그린다. 두 벌로 만들지 않는다.
+ * 회차별 원본 보기 탭 — 회차를 골라 **수기·음성 전문**으로 간다(2026-09-17 Q).
+ * 전문 자체는 `상담 내용 원본 보기` 화면이 그린다. 두 벌로 만들지 않는다.
  */
 function Fulls({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
   const done = detail.sessions.filter((s) => s.status === 'done');
   if (done.length === 0) {
     return (
-      <Card title="회차별 전문 보기">
+      <Card title="회차별 원본 보기">
         <Empty>아직 기록한 상담이 없어요.</Empty>
       </Card>
     );
   }
   return (
-    <Card title="회차별 전문 보기" hint="회차를 고르면 그 회차의 수기·음성 전문을 읽어요.">
+    <Card title="회차별 원본 보기" hint="회차를 고르면 그 회차의 수기·음성 전문을 읽어요.">
       {done.map((s) => (
         <div className="wire-repeat-card" key={s.id}>
           <Item
@@ -556,7 +633,7 @@ function Fulls({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
               <Button
                 onClick={() => (window.location.hash = `#/cases/${caseId}/sessions/${s.id}/full`)}
               >
-                전문 보기
+                원본 보기
               </Button>
             }
           />
@@ -702,13 +779,16 @@ function Info({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
   );
 }
 
-export function ParticipantInfoScreen({ caseId }: { caseId: number }) {
+export function ParticipantInfoScreen({ caseId, initialTab = '당사자 정보' }: { caseId: number; initialTab?: Tab }) {
   const [detail, setDetail] = useState<CaseDetail | null>(null);
-  const [tab, setTab] = useState<Tab>('당사자 정보');
+  const [tab, setTab] = useState<Tab>(initialTab);
 
   useEffect(() => {
     void getCaseDetail(caseId).then(setDetail);
   }, [caseId]);
+  useEffect(() => {
+    setTab(initialTab);
+  }, [initialTab, caseId]);
 
   if (!detail) return <p className="empty">불러오는 중이에요.</p>;
 
@@ -762,8 +842,14 @@ export function ParticipantInfoScreen({ caseId }: { caseId: number }) {
 
         {tab === '당사자 정보' && <Info detail={detail} caseId={caseId} />}
         {tab === '회차별 요약' && <Sessions detail={detail} caseId={caseId} />}
-        {tab === '회차별 전문 보기' && <Fulls detail={detail} caseId={caseId} />}
-        {tab === '목표' && <Goals detail={detail} />}
+        {tab === '회차별 원본 보기' && <Fulls detail={detail} caseId={caseId} />}
+        {tab === '목표' && (
+          <Goals
+            key={`${detail.case.overall_goal ?? ''}|${detail.pending_next_goal?.text ?? ''}`}
+            detail={detail}
+            reload={() => getCaseDetail(caseId).then(setDetail)}
+          />
+        )}
       </div>
     </>
   );

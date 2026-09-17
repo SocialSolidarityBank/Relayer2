@@ -1,8 +1,15 @@
+/** 과제 수행 주체(2026-09-18). 서버 `CARD_OWNERS` 와 같다. */
+export type CardOwner = 'participant' | 'worker';
+export const OWNER_LABEL: Record<CardOwner, string> = { participant: '당사자', worker: '담당 실무자' };
+
 export type BriefingItem = {
   card_id: number;
   text: string;
   source_session_seq: number;
   last_result: string | null;
+  owner: CardOwner;
+  closed_session_seq?: number;
+  last_follow?: string | null;
 };
 
 export type Briefing = {
@@ -27,6 +34,8 @@ export type Briefing = {
   };
   today_questions: BriefingItem[] | null;
   open_tasks: { items: BriefingItem[]; unchecked_carried_over: number } | null;
+  closed_tasks: BriefingItem[];
+  closed_questions: BriefingItem[];
 };
 
 export type CaseView = {
@@ -166,7 +175,8 @@ export type CaseDetail = {
     voice: { recordings: number; transcript: SessionTranscriptState };
   }>;
   goal_revisions: Array<{ text: string | null; created_at: string }>;
-  open_cards: Array<{ id: number; kind: string; text: string; source_session_seq?: number | null }>;
+  pending_next_goal: { session_id: number; session_seq: number; text: string | null } | null;
+  open_cards: Array<{ id: number; kind: string; text: string; owner: CardOwner; source_session_seq?: number | null }>;
   closure: {
     closed_at: string;
     close_reason: string;
@@ -190,6 +200,13 @@ export const listSchedules = (from: string, to: string) =>
 export const getBriefing = (caseId: number, seq?: number) =>
   json<Briefing>(`/cases/${caseId}/briefing${seq ? `?seq=${seq}` : ''}`);
 export const getCase = (caseId: number) => json<CaseView>(`/cases/${caseId}`);
+export const updateOverallGoal = (caseId: number, overallGoal: string | null) =>
+  json<{ ok: true }>(`/cases/${caseId}/goal`, { method: 'PATCH', body: JSON.stringify({ overall_goal: overallGoal }) });
+export const updateNextGoal = (sessionId: number, nextGoalText: string | null) =>
+  json<{ ok: true }>(`/sessions/${sessionId}/next-goal`, {
+    method: 'PATCH',
+    body: JSON.stringify({ next_goal_text: nextGoalText }),
+  });
 
 export type OutcomeInput = {
   card_id: number;
@@ -206,7 +223,7 @@ export type RecordInput = {
   place?: string | null;
   next_goal_text?: string | null;
   overall_goal?: string | null;
-  cards?: Array<{ kind: string; text: string; section: string; area?: string }>;
+  cards?: Array<{ kind: string; text: string; section: string; area?: string; owner?: CardOwner }>;
   outcomes?: OutcomeInput[];
 };
 
@@ -405,7 +422,7 @@ export type IntakeInput = {
   memo?: string;
   overall_goal?: string | null;
   detail?: Record<string, unknown>;
-  cards?: Array<{ kind: string; text: string; section: string }>;
+  cards?: Array<{ kind: string; text: string; section: string; owner?: CardOwner }>;
 };
 
 export type IntakeView = {
@@ -416,7 +433,7 @@ export type IntakeView = {
   memo: string | null;
   detail: Record<string, unknown>;
   overall_goal: string | null;
-  cards: Array<{ kind: string; text: string; locked: boolean }>;
+  cards: Array<{ kind: string; text: string; owner: CardOwner; locked: boolean }>;
 };
 
 export const getIntake = (caseId: number) => json<IntakeView>(`/cases/${caseId}/intake`);
@@ -470,11 +487,12 @@ export type SessionRecord = {
   next_goal_text: string | null;
   overall_goal: string | null;
   is_closing: boolean;
-  cards: Array<{ kind: string; text: string; area: string | null; locked: boolean }>;
+  cards: Array<{ kind: string; text: string; area: string | null; owner: CardOwner; locked: boolean }>;
   open_cards: Array<{
     card_id: number;
     kind: string;
     text: string;
+    owner: CardOwner;
     source_session_seq: number | null;
     result: string | null;
     follow: string | null;
