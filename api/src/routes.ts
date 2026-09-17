@@ -32,7 +32,7 @@ import {
   COPY_VERSION,
   copyHash,
 } from './consent.ts';
-import { LIFE_AREAS } from './domain/types.ts';
+import { CARD_OWNERS, LIFE_AREAS } from './domain/types.ts';
 import * as service from './service.ts';
 import * as settings from './settings.ts';
 import { sql } from './db.ts';
@@ -61,6 +61,7 @@ const cardInput = z.object({
   area: area.optional(),
   risk_type: z.string().optional(),
   quote: z.string().optional(),
+  owner: z.enum(CARD_OWNERS).optional(),
 });
 
 const outcomeInput = z.object({

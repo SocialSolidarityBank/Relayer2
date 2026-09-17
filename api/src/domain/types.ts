@@ -1,4 +1,7 @@
 export type CardKind = 'fact' | 'question' | 'promise' | 'judgment';
+/** 과제 수행 주체. `participant` 당사자 · `worker` 담당 실무자(2026-09-18 Q). */
+export const CARD_OWNERS = ['participant', 'worker'] as const;
+export type CardOwner = (typeof CARD_OWNERS)[number];
 export type SourceSection = 'intake' | 'memo' | 'change' | 'promise' | 'question' | 'judgment';
 export type OutcomeResult = 'done' | 'in_progress' | 'not_done' | 'confirmed' | 'unchecked';
 export type Follow = 'continue' | 'stop';
@@ -59,6 +62,8 @@ export type Card = {
   source_session_id: number;
   source_section: SourceSection;
   source_type: 'manual' | 'ai_approved';
+  /** 수행 주체(2026-09-18). 당사자가 기본, 담당 실무자 일이면 worker. */
+  owner: CardOwner;
   created_at: string;
 };
 

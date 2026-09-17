@@ -1,8 +1,13 @@
+/** 과제 수행 주체(2026-09-18). 서버 `CARD_OWNERS` 와 같다. */
+export type CardOwner = 'participant' | 'worker';
+export const OWNER_LABEL: Record<CardOwner, string> = { participant: '당사자', worker: '담당 실무자' };
+
 export type BriefingItem = {
   card_id: number;
   text: string;
   source_session_seq: number;
   last_result: string | null;
+  owner: CardOwner;
   closed_session_seq?: number;
   last_follow?: string | null;
 };
@@ -171,7 +176,7 @@ export type CaseDetail = {
   }>;
   goal_revisions: Array<{ text: string | null; created_at: string }>;
   pending_next_goal: { session_id: number; session_seq: number; text: string | null } | null;
-  open_cards: Array<{ id: number; kind: string; text: string; source_session_seq?: number | null }>;
+  open_cards: Array<{ id: number; kind: string; text: string; owner: CardOwner; source_session_seq?: number | null }>;
   closure: {
     closed_at: string;
     close_reason: string;
@@ -218,7 +223,7 @@ export type RecordInput = {
   place?: string | null;
   next_goal_text?: string | null;
   overall_goal?: string | null;
-  cards?: Array<{ kind: string; text: string; section: string; area?: string }>;
+  cards?: Array<{ kind: string; text: string; section: string; area?: string; owner?: CardOwner }>;
   outcomes?: OutcomeInput[];
 };
 
@@ -417,7 +422,7 @@ export type IntakeInput = {
   memo?: string;
   overall_goal?: string | null;
   detail?: Record<string, unknown>;
-  cards?: Array<{ kind: string; text: string; section: string }>;
+  cards?: Array<{ kind: string; text: string; section: string; owner?: CardOwner }>;
 };
 
 export type IntakeView = {
@@ -428,7 +433,7 @@ export type IntakeView = {
   memo: string | null;
   detail: Record<string, unknown>;
   overall_goal: string | null;
-  cards: Array<{ kind: string; text: string; locked: boolean }>;
+  cards: Array<{ kind: string; text: string; owner: CardOwner; locked: boolean }>;
 };
 
 export const getIntake = (caseId: number) => json<IntakeView>(`/cases/${caseId}/intake`);
@@ -482,11 +487,12 @@ export type SessionRecord = {
   next_goal_text: string | null;
   overall_goal: string | null;
   is_closing: boolean;
-  cards: Array<{ kind: string; text: string; area: string | null; locked: boolean }>;
+  cards: Array<{ kind: string; text: string; area: string | null; owner: CardOwner; locked: boolean }>;
   open_cards: Array<{
     card_id: number;
     kind: string;
     text: string;
+    owner: CardOwner;
     source_session_seq: number | null;
     result: string | null;
     follow: string | null;

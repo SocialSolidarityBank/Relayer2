@@ -36,6 +36,8 @@ import { METHODS } from '../vocab.ts';
 import { dateTimeFromIso, dateTimeToIso } from '../date-time.ts';
 import { DateTimeInput } from '../date-time-input.tsx';
 import { RecordingPanel, SessionAudio } from './session-audio.tsx';
+import { TaskOwnerToggle } from '../task-owner.tsx';
+import { OWNER_LABEL } from '../api.ts';
 
 /** 지금 시각을 한국 시간의 날짜·시·분으로 표시하는 상담 일시 초깃값. */
 const nowDateTime = () => dateTimeFromIso(new Date().toISOString());
@@ -87,7 +89,7 @@ export function RecordScreen({
   // 종결 상담(요구 5). 일정에서 미리 골랐으면 이어받고, 여기서 바꿀 수도 있다.
   const [isClosing, setIsClosing] = useState(startClosing);
   const [outcomes, setOutcomes] = useState<Record<number, OutcomeInput>>({});
-  const [taskDraft, setTaskDraft] = useState<Line>({ text: '' });
+  const [taskDraft, setTaskDraft] = useState<Line>({ text: '', owner: 'participant' });
   const [questionDraft, setQuestionDraft] = useState<Line>({ text: '' });
   // 저장해 둔 회차를 고쳐 쓰는 중이면 그 회차. 새로 쓰는 중이면 null.
   const [editing, setEditing] = useState<SessionRecord | null>(null);
@@ -129,7 +131,7 @@ export function RecordScreen({
         setMethod((rec.method as NewSessionInput['method']) ?? 'in_person');
         setIsClosing(startClosing || rec.is_closing);
         setNextGoal(rec.next_goal_text ?? '');
-        setTasks(rec.cards.filter((c) => c.kind === 'promise').map((c) => ({ text: c.text })));
+        setTasks(rec.cards.filter((c) => c.kind === 'promise').map((c) => ({ text: c.text, owner: c.owner })));
         setQuestions(rec.cards.filter((c) => c.kind === 'question').map((c) => ({ text: c.text })));
         setOpinion(rec.cards.find((c) => c.kind === 'judgment')?.text ?? '');
         // 지난번에 매긴 결과를 그대로 다시 세운다. 안 그러면 수정이 전부 미확인으로 덮는다.
@@ -162,7 +164,7 @@ export function RecordScreen({
       setQuestions([]);
       setOpinion('');
       setOutcomes({});
-      setTaskDraft({ text: '' });
+      setTaskDraft({ text: '', owner: 'participant' });
       setQuestionDraft({ text: '' });
       setPlace(planned?.place ?? '');
       // 당사자 카드에서 종결로 들어온 경우가 예정 회차의 표시보다 세다(2026-09-17 Q).
@@ -257,7 +259,7 @@ export function RecordScreen({
         next_goal_text: nextGoal.trim() || null,
         cards: [
           // `추가`를 누르지 않고 적어만 둔 줄도 함께 저장한다.
-          ...withDraft(tasks, taskDraft).map((t) => ({ kind: 'promise', text: t.text, section: 'promise' })),
+          ...withDraft(tasks, taskDraft).map((t) => ({ kind: 'promise', text: t.text, section: 'promise', owner: t.owner })),
           ...withDraft(questions, questionDraft).map((q) => ({ kind: 'question', text: q.text, section: 'question' })),
           ...(opinion.trim() ? [{ kind: 'judgment', text: opinion.trim(), section: 'judgment' }] : []),
         ],
@@ -326,7 +328,7 @@ export function RecordScreen({
                 <div className="wire-repeat-card" key={t.card_id}>
                   <Item
                     title={t.text}
-                    desc={`${t.source_session_seq}회차${t.last_result === 'unchecked' ? ', 지난 회차 미확인' : ''}`}
+                    desc={`${t.source_session_seq}회차, ${OWNER_LABEL[t.owner]}${t.last_result === 'unchecked' ? ', 지난 회차 미확인' : ''}`}
                   />
                   {/* 결과는 셋이다(2026-09-15 Q). 그만두는 것은 상태가 아니라 과제를 접는 일이라 따로 둔다. */}
                   <ChoiceGroup legend="결과">
@@ -399,7 +401,7 @@ export function RecordScreen({
                 <Item
                   key={t.card_id}
                   title={t.text}
-                  desc={`${t.source_session_seq}회차 · ${t.closed_session_seq}회차 ${closedLabel(t.last_result, t.last_follow)}`}
+                  desc={`${t.source_session_seq}회차, ${OWNER_LABEL[t.owner]}, ${t.closed_session_seq}회차 ${closedLabel(t.last_result, t.last_follow)}`}
                 />
               ))}
             </Fold>
@@ -410,7 +412,7 @@ export function RecordScreen({
                 <Item
                   key={q.card_id}
                   title={q.text}
-                  desc={`${q.source_session_seq}회차 · ${q.closed_session_seq}회차 확인함`}
+                  desc={`${q.source_session_seq}회차, ${q.closed_session_seq}회차 확인함`}
                 />
               ))}
             </Fold>
@@ -430,7 +432,7 @@ export function RecordScreen({
                 title={briefing.goals.today?.text ?? '오늘 상담 목표 없음'}
                 desc={
                   briefing.goals.today?.from_session_seq
-                    ? `오늘 상담 목표 · ${briefing.goals.today.from_session_seq}회차에서 이어받음`
+                    ? `오늘 상담 목표, ${briefing.goals.today.from_session_seq}회차에서 이어받음`
                     : '오늘 상담 목표'
                 }
                 action={
@@ -488,6 +490,13 @@ export function RecordScreen({
               draft={taskDraft}
               onDraft={setTaskDraft}
               onChange={setTasks}
+              ownerToggle={
+                <TaskOwnerToggle
+                  id="task"
+                  value={taskDraft.owner ?? 'participant'}
+                  onChange={(owner) => setTaskDraft({ ...taskDraft, owner })}
+                />
+              }
             />
             {/*
               `진행 전`·`진행 중`은 그 자체로 "계속 간다"는 뜻이다. 그런데 같은 약속을 또 적는 사람이 있다

@@ -17,6 +17,8 @@ export type BriefingItem = {
   text: string;
   source_session_seq: number;
   last_result: string | null;
+  /** 과제 수행 주체(2026-09-18). 질문 카드도 값은 있지만 화면은 과제에만 쓴다. */
+  owner: Card['owner'];
   /** 닫힌 카드만: 어느 회차가 닫았나(완료·중단·확인함을 찍은 회차). */
   closed_session_seq?: number;
   /** not_done 일 때 continue·stop. 중단은 `stop`. */
@@ -80,6 +82,7 @@ export function buildBriefing(input: BriefingInput): Briefing {
     text: card.text,
     source_session_seq: seqBySession[card.source_session_id] ?? 0,
     last_result: latestOutcome(card, outcomes, seqBySession)?.result ?? null,
+    owner: card.owner,
   });
 
   const open = openCards(cards, outcomes, sessions).sort(

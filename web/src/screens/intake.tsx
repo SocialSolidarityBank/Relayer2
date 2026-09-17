@@ -23,6 +23,7 @@ import {
 import { METHODS } from '../vocab.ts';
 import { EMPTY_DATE_TIME, dateTimeFromIso, dateTimeToIso } from '../date-time.ts';
 import { DateTimeInput } from '../date-time-input.tsx';
+import { TaskOwnerToggle } from '../task-owner.tsx';
 import {
   Button,
   Card,
@@ -183,7 +184,7 @@ export function IntakeScreen({ caseId, readOnly = false }: { caseId: number; rea
   const [questions, setQuestions] = useState<Line[]>([]);
   // 첫 상담에서도 약속은 나온다("다음까지 서류 떼어 오기"). 2026-09-15 예행연습에서 드러난 빈자리.
   const [tasks, setTasks] = useState<Line[]>([]);
-  const [taskDraft, setTaskDraft] = useState<Line>({ text: '' });
+  const [taskDraft, setTaskDraft] = useState<Line>({ text: '', owner: 'participant' });
   const [questionDraft, setQuestionDraft] = useState<Line>({ text: '' });
   // 실제로 진행한 상담의 일시·방식·장소. 선호 상담 방식(detail)과 다른 값이다.
   const [heldAt, setHeldAt] = useState(nowDateTime);
@@ -204,7 +205,7 @@ export function IntakeScreen({ caseId, readOnly = false }: { caseId: number; rea
     setOverallGoal('');
     setTasks([]);
     setQuestions([]);
-    setTaskDraft({ text: '' });
+    setTaskDraft({ text: '', owner: 'participant' });
     setQuestionDraft({ text: '' });
     setHeldAt(nowDateTime());
     setMethod('');
@@ -218,7 +219,7 @@ export function IntakeScreen({ caseId, readOnly = false }: { caseId: number; rea
       setOverallGoal(intake.overall_goal ?? v.case.overall_goal ?? '');
       setWritten(intake.session_id !== null);
       setAnswers(withLegacyMapping(intake.detail ?? {}, intake.memo));
-      setTasks(intake.cards.filter((c) => c.kind === 'promise').map((c) => ({ text: c.text })));
+      setTasks(intake.cards.filter((c) => c.kind === 'promise').map((c) => ({ text: c.text, owner: c.owner })));
       setQuestions(intake.cards.filter((c) => c.kind === 'question').map((c) => ({ text: c.text })));
       setHeldAt(intake.held_at ? dateTimeFromIso(intake.held_at) : nowDateTime());
       setMethod(intake.method ?? '');
@@ -285,7 +286,7 @@ export function IntakeScreen({ caseId, readOnly = false }: { caseId: number; rea
         // 다음에 물어볼 것은 상담 기록하기와 같은 입력이며 확인할 것 카드가 된다.
         cards: [
           ...withDraft(questions, questionDraft).map((q) => ({ kind: 'question', text: q.text, section: 'intake' })),
-          ...withDraft(tasks, taskDraft).map((t) => ({ kind: 'promise', text: t.text, section: 'promise' })),
+          ...withDraft(tasks, taskDraft).map((t) => ({ kind: 'promise', text: t.text, section: 'promise', owner: t.owner })),
         ],
       };
       if (heldAtIso) body.held_at = heldAtIso;
@@ -354,6 +355,13 @@ export function IntakeScreen({ caseId, readOnly = false }: { caseId: number; rea
             onDraft={setTaskDraft}
             onChange={setTasks}
             readOnly={readOnly}
+            ownerToggle={
+              <TaskOwnerToggle
+                id="intake-task"
+                value={taskDraft.owner ?? 'participant'}
+                onChange={(owner) => setTaskDraft({ ...taskDraft, owner })}
+              />
+            }
           />
         </Card>
 

@@ -40,6 +40,8 @@ export type NewCardInput = {
   area?: Card['area'];
   risk_type?: string | null;
   quote?: string | null;
+  /** 과제 수행 주체. 안 주면 당사자(2026-09-18). */
+  owner?: Card['owner'];
 };
 
 /**
@@ -104,7 +106,7 @@ export type IntakeView = {
   detail: Record<string, unknown>;
   overall_goal: string | null;
   /** 이미 다른 회차에서 결과가 찍힌 카드. 고칠 때 지우지 않는다. */
-  cards: Array<{ kind: string; text: string; locked: boolean }>;
+  cards: Array<{ kind: string; text: string; owner: Card['owner']; locked: boolean }>;
 };
 
 /** 저장해 둔 인테이크를 다시 연다. 아직 없으면 빈 것을 낸다. */
@@ -133,8 +135,8 @@ export async function getIntake(caseId: number): Promise<IntakeView | null> {
       cards: [],
     };
   }
-  const cards = await sql<Array<{ kind: string; text: string; locked: boolean }>>`
-    select c.kind, c.text, exists (select 1 from card_outcomes o where o.card_id = c.id) as locked
+  const cards = await sql<Array<{ kind: string; text: string; owner: Card['owner']; locked: boolean }>>`
+    select c.kind, c.text, c.owner, exists (select 1 from card_outcomes o where o.card_id = c.id) as locked
     from cards c where c.source_session_id = ${session.id} order by c.id`;
   return {
     session_id: session.id,
@@ -441,12 +443,13 @@ export type SessionRecord = {
   overall_goal: string | null;
   is_closing: boolean;
   /** 이 회차가 만든 카드. 결과가 붙은 것은 지울 수 없다. */
-  cards: Array<{ kind: string; text: string; area: string | null; locked: boolean }>;
+  cards: Array<{ kind: string; text: string; area: string | null; owner: Card['owner']; locked: boolean }>;
   /** 이 회차에 올라와 있던 카드와 이 회차가 매긴 결과(고쳐 쓸 때 그대로 다시 보여 준다). */
   open_cards: Array<{
     card_id: number;
     kind: string;
     text: string;
+    owner: Card['owner'];
     source_session_seq: number | null;
     result: string | null;
     follow: string | null;
@@ -492,6 +495,7 @@ export async function getSessionRecord(sessionId: number): Promise<SessionRecord
         kind: c.kind,
         text: c.text,
         area: c.area,
+        owner: c.owner,
         locked: outcomes.some((o) => o.card_id === c.id),
       })),
     open_cards: before.map((c) => {
@@ -500,6 +504,7 @@ export async function getSessionRecord(sessionId: number): Promise<SessionRecord
         card_id: c.id,
         kind: c.kind,
         text: c.text,
+        owner: c.owner,
         source_session_seq: seqById.get(c.source_session_id) ?? null,
         result: got?.result ?? null,
         follow: got?.follow ?? null,
@@ -552,9 +557,9 @@ async function insertCards(
 ): Promise<void> {
   for (const card of cards) {
     // 카드 본문은 사람이 쓴 문장이다. 평문으로 앉히지 않는다(P1).
-    await tx`insert into cards (case_id, kind, text, area, risk_type, quote, source_session_id, source_section, source_type)
+    await tx`insert into cards (case_id, kind, text, area, risk_type, quote, source_session_id, source_section, source_type, owner)
       values (${caseId}, ${card.kind}, ${encryptText(card.text)}, ${card.area ?? null}, ${card.risk_type ?? null},
-              ${encryptText(card.quote)}, ${sessionId}, ${card.section}, ${sourceType})`;
+              ${encryptText(card.quote)}, ${sessionId}, ${card.section}, ${sourceType}, ${card.owner ?? 'participant'})`;
   }
 }
 
