@@ -32,7 +32,7 @@ constraints:
   - "역할 변경: PUT /settings/workers/:id/role {role:'worker'|'admin'} 관리자 전용. 자기 자신을 내리는 것은 허용하되 마지막 활성 관리자는 409. 실무자 관리 › 실무자 목록에 역할 바꾸기가 선다. 감사 user.role.update(fields user=<id>, role=<new>)"
   - "seed.ts: test4 관리자를 더하고(test1·test4 관리자, test2 실무자, test3 당사자), 기관 이름·슬러그·onboarded_at 과 사업 1개를 심고 createCase 에 program_id 를 넘긴다. 가입 문 검증은 seed 없는 새 DB에서 한다"
   - "감사: AUDIT_KINDS 에 org.bootstrap·program.update·program.reopen·user.role.update·ai.key.set 을 운영 종류로 더한다. 감사 fields 에 키 값·이름 외 개인정보를 넣지 않는다"
-  - "화면 범위: web/ 변경은 새 화면(#/signup, #/onboarding)과 라우터·api.ts·설정·당사자 등록 화면(participant-new.tsx)·당사자 목록·실무자 목록의 기능 배선에 한정한다. CSS·디자인 토큰·DESIGN.md·DESIGN-RULES 는 고치지 않고 .worktrees/DESIGN 의 파일을 건드리지 않는다. 화면 문구에 `워크스페이스`를 쓰지 않는다(GLOSSARY §15). UI 정리는 전체 흐름이 돈 뒤 같은 브랜치의 마지막 단계다"
+  - "화면 범위: web/ 변경은 새 화면(#/signup, #/onboarding)과 라우터·api.ts·설정·당사자 등록 화면(participant-new.tsx)·당사자 목록·실무자 목록의 기능 배선에 한정한다. CSS·디자인 토큰·DESIGN.md·DESIGN-RULES 는 고치지 않고 .worktrees/DESIGN 의 파일을 건드리지 않는다. 화면 문구의 `기관 워크스페이스`는 한 배포의 기관 업무 환경 전체를 뜻하는 말로 쓴다 — 마법사 제목·1단계 만들기·기관 요약 카드·완료 화면(GLOSSARY §15-2, 2026-09-18 Q 확정). 홈·설정 메뉴·사이드바에는 붙이지 않는다. UI 정리는 전체 흐름이 돈 뒤 같은 브랜치의 마지막 단계다"
   - "문서: SPEC.md 에 가입 예외·마법사·API 키 저장·사업 실체(FK·기간·설명·종료 경고·잠금·다시 열기)·역할 변경을 적고, docs/deploy.md 에 기관별 서브도메인 절차와 새 DB 첫 가입 절차를 적는다. 표시명이 바뀌어도 URL·컬럼·라벨 코드는 바꾸지 않는다"
   - "비범위: 메일 발송, 멀티테넌트 org_id, 앱 내 서브도메인 라우팅, 랜딩페이지(내일, 같은 오리진에서 #/signup·로그인으로 링크), STT·Supabase 키 입력, 사업별 새 페이지, 일정 취소 API"
 
@@ -184,7 +184,7 @@ context_references:
     summary: "§18 설정하기·사이드바·규율 넷(초대 전용·열쇠 화면 금지)·§18-5 사업은 고르기만, §22 공동 배정"
   - path: "GLOSSARY.md"
     role: "primary"
-    summary: "§3 역할 셋, §15 이름 규율(워크스페이스 화면 금지, 실무자/담당), /onboarding 은 기관 준비"
+    summary: "§3 역할 셋, §15 이름 규율(실무자/담당) · §15-2 기관 워크스페이스 용어, /onboarding 은 기관 워크스페이스 설정하기"
   - path: "PLAN.md"
     role: "reference"
     summary: "A3 단일 기관 org_id 없음, D1 자체 인증"
