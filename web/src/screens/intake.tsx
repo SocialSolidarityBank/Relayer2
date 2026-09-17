@@ -285,7 +285,7 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
         ],
       };
       if (heldAtIso) body.held_at = heldAtIso;
-      // 방식을 고르지 않았으면 보내지 않는다 — 고쳐 쓰기에서 예전 값을 지우지 않는다.
+      // 방식을 고르지 않았으면 보내지 않는다 — 수정에서 예전 값을 지우지 않는다.
       if (method && INTAKE_METHODS.some((m) => m.key === method)) {
         body.method = method;
         body.place = method === 'in_person' ? place.trim() || null : null;
@@ -388,7 +388,7 @@ export function IntakeScreen({ caseId }: { caseId: number }) {
           {error && <ErrorText>{error}</ErrorText>}
           <Button variant="primary" disabled={saving} onClick={() => void save()}>
             {/* 이미 쓴 인테이크를 다시 열었을 때도 버튼은 `저장`이다.
-                들어올 때 누른 버튼(`고쳐 쓰기`)과 이름이 같으면 같은 일을 또 하는 줄 안다. */}
+                들어올 때 누른 버튼(`수정`)과 이름이 같으면 같은 일을 또 하는 줄 안다. */}
             {saving ? '저장 중…' : written ? '저장' : '저장하고 상담 일정 잡기'}
           </Button>
         </FormActions>

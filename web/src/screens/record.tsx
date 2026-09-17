@@ -105,7 +105,7 @@ export function RecordScreen({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // 늦게 온 응답이 새 화면을 덮지 않게 한다(2026-09-16 검수). 고쳐 쓰기 요청이 날아간 뒤
+    // 늦게 온 응답이 새 화면을 덮지 않게 한다(2026-09-16 검수). 수정 요청이 날아간 뒤
     // `상담 기록하기` 로 넘어가면, 먼저 끝난 새 화면 위에 이전 응답이 내려앉아
     // `editing` 을 지난 회차로 되돌린다 — 그대로 저장하면 그 회차를 덮어쓴다.
     let live = true;
@@ -132,7 +132,7 @@ export function RecordScreen({
         setTasks(rec.cards.filter((c) => c.kind === 'promise').map((c) => ({ text: c.text })));
         setQuestions(rec.cards.filter((c) => c.kind === 'question').map((c) => ({ text: c.text })));
         setOpinion(rec.cards.find((c) => c.kind === 'judgment')?.text ?? '');
-        // 지난번에 매긴 결과를 그대로 다시 세운다. 안 그러면 고쳐 쓰기가 전부 미확인으로 덮는다.
+        // 지난번에 매긴 결과를 그대로 다시 세운다. 안 그러면 수정이 전부 미확인으로 덮는다.
         const prior: Record<number, OutcomeInput> = {};
         for (const c of rec.open_cards) {
           if (!c.result || c.result === 'unchecked') continue;
@@ -147,8 +147,8 @@ export function RecordScreen({
         return;
       }
 
-      // **고쳐 쓰던 회차를 반드시 놓는다**(2026-09-16 검수). 이 화면은 고쳐 쓰기와 새 기록이
-      // 같은 부품이라, 고쳐 쓰기를 열어 둔 채 `상담 기록하기` 로 넘어오면 `editing` 이 남는다.
+      // **고쳐 쓰던 회차를 반드시 놓는다**(2026-09-16 검수). 이 화면은 수정과 새 기록이
+      // 같은 부품이라, 수정을 열어 둔 채 `상담 기록하기` 로 넘어오면 `editing` 이 남는다.
       // 그러면 새로 쓴 글이 PATCH 로 **지난 회차를 덮어쓴다** — 지운 기록은 돌아오지 않는다.
       setEditing(null);
 
@@ -203,7 +203,7 @@ export function RecordScreen({
     });
   /**
    * 회차 id 를 돌려준다. 없으면 sessions/start 로 만든다 — 수기 첫 입력·녹음 시작·
-   * 파일 올리기가 모두 이 한 길을 지난다. 두 번 부르지 않는다(계약).
+   * 파일 업로드가 모두 이 한 길을 지난다. 두 번 부르지 않는다(계약).
    */
   const ensureSession = (): Promise<number> => {
     if (editing) return Promise.resolve(editing.session_id);
@@ -289,7 +289,7 @@ export function RecordScreen({
         pseudonym={briefing.participant_card.pseudonym}
         details={[
           ['당사자 ID', briefing.participant_card.pseudonym],
-          ['참여 사업', `${briefing.participant_card.program_name}, ${seq}회차${editing ? ' 고쳐 쓰기' : ''}`],
+          ['참여 사업', `${briefing.participant_card.program_name}, ${seq}회차${editing ? ' 수정' : ''}`],
           ['연락처', detail?.participant.phone ?? ''],
           ['이메일', detail?.participant.email ?? ''],
         ]}        actions={
@@ -535,8 +535,8 @@ export function RecordScreen({
               disabled={(!memo.trim() && !startedId && !editing) || !heldAtIso || saving}
               onClick={() => void save()}
             >
-              {/* 고쳐 쓰기 화면에서도 저장 버튼은 `저장`이다. 들어올 때 누른 버튼과 이름이 같으면
-                  같은 일을 또 하는 줄 안다(2026-09-15 예행연습). 화면 제목이 이미 고쳐 쓰기라고 말한다. */}
+              {/* 수정 화면에서도 저장 버튼은 `저장`이다. 들어올 때 누른 버튼과 이름이 같으면
+                  같은 일을 또 하는 줄 안다(2026-09-15 예행연습). 화면 제목이 이미 수정이라고 말한다. */}
               {saving ? '저장 중…' : isClosing ? '저장하고 종결로' : '저장'}
             </Button>
           </FormActions>

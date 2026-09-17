@@ -75,12 +75,12 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
   await expect(row).toContainText('녹음 1');
   await expect(row).toContainText('전사 건너뜀');
 
-  // ── 원문 보기 — `회차별 전문 보기` 탭이 그 입구다 ───────────
-  // 화면 이름과 구획(2026-09-17 Q): `상담 내용 원문 보기` · `수기 기록`·`음성 기록` 접힘 카드.
-  await page.getByRole('tab', { name: '회차별 전문 보기' }).click();
+  // ── 원문 보기 — `회차별 원본 보기` 탭이 그 입구다 ───────────
+  // 화면 이름과 구획(2026-09-17 Q): `상담 내용 원본 보기` · `수기 기록`·`음성 기록` 접힘 카드.
+  await page.getByRole('tab', { name: '회차별 원본 보기' }).click();
   await page
     .locator('.wire-repeat-card', { hasText: '1회차' })
-    .getByRole('button', { name: '전문 보기' })
+    .getByRole('button', { name: '원본 보기' })
     .click();
   await expect(page).toHaveURL(/\/full$/);
   await expect(page.locator('.page-header')).toContainText('1회차');

@@ -1,5 +1,5 @@
 // 당사자 정보 — **당사자 카드(HERO)가 머리**이고 그 아래 탭 4개가 화면을 가른다
-// (2026-09-17 Q): 당사자 정보 · 회차별 요약 · 회차별 전문 보기 · 목표.
+// (2026-09-17 Q): 당사자 정보 · 회차별 요약 · 회차별 원본 보기 · 목표.
 // 15초 다시보기는 폐지했다(2026-09-17 Q) — 화면·탭·버튼 어디에도 두지 않는다.
 import { useEffect, useState, type ReactNode } from 'react';
 import {
@@ -38,7 +38,7 @@ import {
   ParticipantHero,
 } from '../ui.tsx';
 
-const TABS = ['당사자 정보', '회차별 요약', '회차별 전문 보기', '목표'] as const;
+const TABS = ['당사자 정보', '회차별 요약', '회차별 원본 보기', '목표'] as const;
 type Tab = (typeof TABS)[number];
 
 const dateLabel = (iso: string | null): string => {
@@ -138,7 +138,7 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
     <>
       {/* 이 탭은 **이 사례의 지금 상태와 회차 기록**이다(2026-09-17 Q — 15초 다시보기 폐지로
           다시 정의). 맨 위가 위험 신호, 그 아래가 회차 목록이다. 목표는 `목표` 탭, 전문은
-          `회차별 전문 보기` 탭, 확인할 과제·오늘 물어볼 것은 상담 기록하기의 레일이 갖는다. */}
+          `회차별 원본 보기` 탭, 확인할 과제·오늘 물어볼 것은 상담 기록하기의 레일이 갖는다. */}
       <RiskBanner caseId={caseId} />
       <Card title="회차별 요약" hint="회차 줄은 기록 상태예요. 승인한 AI 정리는 아래 접힌 카드에 있어요.">
         {done.map((s) => {
@@ -159,7 +159,7 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
                 }
                 action={
                 <>
-                  {/* 원문은 `회차별 전문 보기` 탭이 유일한 입구다(2026-09-17 Q). 요약 줄에서
+                  {/* 원문은 `회차별 원본 보기` 탭이 유일한 입구다(2026-09-17 Q). 요약 줄에서
                       수기 본문을 펼치던 `원문 보기`는 그 탭의 부분집합이라 걷었다 —
                       요약은 상태와 AI 정리, 전문은 원문이다(§4 탭별 성격). */}
                   <Button
@@ -169,13 +169,13 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
                   </Button>
                   {s.kind === 'intake' ? (
                     <Button onClick={() => (window.location.hash = `#/cases/${caseId}/intake`)}>
-                      고쳐 쓰기
+                      수정
                     </Button>
                   ) : (
                     <Button
                       onClick={() => (window.location.hash = `#/cases/${caseId}/sessions/${s.id}/edit`)}
                     >
-                      고쳐 쓰기
+                      수정
                     </Button>
                   )}
                 </>
@@ -527,20 +527,20 @@ function Documents({ caseId }: { caseId: number }) {
 }
 
 /**
- * 회차별 전문 보기 탭 — 회차를 골라 **수기·음성 전문**으로 간다(2026-09-17 Q).
- * 전문 자체는 `상담 내용 원문 보기` 화면이 그린다. 두 벌로 만들지 않는다.
+ * 회차별 원본 보기 탭 — 회차를 골라 **수기·음성 전문**으로 간다(2026-09-17 Q).
+ * 전문 자체는 `상담 내용 원본 보기` 화면이 그린다. 두 벌로 만들지 않는다.
  */
 function Fulls({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
   const done = detail.sessions.filter((s) => s.status === 'done');
   if (done.length === 0) {
     return (
-      <Card title="회차별 전문 보기">
+      <Card title="회차별 원본 보기">
         <Empty>아직 기록한 상담이 없어요.</Empty>
       </Card>
     );
   }
   return (
-    <Card title="회차별 전문 보기" hint="회차를 고르면 그 회차의 수기·음성 전문을 읽어요.">
+    <Card title="회차별 원본 보기" hint="회차를 고르면 그 회차의 수기·음성 전문을 읽어요.">
       {done.map((s) => (
         <div className="wire-repeat-card" key={s.id}>
           <Item
@@ -762,7 +762,7 @@ export function ParticipantInfoScreen({ caseId }: { caseId: number }) {
 
         {tab === '당사자 정보' && <Info detail={detail} caseId={caseId} />}
         {tab === '회차별 요약' && <Sessions detail={detail} caseId={caseId} />}
-        {tab === '회차별 전문 보기' && <Fulls detail={detail} caseId={caseId} />}
+        {tab === '회차별 원본 보기' && <Fulls detail={detail} caseId={caseId} />}
         {tab === '목표' && <Goals detail={detail} />}
       </div>
     </>

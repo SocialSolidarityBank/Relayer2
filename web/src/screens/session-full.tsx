@@ -1,4 +1,4 @@
-// 상담 내용 원문 보기(2026-09-16 인계 · 이름은 2026-09-17 Q — 구 `수기·음성 전문`).
+// 상담 내용 원본 보기(2026-09-16 인계 · 이름은 2026-09-17 Q — 구 `수기·음성 전문`).
 // 회차별 요약의 `전문 보기`가 여기로 온다. 읽기 전용이다 — 편집·승인은 상담 기록하기가 담당한다.
 import { useEffect, useRef, useState } from 'react';
 import { getCaseDetail, getSessionRecord, type CaseDetail, type SessionRecord } from '../api.ts';

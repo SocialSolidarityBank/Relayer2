@@ -115,7 +115,7 @@ export function Routes() {
     if (inSettings) return <SettingsScreen module={inSettings[1]} me={me} />;
     if (path === '#/participants/new') return <ParticipantNewScreen />;
 
-    // 저장해 둔 회차 고쳐 쓰기. 기록 화면을 그대로 쓰되 대상 회차를 준다.
+    // 저장해 둔 회차 수정. 기록 화면을 그대로 쓰되 대상 회차를 준다.
     const editing = path.match(/^#\/cases\/(\d+)\/sessions\/(\d+)\/edit$/);
     if (editing)
       return (
@@ -136,7 +136,7 @@ export function Routes() {
     const byCase = path.match(/^#\/cases\/(\d+)\/(record|schedule|intake|info|close)$/);
     if (byCase) {
       const caseId = Number(byCase[1]);
-            // `key` 로 갈아 끼운다. 고쳐 쓰기와 새 기록이 같은 부품이라 상태가 새면 남의 회차를 덮는다.
+            // `key` 로 갈아 끼운다. 수정과 새 기록이 같은 부품이라 상태가 새면 남의 회차를 덮는다.
       if (byCase[2] === 'record')
         return <RecordScreen key={`new-${caseId}`} caseId={caseId} startClosing={query.get('closing') === '1'} />;
       if (byCase[2] === 'intake') return <IntakeScreen caseId={caseId} />;

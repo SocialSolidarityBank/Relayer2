@@ -542,7 +542,7 @@ export function LineList({
         <div className="wire-repeat-card" key={`${line.text}-${i}`}>
           <Item
             title={`${withArea ? `${LIFE_AREAS.find((a) => a.key === line.area)?.label} | ` : ''}${line.text}`}
-            action={<Button onClick={() => onChange(lines.filter((_, j) => j !== i))}>지우기</Button>}
+            action={<Button onClick={() => onChange(lines.filter((_, j) => j !== i))}>삭제</Button>}
           />
         </div>
       ))}

@@ -1,6 +1,6 @@
 // 상담 녹음 패널과 음성·수기 기록 불일치 접이는 카드. 상담 기록하기(record.tsx)에 붙는다.
 //
-//   시작이 곧 회차 — 녹음 시작·파일 올리기·수기 첫 입력이 sessions/start 를 부른다.
+//   시작이 곧 회차 — 녹음 시작·파일 업로드·수기 첫 입력이 sessions/start 를 부른다.
 //   업로드는 즉시 끝나고 전사는 서버가 뒤에서 돌린다. 화면은 상태만 보여 준다.
 //   전사 초안은 승인 전에도 보인다. 승인(전사 확인)은 불일치 비교·기록 반영에만 문이다.
 //
@@ -239,7 +239,7 @@ export function RecordingPanel({
       const id = await ensureSession();
       if (!alive.current) return;
       if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
-        throw new Error('이 브라우저는 바로 녹음을 지원하지 않아요. 파일 올리기로 올려 주세요.');
+        throw new Error('이 브라우저는 바로 녹음을 지원하지 않아요. 파일 업로드로 올려 주세요.');
       }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       // 권한 창이 떠 있는 사이 화면을 나갔으면, 방금 얻은 마이크를 즉시 놓는다.
@@ -274,7 +274,7 @@ export function RecordingPanel({
       if (e instanceof DOMException && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) {
         setError('마이크 사용을 허용해 주세요. 브라우저 주소창의 권한을 확인해요.');
       } else if (e instanceof DOMException && e.name === 'NotFoundError') {
-        setError('마이크를 찾지 못했어요. 파일 올리기로 올려 주세요.');
+        setError('마이크를 찾지 못했어요. 파일 업로드로 올려 주세요.');
       } else {
         guard(e);
       }
@@ -413,7 +413,7 @@ export function RecordingPanel({
           disabled={busy !== null || recording}
           onClick={() => fileRef.current?.click()}
         >
-          파일 올리기
+          파일 업로드
         </Button>
       </FormActions>
       <input
