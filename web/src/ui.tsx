@@ -250,11 +250,14 @@ export function ParticipantHero({
 export function Card({
   title,
   hint,
+  action,
   children,
   className,
 }: {
   title?: string;
   hint?: ReactNode;
+  /** 제목과 같은 행 오른쪽 끝에 서는 행동 하나(이식 `.wire-card-head`). */
+  action?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
@@ -262,7 +265,16 @@ export function Card({
     <section className={className ? `surface-card wire-card ${className}` : 'surface-card wire-card'}>
       {title && (
         <>
-          <h2 className="wire-card-title">{title}</h2>
+          {action ? (
+            <div className="wire-card-title">
+              <div className="wire-card-head">
+                <h2>{title}</h2>
+                {action}
+              </div>
+            </div>
+          ) : (
+            <h2 className="wire-card-title">{title}</h2>
+          )}
           <div className="wire-card-divider" />
         </>
       )}
@@ -325,7 +337,11 @@ export function Fold({
         </span>
         <span className="wire-card-summary-right">
           {action}
-          <Chevron dir="down" />
+          {/* 꺽쇠는 그라데이션 테두리 원 안에 든다(이식 `.wire-chevron-button`, CCC·릴레이어1과 같다).
+              펼치면 이식 CSS 가 180도 돌리고, 면은 `app.css` 가 반전시킨다. */}
+          <span className="wire-chevron-button wire-disclosure-chevron" aria-hidden="true">
+            <Chevron dir="down" />
+          </span>
         </span>
       </summary>
       <div className="wire-card-body">{children}</div>

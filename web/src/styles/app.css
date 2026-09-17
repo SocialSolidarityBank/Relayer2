@@ -218,5 +218,16 @@ body { margin: 0; }
 .doc-upload-row > .wire-button { flex: none; }
 .doc-upload-box { flex: 1 1 320px; min-width: 0; display: flex; align-items: center; gap: var(--space-2); padding-inline-start: var(--space-1-5); }
 .doc-upload-box > input { flex: 1 1 auto; min-width: 0; }
-.doc-upload-pick { flex: none; min-height: 30px; }
+.doc-upload-pick { flex: none; min-height: 30px; border-radius: var(--radius-control); }
+/* 안내 한 줄은 선택 줄 아래, 가로선 하나 뒤다. 위아래 여백은 카드 본문 여백과 같은 24 다. */
+.doc-upload-note { margin-top: var(--space-6); padding-top: var(--space-6); border-top: 1px solid var(--line); }
+.doc-upload-note > p { margin: 0; }
 .doc-upload-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+/* 펼친 접힘 카드의 꺽쇠 원(2026-09-17 Q). 이식 `.wire-chevron-button` 은 면 `--panel` +
+   글리프 `--ink` 라 두 테마에서 스스로 반전한다(라이트: 흰 원·진한 꺽쇠, 다크: 어두운 원·
+   밝은 꺽쇠). 펼친 머리는 두 테마 모두 같은 파스텔이므로 테두리만 `--line-on-action` 으로
+   바꿔 원의 윤곽이 면에 묻히지 않게 한다. */
+.wire-card-details[open] > .wire-card-summary .wire-chevron-button {
+  border-color: var(--line-on-action);
+}
