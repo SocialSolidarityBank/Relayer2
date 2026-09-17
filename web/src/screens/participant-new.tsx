@@ -186,6 +186,7 @@ export function ParticipantNewScreen() {
             (`ConsentLinkCard`)이며 여기서는 누르면 먼저 등록하고 곧바로 링크를 발급한다 —
             사례가 없으면 링크를 만들 수 없기 때문이다. */}
         <ConsentLinkCard
+          status={issued ? 'active' : 'none'}
           link={issued ? `${window.location.origin}/#/access/${issued.token}` : null}
           code={issued?.code ?? null}
           busy={saving === 'link'}

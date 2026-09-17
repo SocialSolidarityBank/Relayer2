@@ -40,6 +40,7 @@ import {
   Meta,
   ParticipantHero,
 } from '../ui.tsx';
+import { ConsentLinkCard } from '../consent-link.tsx';
 import { Dialog } from '../dialog.tsx';
 
 const TABS = ['당사자 정보', '회차별 요약', '회차별 원본 보기', '목표'] as const;
@@ -448,6 +449,7 @@ function Consents({ caseId }: { caseId: number }) {
 /**
  * 당사자 열람 링크(P2). 당사자는 로그인하지 않는다 — 링크와 코드를 전해 준다.
  * **코드는 발급 직후 한 번만 보인다.** 저장해 두지 않는다(해시만 남는다).
+ * 카드는 당사자 등록과 같은 부품이다(`consent-link.tsx`) — 여기는 발급과 끊기만 맡는다.
  */
 function Access({ caseId }: { caseId: number }) {
   const [state, setState] = useState<AccessState | null>(null);
@@ -483,52 +485,25 @@ function Access({ caseId }: { caseId: number }) {
   };
 
   return (
-    <Card
-      /**
-       * 이 카드가 하는 일(2026-09-17 Q): 당사자 등록에서 초대로 동의를 받는 것이 기본이고,
-       * 실무자가 직접 작성해 버린 경우에 **동의를 받으려고 보내는 링크**를 만드는 자리다.
-       * 그래서 이름과 안내를 동의 쪽 말로 바꿨다. 열람 동선 설명은 걷었다.
-       */
-      title="개인정보 및 민감정보 처리 동의 링크"
-      // 만들기 버튼은 제목과 같은 행 오른쪽 끝이다(2026-09-17 Q). `링크 끊기` 는 링크가
-      // 살아 있을 때만 본문 아래에 남는다 — 위험 행동을 제목 줄에 함께 세우지 않는다.
-      action={
-        state && (
-          <Button variant="primary" disabled={busy} onClick={() => void issue()}>
-            {state.active ? '새로 만들기' : '링크 만들기'}
-          </Button>
-        )
-      }
+    <ConsentLinkCard
+      status={state === null ? 'loading' : state.active ? 'active' : 'none'}
+      link={link}
+      code={issued?.code ?? null}
+      busy={busy}
+      makeLabel="링크 만들기"
+      onMake={() => void issue()}
     >
-      {state === null ? (
-        <Empty>불러오는 중</Empty>
-      ) : (
-        <>
-          {!issued && !state.active && <Empty>만든 링크 없음</Empty>}
-          {issued && link && (
-            <div className="wire-repeat-card">
-              <p className="panel-meta">코드는 지금 한 번만 표시</p>
-              <DataRows
-                rows={[
-                  ['링크', link],
-                  ['확인 코드', issued.code],
-                ]}
-              />
-            </div>
-          )}
-          {state.active && (
-            <FormActions>
-              {/* `잠그기` 는 무엇이 잠기는지 읽히지 않았다(2026-09-17 Q). 서버는 링크를
-                  폐기 표시(`revoked_at`)만 하고 기록은 남기므로 `삭제` 도 사실이 아니다 —
-                  링크가 더는 안 열린다는 뜻의 `링크 끊기` 로 적는다. */}
-              <Button disabled={busy} onClick={() => void revoke()}>
-                링크 끊기
-              </Button>
-            </FormActions>
-          )}
-        </>
+      {state?.active && (
+        <FormActions>
+          {/* `잠그기` 는 무엇이 잠기는지 읽히지 않았다(2026-09-17 Q). 서버는 링크를
+              폐기 표시(`revoked_at`)만 하고 기록은 남기므로 `삭제` 도 사실이 아니다 —
+              링크가 더는 안 열린다는 뜻의 `링크 끊기` 로 적는다. */}
+          <Button disabled={busy} onClick={() => void revoke()}>
+            링크 끊기
+          </Button>
+        </FormActions>
       )}
-    </Card>
+    </ConsentLinkCard>
   );
 }
 

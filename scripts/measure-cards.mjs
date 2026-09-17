@@ -44,8 +44,12 @@ const measure = () => {
   const out = [];
   const near = (a, b) => Math.abs(a - b) <= 1;
   for (const card of document.querySelectorAll('.wire-card, .participant-card, .participant-hero-card')) {
+    if (card.getBoundingClientRect().width === 0) continue;
+    // 2열 목록은 줄마다 등높이다(`height:100%`, wire.css:252) — 짧은 카드는 늘어난 만큼
+    // 아래가 벌어져서 여백이 아니라 늘림을 재게 된다(실측 B=43.6). 재는 동안만 늘림을 끈다.
+    const keepHeight = card.style.height;
+    card.style.height = 'auto';
     const r = card.getBoundingClientRect();
-    if (r.width === 0) continue;
     const cs = getComputedStyle(card);
     const pad = parseFloat(cs.paddingLeft) + parseFloat(cs.borderLeftWidth);
     const padY = parseFloat(cs.paddingTop) + parseFloat(cs.borderTopWidth);
@@ -57,6 +61,7 @@ const measure = () => {
       const s = card.querySelector('.wire-card-summary').getBoundingClientRect();
       const l = s.left - r.left, rt = r.right - s.right, t = s.top - r.top, b = r.bottom - s.bottom;
       out.push({ kind: 'fold', name: title, pass: [l, rt, t, b].every((v) => near(v, border)), detail: `border=${border} L=${l.toFixed(1)} R=${rt.toFixed(1)} T=${t.toFixed(1)} B=${b.toFixed(1)}` });
+      card.style.height = keepHeight;
       continue;
     }
     // 펼친 접힘 카드의 머리는 음수 마진으로 아웃라인까지 나간다 — 본문만 잰다. 풀블리드 구분선도 뺀다.
@@ -65,7 +70,7 @@ const measure = () => {
       const kr = k.getBoundingClientRect();
       return kr.width > 0 && kr.height > 0;
     });
-    if (kids.length === 0) continue;
+    if (kids.length === 0) { card.style.height = keepHeight; continue; }
     const first = kids[0].getBoundingClientRect();
     const last = kids[kids.length - 1].getBoundingClientRect();
     const left = first.left - r.left;
@@ -78,6 +83,7 @@ const measure = () => {
       pass: near(padY, pad) && (isFold ? near(left, pad) && near(right, pad) && near(bottom, pad) : near(left, pad) && near(right, pad) && near(top, pad) && near(bottom, pad)),
       detail: `pad=${pad}/${padY} L=${left.toFixed(1)} R=${right.toFixed(1)} T=${top.toFixed(1)} B=${bottom.toFixed(1)}${isFold ? ' (open)' : ''}`,
     });
+    card.style.height = keepHeight;
   }
   for (const b of document.querySelectorAll('.wire-button')) {
     const t = b.querySelector('.wire-button-text');
