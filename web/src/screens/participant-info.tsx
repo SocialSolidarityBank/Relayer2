@@ -1,6 +1,6 @@
 // 당사자 정보 — **당사자 카드(HERO)가 머리**이고 그 아래 탭 4개가 화면을 가른다
 // (2026-09-17 Q): 당사자 정보 · 회차별 요약 · 회차별 전문 보기 · 목표.
-// 15초 다시보기는 카드의 행동 버튼으로 간다(구 5번째 탭 대체 — 회차 고르기는 그 화면이 갖는다).
+// 15초 다시보기는 폐지했다(2026-09-17 Q) — 화면·탭·버튼 어디에도 두지 않는다.
 import { useEffect, useState } from 'react';
 import {
   documentHref,
@@ -553,17 +553,12 @@ export function ParticipantInfoScreen({ caseId }: { caseId: number }) {
         pseudonym={detail.pseudonym}
         details={heroDetails}
         actions={
-          <>
-            <Button onClick={() => (window.location.hash = `#/cases/${caseId}/briefing`)}>
-              15초 다시보기
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => (window.location.hash = `#/cases/${caseId}/record`)}
-            >
-              상담 기록하기
-            </Button>
-          </>
+          <Button
+            variant="primary"
+            onClick={() => (window.location.hash = `#/cases/${caseId}/record`)}
+          >
+            상담 기록하기
+          </Button>
         }
       />
       <div className="wire-container">

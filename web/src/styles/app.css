@@ -11,9 +11,39 @@ body { margin: 0; }
 
 .home-open { display: inline-flex; gap: var(--space-2); margin-left: var(--space-2); vertical-align: middle; }
 
-.info-tabs { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-4); }
-.info-tabs .wire-step { cursor: pointer; }
-.info-tabs .wire-step[aria-selected="true"] { border-color: var(--ink); background: var(--ink); color: var(--on-badge); }
+/* 당사자 카드 아래 탭 = **토글 상자**(2026-09-17 Q — CCC 2026-09-09 시안
+   `artifacts/2026-09-09-workflow-prototypes/prototype.css` 의 `.participant-tabs` 를 가져왔다).
+   상자는 `--panel` 면 + `--gradient-brand` 1px 아웃라인(선택 어휘와 같은 테두리)이고,
+   고른 탭만 `--gradient-action` 으로 채운다 — 버튼·켠 체크와 같은 '고른 것' 어휘다.
+   칸은 같은 폭으로 나눠 토글로 읽히게 한다. 767 이하는 2열이다. */
+.info-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  padding: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-card);
+  background: linear-gradient(var(--panel), var(--panel)) padding-box, var(--gradient-brand) border-box;
+}
+.info-tabs .wire-step {
+  width: 100%;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--sub);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.info-tabs .wire-step[aria-selected="true"] {
+  background: var(--gradient-action);
+  color: var(--on-action);
+  font-weight: 600;
+}
+@media (max-width: 767px) {
+  .info-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .info-original { margin: var(--space-2) 0 0; padding: var(--space-3); border-radius: var(--radius-md); background: var(--panel-alt, var(--panel)); color: var(--ink); white-space: pre-wrap; }
 /* 회차별 요약 안 승인된 AI 정리(2026-09-16 검수). 원문 위, 제목 아래 본문 단이다.
    grid 항목은 min-width:auto 라 안의 nowrap 글자가 폭을 밀어낸다 — 항목마다 0 을 박는다. */

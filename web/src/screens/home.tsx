@@ -1,5 +1,5 @@
 // 홈 — 다가오는 상담. 아침에 열어서 오늘 누구를 만나는지 보는 자리다.
-// 여기서 15초 다시보기로 바로 넘어간다.
+// 여기서 그 사람의 당사자 정보로 바로 넘어간다(2026-09-17 Q — 15초 다시보기 폐지).
 import { useEffect, useState } from 'react';
 import { listSchedules, type ScheduleRow } from '../api.ts';
 import { Badge, Button, Card, Empty, Item, PageHeader } from '../ui.tsx';
@@ -75,8 +75,8 @@ export function HomeScreen() {
                   </>
                 }
                 action={
-                  <Button onClick={() => (window.location.hash = `#/cases/${row.case_id}/briefing`)}>
-                    15초 다시보기
+                  <Button onClick={() => (window.location.hash = `#/cases/${row.case_id}/info`)}>
+                    당사자 정보
                   </Button>
                 }
               />
