@@ -27,8 +27,33 @@ export type ConsentDecision = (typeof CONSENT_DECISIONS)[number];
  *
  * 판이 바뀌면 이미 받은 동의는 전부 `확인 필요`로 떨어진다. 설계대로다 —
  * **문안이 바뀌면 그 문안에 동의한 적 없는 사람이 된다.**
+ *
+ * 코드 판은 **바닥값**이다(2026-09-18 Q D6). 관리자가 설정에서 고치면 `consent_copy` 표에 새 판
+ * (`consent-standard-form-v<N+1>`)이 쌓이고, 서버는 그것을 우선한다(`consent-copy.ts`).
+ * `copyVersion()`·`copyText()` 가 지금 판을 낸다 — 상수를 직접 읽지 않는다.
  */
-export const COPY_VERSION = 'consent-standard-form-v3';
+export const CODE_COPY_VERSION = 'consent-standard-form-v3';
+
+/** 관리자가 고칠 수 있는 칸. 나머지(label·purpose·provider·retentionDuration)는 코드 정본이다. */
+export type EditableCopy = {
+  copy: string;
+  items: string[];
+  purposeText: string;
+  retentionText: string;
+  refusalText: string;
+};
+
+let live: { version: string; text: Partial<Record<ConsentDomain, EditableCopy>> } = {
+  version: CODE_COPY_VERSION,
+  text: {},
+};
+
+/** DB 에서 읽은 판을 앉힌다. 서버 시작과 관리자 저장 뒤에 `consent-copy.ts` 가 부른다. */
+export function setLiveCopy(version: string, text: Partial<Record<ConsentDomain, EditableCopy>>): void {
+  live = { version, text };
+}
+
+export const copyVersion = (): string => live.version;
 
 /** 승인된 LLM 제공자. 여기 없는 곳으로는 보내지 않는다. */
 export const AI_PROVIDERS = {
@@ -168,6 +193,9 @@ export const CONSENT_COPY: Record<ConsentDomain, DomainCopy> = {
   },
 };
 
+/** 지금 쓰는 문안 — DB 판이 있으면 그것, 없으면 코드 정본. 해시와 화면이 같은 것을 본다. */
+export const copyText = (domain: ConsentDomain): DomainCopy => ({ ...CONSENT_COPY[domain], ...live.text[domain] });
+
 /**
  * 문안 해시의 원문(정본 §2.1). 외부 수신자가 없는 영역은 provider 세 칸이 `<null>` 이고,
  * 외부 LLM 처럼 수신자가 있으면 그 스냅샷이 해시에 함께 묶인다 — 수신자가 바뀌면 동의도 다시 받는다.
@@ -175,7 +203,7 @@ export const CONSENT_COPY: Record<ConsentDomain, DomainCopy> = {
  */
 export function canonicalPreimage(domain: ConsentDomain): string {
   const { label, copy, purpose, provider, retentionDuration, items, purposeText, retentionText, refusalText } =
-    CONSENT_COPY[domain];
+    copyText(domain);
   const lines = [
     `domain=${domain}`,
     `label=${label}`,
@@ -251,6 +279,6 @@ export function foldConsent(domain: ConsentDomain, events: ConsentEventRow[]): C
   const last = mine.at(-1);
   if (!last) return 'unconfirmed';
   if (last.decision !== 'grant') return 'not_granted';
-  if (last.copy_version !== COPY_VERSION || last.copy_hash !== copyHash(domain)) return 'unconfirmed';
+  if (last.copy_version !== copyVersion() || last.copy_hash !== copyHash(domain)) return 'unconfirmed';
   return 'granted';
 }

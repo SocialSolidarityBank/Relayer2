@@ -88,6 +88,8 @@ export type Session = {
   place: string | null;
   plan_memo: string | null;
   held_at: string | null;
+  /** 소요 분(2026-09-18 Q D4). 종료 시각은 화면이 분으로 바꿔 보낸다. */
+  duration_min: number | null;
   memo: string | null;
   detail: Record<string, unknown>;
   today_goal_text: string | null;

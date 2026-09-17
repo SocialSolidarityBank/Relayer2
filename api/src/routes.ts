@@ -26,12 +26,14 @@ import { audit, auditCsv, auditSummary, listAudit, AUDIT_KIND_LIST } from './aud
 import { accessState, issueAccess, openAccess, revokeAccess } from './participant-access.ts';
 import {
   activeDomains,
-  CONSENT_COPY,
   CONSENT_DECISIONS,
   CONSENT_DOMAINS,
-  COPY_VERSION,
   copyHash,
+  copyText,
+  copyVersion,
 } from './consent.ts';
+import { putConsentCopy } from './consent-copy.ts';
+import { listRevisions, NothingToRevise, REVISION_KINDS, reviseSession } from './revisions.ts';
 import { CARD_OWNERS, LIFE_AREAS } from './domain/types.ts';
 import * as service from './service.ts';
 import * as settings from './settings.ts';
@@ -55,6 +57,8 @@ const area = z.enum(LIFE_AREAS);
 const sessionMethod = z.enum(['in_person', 'phone', 'video', 'visit', 'other']);
 // 상담 일시는 ISO datetime 만 받는다 — 잘못 들어온 날짜가 조용히 저장되지 않게.
 const isoDateTime = z.string().datetime({ offset: true });
+// 소요 분(2026-09-18 Q D4). 종료 시각은 화면이 분으로 바꿔 보낸다. null 은 지움, 안 보내면 그대로.
+const durationMin = z.number().int().positive().max(24 * 60).nullable().optional();
 
 const cardInput = z.object({
   kind: z.enum(['fact', 'question', 'promise', 'judgment']),
@@ -86,7 +90,8 @@ app.onError((err, c) => {
     err instanceof CaseClosed ||
     err instanceof ProgramRetired ||
     err instanceof service.SessionAlreadyStarted ||
-    err instanceof service.GoalLocked
+    err instanceof service.GoalLocked ||
+    err instanceof NothingToRevise
   ) {
     return c.json({ error: err.message }, 409);
   }
@@ -312,6 +317,7 @@ app.post('/cases/:id/sessions', async (c) => {
       place: z.string().nullable().optional(),
       plan_memo: z.string().optional(),
       is_closing: z.boolean().optional(),
+      duration_min: durationMin,
     })
     .parse(await c.req.json());
   if (body.place && body.method !== 'in_person') {
@@ -343,7 +349,8 @@ app.get('/cases/:id', async (c) => {
   return found ? c.json(found) : c.json({ error: '사례 없음' }, 404);
 });
 
-app.get('/sessions/:id', async (c) => {
+// `/detail` 은 ui-plan §4 계약의 이름이다. 같은 것을 낸다 — `stale`·`duration_min` 이 실려 있다.
+app.on('GET', ['/sessions/:id', '/sessions/:id/detail'], async (c) => {
   const sessionId = await sessionAccess(c.req.param('id'), c.get('actor').id);
   const found = await service.getSessionRecord(sessionId);
   return found ? c.json(found) : c.json({ error: '회차 없음' }, 404);
@@ -364,6 +371,7 @@ app.patch('/sessions/:id', async (c) => {
       cards: z.array(cardInput).optional(),
       outcomes: z.array(outcomeInput).optional(),
       is_closing: z.boolean().optional(),
+      duration_min: durationMin,
     })
     .parse(await c.req.json());
   return c.json(await service.recordSession(sessionId, { ...body, actorId: c.get('actor').id }));
@@ -382,6 +390,31 @@ app.patch('/sessions/:id/next-goal', async (c) => {
   const body = z.object({ next_goal_text: z.string().nullable() }).parse(await c.req.json());
   await service.updateNextGoal(sessionId, body.next_goal_text?.trim() || null);
   return c.json({ ok: true });
+});
+
+/**
+ * 다음 상담 목표를 줄 배열로(2026-09-18 Q D5). 대상 회차는 detail 의 `pending_next_goal` 과 같고,
+ * 서버가 '\n' 으로 이어 기존 컬럼에 둔다. 빈 줄은 버린다.
+ */
+app.patch('/cases/:id/next-goals', async (c) => {
+  const caseId = await caseAccess(c.req.param('id'), c.get('actor').id);
+  const body = z.object({ lines: z.array(z.string()) }).parse(await c.req.json());
+  return c.json({ ok: true, ...(await service.updateNextGoalLines(caseId, body.lines)) });
+});
+
+/**
+ * 회차 원본 리비전(2026-09-18 Q D3). 수기·전사·요약을 편집 모드로 고치고 로그를 쌓는다.
+ * 파생물은 자동 재처리하지 않는다 — detail 의 `stale` 이 배지를 붙이고 사람이 다시 돌린다.
+ */
+app.post('/sessions/:id/revisions', async (c) => {
+  const sessionId = await sessionAccess(c.req.param('id'), c.get('actor').id);
+  const body = z.object({ kind: z.enum(REVISION_KINDS), text: z.string().trim().min(1) }).parse(await c.req.json());
+  return c.json(await reviseSession(sessionId, c.get('actor').id, body.kind, body.text), 201);
+});
+
+app.get('/sessions/:id/revisions', async (c) => {
+  const sessionId = await sessionAccess(c.req.param('id'), c.get('actor').id);
+  return c.json(await listRevisions(sessionId));
 });
 
 const consentInput = z.object({
@@ -860,6 +893,54 @@ app.get('/settings/workers/:id/cases', async (c) => {
   return c.json(await settings.workerCases(userId));
 });
 
+// ── UI 개편 L5 계약(docs/ui-plan-2026-09-18.md §4, 2026-09-18) ────────────────
+
+/** 담당 중인 당사자 팝업(J1). 본인 것은 배정 목록과 같아 감사에 안 남고, 남의 것은 이름을 실으므로 남는다. */
+app.get('/users/:id/cases', async (c) => {
+  const userId = positiveId(c.req.param('id'));
+  const me = c.get('actor');
+  if (me.role !== 'admin' && me.id !== userId) return c.json({ error: '본인이 맡은 당사자만 열람 가능' }, 403);
+  const rows = await settings.userCases(userId);
+  if (me.id !== userId && rows.some((r) => r.name)) {
+    await audit({ actorId: me.id, action: 'assign.view', fields: ['name', `user=${userId}`] });
+  }
+  return c.json(rows);
+});
+
+/** 담당 실무자 배정 목록(J3). 이름·연락처·이메일을 실으므로 한 번 남긴다(10분 접힘). */
+app.get('/assign/cases', async (c) => {
+  if (adminOnly(c)) return c.json(DENY, 403);
+  const rawProgram = c.req.query('program');
+  const page = Math.max(1, Math.floor(Number(c.req.query('page')) || 1));
+  const out = await settings.assignCases({
+    q: (c.req.query('q') ?? '').trim(),
+    programId: rawProgram ? positiveId(rawProgram) : null,
+    page,
+  });
+  if (out.items.length > 0) {
+    await audit({ actorId: c.get('actor').id, action: 'assign.view', fields: ['name', 'phone', 'email'] });
+  }
+  return c.json({ ...out, page, page_size: settings.ASSIGN_PAGE });
+});
+
+/** 배정 전체 치환(J3·D7). `/settings/assign` 과 같은 일이다 — 계약 경로로도 연다. */
+app.put('/cases/:id/assignments', async (c) => {
+  if (adminOnly(c)) return c.json(DENY, 403);
+  const caseId = positiveId(c.req.param('id'));
+  const body = z.object({ user_ids: z.array(z.number().int().positive()) }).parse(await c.req.json());
+  const out = await settings.assign(c.get('actor').id, caseId, body.user_ids);
+  if ('error' in out) return c.json(out, out.error === '사례 없음' ? 404 : 409);
+  return c.json({ ok: true, assignees: (await settings.listAssignments()).find((a) => a.id === caseId)?.assignees ?? [] });
+});
+
+/** 배정 요청 승인(J4). 승인 트랜잭션에서 `case_assignments` 에 넣는다(`decideRequest`). */
+app.post('/assignment-requests/:id/approve', async (c) => {
+  if (adminOnly(c)) return c.json(DENY, 403);
+  const out = await settings.decideRequest(c.get('actor').id, positiveId(c.req.param('id')), 'approved');
+  if ('error' in out) return c.json(out, 409);
+  return c.json({ ok: true });
+});
+
 app.get('/settings/assignments', async (c) => {
   if (adminOnly(c)) return c.json(DENY, 403);
   return c.json(await settings.listAssignments());
@@ -921,43 +1002,71 @@ app.post('/settings/requests/:id', async (c) => {
 });
 
 /**
- * 연결 상태 — AI·전사·데이터베이스가 지금 붙어 있는지.
- *
- * **키를 화면으로 보내지 않는다.** 붙었는지 여부와 어느 제공자인지까지다.
- * 설정 자체(키 넣기)는 아직 없다 — 기관 서버의 환경 변수로 넣는다. 그 사실을 화면이 말한다.
- */
-/**
- * 지금 쓰는 동의 문안. **읽기만 한다** — 문안은 코드가 정본이다(`consent.ts`).
+ * 지금 쓰는 동의 문안. DB 판이 있으면 그것, 없으면 코드 정본(`consent.ts`·`consent-copy.ts`).
  *
  * 관리자 전용이 아니다. **동의를 받는 화면이 이것을 써야 한다** — 화면이 문안을 복사해 두면
  * 서버 문안이 바뀌어도 화면은 옛 글을 보여 주며 동의를 받는다. 그렇게 받은 동의는
  * 당사자가 본 적 없는 문안에 대한 동의다(2026-09-16 검수에서 실제로 그 상태였다).
  *
  * 꺼진 영역은 내지 않는다 — 음성이 꺼져 있으면 녹음 동의를 받을 이유가 없다.
+ * `editable` 은 관리자에게만 true 다(2026-09-18 Q D6). 판·지문은 설정 › 동의서 관리에만 보인다(D9).
  */
+const consentCopyView = (domain: (typeof CONSENT_DOMAINS)[number]) => {
+  const c = copyText(domain);
+  return {
+    domain,
+    label: c.label,
+    body: c.copy,
+    items: c.items,
+    purpose_text: c.purposeText,
+    retention_text: c.retentionText,
+    refusal_text: c.refusalText,
+    recipient: c.provider ? `${c.provider.legalRecipient} (${c.provider.country})` : null,
+    // 개인정보 수집·이용이 없으면 사례를 열 수 없다. 나머지는 골라 받는다.
+    required: domain === 'personal_data_collection_use',
+    version: copyVersion(),
+    hash: copyHash(domain).slice(0, 12),
+  };
+};
+
 app.get('/consent-copy', async (c) => {
-  const active = new Set(activeDomains());
-  return c.json(
-    CONSENT_DOMAINS.filter((d) => active.has(d)).map((domain) => {
-      const c = CONSENT_COPY[domain];
-      return {
-        domain,
-        label: c.label,
-        body: c.copy,
-        items: c.items,
-        purpose_text: c.purposeText,
-        retention_text: c.retentionText,
-        refusal_text: c.refusalText,
-        recipient: c.provider ? `${c.provider.legalRecipient} (${c.provider.country})` : null,
-        // 개인정보 수집·이용이 없으면 사례를 열 수 없다. 나머지는 골라 받는다.
-        required: domain === 'personal_data_collection_use',
-        version: COPY_VERSION,
-        hash: copyHash(domain).slice(0, 12),
-      };
-    }),
-  );
+  const editable = c.get('actor').role === 'admin';
+  return c.json(activeDomains().map((domain) => ({ ...consentCopyView(domain), editable })));
 });
 
+/**
+ * 문안 고치기(2026-09-18 Q D6 — §21-3 "버튼은 아직 없다"를 대체). 관리자 전용.
+ * 새 판 `consent-standard-form-v<N+1>` 이 되고 **모든 영역의 지난 동의가 `확인 필요`로 떨어진다** —
+ * 경고창은 화면이 띄우고, 다시 받는 고지는 기관 절차다. 수신자·보유기간 값은 코드 정본이라 여기서 못 바꾼다.
+ */
+app.put('/consent-copy/:domain', async (c) => {
+  if (adminOnly(c)) return c.json(DENY, 403);
+  const domain = z.enum(CONSENT_DOMAINS).parse(c.req.param('domain'));
+  const body = z
+    .object({
+      copy: z.string().trim().min(1),
+      items: z.array(z.string().trim().min(1)).min(1),
+      purpose_text: z.string().trim().min(1),
+      retention_text: z.string().trim().min(1),
+      refusal_text: z.string().trim().min(1),
+    })
+    .parse(await c.req.json());
+  await putConsentCopy(c.get('actor').id, domain, {
+    copy: body.copy,
+    items: body.items,
+    purposeText: body.purpose_text,
+    retentionText: body.retention_text,
+    refusalText: body.refusal_text,
+  });
+  return c.json({ ...consentCopyView(domain), editable: true });
+});
+
+/**
+ * 연결 상태 — AI·전사·데이터베이스가 지금 붙어 있는지.
+ *
+ * **키를 화면으로 보내지 않는다.** 붙었는지 여부와 어느 제공자인지까지다.
+ * 설정 자체(키 넣기)는 아직 없다 — 기관 서버의 환경 변수로 넣는다. 그 사실을 화면이 말한다.
+ */
 app.get('/settings/connections', async (c) => {
   if (adminOnly(c)) return c.json(DENY, 403);
   const [{ now }] = await sql<Array<{ now: string }>>`select now()`;
