@@ -3,7 +3,7 @@
 // 서버 계약은 그대로 쓴다. 목록에 없는 연락처를 얻으려고 상담 상세를 미리 읽지 않는다.
 import { useEffect, useMemo, useState } from 'react';
 import { listParticipants, type ParticipantRow } from '../api.ts';
-import { Badge, Card, Empty, Field, PageHeader } from '../ui.tsx';
+import { Badge, Card, Empty, PageHeader } from '../ui.tsx';
 
 const scheduleDate = new Intl.DateTimeFormat('ko-KR', {
   month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
@@ -45,16 +45,21 @@ export function ParticipantsScreen({ pickFor = null }: { pickFor?: PickFor }) {
         meta={rows ? `${rows.length}명` : undefined}
       />
       <div className="wire-container">
-        <Card>
-          <Field label="찾기" htmlFor="q">
+        {/* 카드의 이름은 `Card title`(16/600 --ink)이다(2026-09-17 Q 제목 위계 점검).
+            구 구조는 `찾기`를 폼 라벨(14/600 --sub)로 두고 카드 제목을 비워, 같은 자리에서
+            카드마다 글자 크기가 달랐다. 입력의 접근성 이름은 `aria-label`이 갖는다 —
+            보이는 라벨을 한 번 더 두면 같은 말이 두 줄로 쌓인다. */}
+        <Card title="찾기">
+          <div className="wire-input-box">
             <input
               id="q"
               type="search"
+              aria-label="찾기"
               placeholder="이름 · 가명 · 사업 이름"
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
-          </Field>
+          </div>
         </Card>
 
         {rows === null && <Empty>불러오는 중이에요.</Empty>}

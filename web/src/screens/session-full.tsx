@@ -96,9 +96,11 @@ export function SessionFullScreen({ caseId, sessionId }: { caseId: number; sessi
         }
       />
       <div className="wire-container">
-        {/* 두 구획 모두 접힌다(2026-09-17 Q). 기본은 펼침이다 — 읽으러 온 화면에서 본문을
-            한 번 더 눌러 열게 하지 않는다. 긴 전사문만 접어 둘 수 있으면 된다. */}
-        <Fold title="수기 기록" open>
+        {/* 한 화면에서 **하나만 펼친다**(2026-09-17 Q). 펼친 제목 줄은 활성 면(파스텔)을
+            받으므로, 둘 다 펼치면 그 신호가 가리킬 대조군이 없다.
+            어느 쪽을 펼치는지는 회차가 정한다 — 수기가 있으면 수기가 보러 온 것이고,
+            수기 미작성 회차(녹음만 있는 회차)에서는 볼 것이 음성 쪽에 있다. */}
+        <Fold title="수기 기록" open={written}>
           {!written ? (
             <Empty>수기 미작성</Empty>
           ) : (
@@ -116,7 +118,7 @@ export function SessionFullScreen({ caseId, sessionId }: { caseId: number; sessi
           )}
         </Fold>
 
-        <Fold title="음성 기록" open>
+        <Fold title="음성 기록" open={!written}>
           {voiceError && <ErrorText>{voiceError}</ErrorText>}
           {recordings.length === 0 ? (
             <Empty>올라온 녹음이 없어요.</Empty>
@@ -153,9 +155,11 @@ export function SessionFullScreen({ caseId, sessionId }: { caseId: number; sessi
 
           {transcript && (
             <>
-              <p className="panel-meta">
+              {/* 구획 이름은 소제목(14/600 --sub)이다 — 값·상태를 쓰는 `.panel-meta`(14/400)로
+                  머리를 대신하면 아래 내용과 위계가 같아진다(2026-09-17 Q 제목 위계 점검). */}
+              <h3 className="wire-subhead">
                 전사문{transcript.status === 'draft' && <> · <Badge>확인 전</Badge></>}
-              </p>
+              </h3>
               {transcript.segments && transcript.segments.length > 0 ? (
                 transcript.segments.map((s, i) => (
                   <div className="wire-repeat-card" key={i}>
