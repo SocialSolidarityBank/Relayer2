@@ -102,10 +102,13 @@ test('상담 기록은 다섯 구획이고 인테이크의 전체 목표를 덮�
   await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
   await expect(page).toHaveURL(/\/schedule$/);
   await page.goto(`/#/cases/${caseId}/record`);
+  // 전체 목표가 있으니 읽기 전용 `목표` 카드가 다섯 구획 위에 선다(2026-09-18 UI-9).
   await expect(page.locator('.record-main > section.wire-card .wire-card-title')).toHaveText([
-    '1. 오늘 상담 내용', '2. 수행할 과제', '3. 다음에 물어볼 것', '4. 실무자 의견', '5. 다음 상담 목표',
+    '목표', '1. 오늘 상담 내용', '2. 수행할 과제', '3. 다음에 물어볼 것', '4. 실무자 의견', '5. 다음 상담 목표',
   ]);
+  await expect(page.locator('.record-main > section.wire-card').first()).toContainText('보존할 전체 상담 목표');
   await expect(page.getByRole('textbox', { name: '달라진 것', exact: true })).toHaveCount(0);
+  // 목표는 여기서 고치지 않는다 — 입력칸이 아니라 수정 버튼(목표 탭행)이다.
   await expect(page.locator('#overall-goal')).toHaveCount(0);
   await page.getByRole('radio', { name: '대면', exact: true }).check();
   await page.locator('#place').fill('이전 상담 장소');
