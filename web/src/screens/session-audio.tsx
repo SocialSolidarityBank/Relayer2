@@ -639,7 +639,9 @@ export function SessionAudio({
           {writtenChanged && <Empty>변경한 수기 기록을 저장한 뒤 비교할 수 있어요.</Empty>}
           {!writtenChanged && mismatches && (
             <>
-              <p className="panel-meta">숫자 항목 비교</p>
+              {/* 구획 이름은 소제목이다(2026-09-17 Q) — 구 `.panel-meta`(14/400)는 값·상태의 옷이라
+                  아래 목록과 위계가 같아졌다. */}
+              <h3 className="wire-subhead">숫자 항목 비교</h3>
               {mismatches.voice_status === 'unavailable' ? (
                 <Empty>{mismatches.voice_reason === 'missing_written' ? '저장된 수기 기록이 없어 비교할 수 없어요.' : '전사문이 없어 비교할 수 없어요.'}</Empty>
               ) : mismatches.voice_status === 'needs_review' ? (
@@ -651,7 +653,7 @@ export function SessionAudio({
               )}
               {mismatches.across_sessions.length > 0 && (
                 <>
-                  <p className="panel-meta">회차간 기록 불일치</p>
+                  <h3 className="wire-subhead">회차간 기록 불일치</h3>
                   <MismatchList items={mismatches.across_sessions} />
                 </>
               )}
