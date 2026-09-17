@@ -38,8 +38,8 @@ OpenAI 키 하나가 죽으면서 두 제품이 같이 멈췄다.
 | 이름 | 무엇 | 없으면 |
 |---|---|---|
 | `RELAYER_OPENAI_API_KEY` | OpenAI 서비스 계정 키 (`sk-svcacct-…`) | AI 정리 요청이 503 |
-| `GEMINI_API_KEY` | Google Gemini 키 (예비 제공자) | 위와 같음 |
-| `AI_PROVIDER` | `openai` 또는 `gemini` | 기본 `openai` |
+| `GEMINI_API_KEY` | Google Gemini 키 (예비 제공자). **실데이터에는 열지 않는다** — SPEC §15-1 | 위와 같음 |
+| `AI_PROVIDER` | `openai` 또는 `gemini`. 밖의 값이면 부팅에서 멈춘다 | 기본 `openai` |
 | `AI_MODEL` | 모델 이름. 비워 두면 알아서 고른다 | 기본값 사용 |
 
 **AI 키는 선택이다.** 없으면 배포 스크립트가 그냥 건너뛰고 나머지는 정상으로 돈다.
