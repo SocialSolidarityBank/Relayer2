@@ -384,14 +384,19 @@ function Access({ caseId }: { caseId: number }) {
 
   return (
     <Card
-      title="당사자 열람"
-      hint="당사자는 로그인하지 않아요. 링크와 여섯 자리 숫자를 전해 주면 자기 정보와 일정만 봐요."
+      /**
+       * 이 카드가 하는 일(2026-09-17 Q): 당사자 등록에서 초대로 동의를 받는 것이 기본이고,
+       * 실무자가 직접 작성해 버린 경우에 **동의를 받으려고 보내는 링크**를 만드는 자리다.
+       * 그래서 이름과 안내를 동의 쪽 말로 바꿨다. 열람 동선 설명은 걷었다.
+       */
+      title="개인정보 및 민감정보 처리 동의 링크"
+      hint="개인 정보 및 민감 정보 처리 동의 받기 링크를 생성하세요"
       // 만들기 버튼은 제목과 같은 행 오른쪽 끝이다(2026-09-17 Q). 잠그기는 살아 있을 때만
       // 본문 아래에 남는다 — 위험 행동을 제목 줄에 함께 세우지 않는다.
       action={
         state && (
           <Button variant="primary" disabled={busy} onClick={() => void issue()}>
-            {state.active ? '새로 만들기' : '열람 링크 만들기'}
+            {state.active ? '새로 만들기' : '링크 만들기'}
           </Button>
         )
       }
@@ -400,19 +405,6 @@ function Access({ caseId }: { caseId: number }) {
         <Empty>불러오는 중이에요.</Empty>
       ) : (
         <>
-          <Item
-            title={state.active ? '열람 링크가 살아 있어요' : '열람 링크가 없어요'}
-            desc={
-              state.active
-                ? [
-                    state.expires_at ? `${dateLabel(state.expires_at)}까지` : null,
-                    state.last_opened_at ? `마지막 열람 ${dateLabel(state.last_opened_at)}` : '아직 연 적 없음',
-                  ]
-                    .filter(Boolean)
-                    .join(', ')
-                : '새로 만들면 이전 링크는 잠겨요.'
-            }
-          />
           {issued && link && (
             <div className="wire-repeat-card">
               <p className="panel-meta">이 화면을 닫으면 코드는 다시 볼 수 없어요. 지금 전해 주세요.</p>
