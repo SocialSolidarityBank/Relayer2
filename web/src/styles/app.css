@@ -44,6 +44,13 @@ body { margin: 0; }
 @media (max-width: 767px) {
   .info-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+/* 두 칸 변형 — 드로어 머리의 `수기 기록 ↔ 녹음 전사` 전환이 쓴다. 제목·닫기와 한 줄이라
+   아래 여백을 두지 않고 글자 폭만 차지한다. */
+.info-tabs[data-cols='2'] {
+  grid-template-columns: repeat(2, max-content);
+  margin-bottom: 0;
+  margin-inline-start: auto;
+}
 .info-original { margin: var(--space-2) 0 0; padding: var(--space-3); border-radius: var(--radius-md); background: var(--panel-alt, var(--panel)); color: var(--ink); white-space: pre-wrap; }
 /* 회차별 요약 안 승인된 AI 정리(2026-09-16 검수). 원문 위, 제목 아래 본문 단이다.
    grid 항목은 min-width:auto 라 안의 nowrap 글자가 폭을 밀어낸다 — 항목마다 0 을 박는다. */
@@ -265,12 +272,20 @@ body { margin: 0; }
   background: var(--panel);
   border-bottom: 1px solid var(--line);
 }
-.side-drawer-head h2 { margin: 0; font-size: var(--text-lg); font-weight: 600; }
+.side-drawer-head h2 { margin: 0; font-size: var(--text-lg); font-weight: 600; white-space: nowrap; }
 .side-drawer-body { overflow-y: auto; padding: var(--space-6); display: grid; gap: var(--space-4); align-content: start; }
 /* 인테이크 원본은 작성 화면을 그대로 잠근 것이라 자기 열 여백을 갖고 온다 — 드로어 안에서는 뺀다. */
 .side-drawer-body > .wire-container { padding: 0; }
 @media (max-width: 767px) {
-  .side-drawer-head { padding: var(--space-4); }
+  .side-drawer-head { padding: var(--space-4); flex-wrap: wrap; row-gap: var(--space-3); }
+  /* 390 에서 제목·전환·닫기가 한 줄에 423px 을 먹어 닫기가 잘렸다(실측) —
+     전환을 아래 줄로 내리고 두 칸이 폭을 반씩 쓴다. */
+  .side-drawer-head > .info-tabs[data-cols='2'] {
+    order: 1;
+    flex: 1 1 100%;
+    margin-inline-start: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .side-drawer-body { padding: var(--space-4); }
 }
 
