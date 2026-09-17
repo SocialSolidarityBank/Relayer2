@@ -271,15 +271,17 @@ function Goals({ detail, reload }: { detail: CaseDetail; reload: () => Promise<v
         </Field>
         <FormActions>
           <Dialog id="goal-history" title="지난 목표" trigger="지난 목표 보기">
+            {/* 최신순이다(2026-09-17 Q — 회차 정보 표·회차별 요약과 같은 순서).
+                `승인`/`수정` 라벨은 원래 순서의 첫 줄(처음 적은 목표)에만 `승인`이 붙는다. */}
             <Card title="전체 상담 목표 이력">
               {history.length === 0 ? (
                 <Empty>아직 이력이 없어요.</Empty>
               ) : (
-                history.map((r, i) => (
+                [...history].reverse().map((r, j) => (
                   <Item
-                    key={`${r.created_at}-${i}`}
+                    key={`${r.created_at}-${j}`}
                     title={r.text ?? '(비움)'}
-                    desc={`${dateLabel(r.created_at)}, ${i === 0 ? '승인' : '수정'}`}
+                    desc={`${dateLabel(r.created_at)}, ${j === history.length - 1 ? '승인' : '수정'}`}
                   />
                 ))
               )}
@@ -288,8 +290,17 @@ function Goals({ detail, reload }: { detail: CaseDetail; reload: () => Promise<v
               {withGoal.length === 0 ? (
                 <Empty>이어받은 목표가 아직 없어요.</Empty>
               ) : (
-                withGoal.map((s) => (
-                  <Item key={s.id} title={s.today_goal_text ?? ''} desc={`${s.seq}회차 | ${dateLabel(s.held_at)}`} />
+                [...withGoal].reverse().map((s) => (
+                  <Item
+                    key={s.id}
+                    title={s.today_goal_text ?? ''}
+                    desc={
+                      <>
+                        <span className="seq-head-no">{s.seq}회차</span>
+                        <span className="seq-head-meta">{dateLabel(s.held_at)}</span>
+                      </>
+                    }
+                  />
                 ))
               )}
             </Card>
