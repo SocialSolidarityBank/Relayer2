@@ -45,11 +45,16 @@ export const AUDIT_KINDS = {
   'invite.create': { kind: '운영', label: '초대 링크 만듦', fold: false },
   'invite.revoke': { kind: '운영', label: '초대 취소', fold: false },
   'invite.accept': { kind: '운영', label: '초대로 들어옴', fold: false },
+  'org.bootstrap': { kind: '운영', label: '기관 첫 가입', fold: false },
   'org.update': { kind: '운영', label: '기관 정보 고침', fold: false },
   'program.add': { kind: '운영', label: '사업 더함', fold: false },
-  'program.retire': { kind: '운영', label: '사업 내림', fold: false },
+  'program.update': { kind: '운영', label: '사업 고침', fold: false },
+  'program.retire': { kind: '운영', label: '사업 종료', fold: false },
+  'program.reopen': { kind: '운영', label: '사업 다시 열기', fold: false },
   'user.profile.update': { kind: '운영', label: '내 정보 고침', fold: false },
+  'user.role.update': { kind: '운영', label: '역할 바꿈', fold: false },
   'user.deactivate': { kind: '운영', label: '계정 삭제', fold: false },
+  'ai.key.set': { kind: '운영', label: 'AI 키 설정', fold: false },
 } as const;
 
 export type AuditAction = keyof typeof AUDIT_KINDS;
@@ -185,7 +190,7 @@ export async function listAudit(q: AuditQuery = {}): Promise<AuditRow[]> {
   const limit = Math.min(q.limit ?? 500, HARD_LIMIT);
   const rows = await sql<RawRow[]>`
     select a.id, a.at, a.action, a.fields, a.actor_id, u.name as actor_name,
-           p.pseudonym, v.enc_name, a.case_id, c.program_name,
+           p.pseudonym, v.enc_name, a.case_id, pg.name as program_name,
            (c.id is not null) as case_exists,
            exists (select 1 from case_assignments ca
                    where ca.case_id = a.case_id and ca.user_id = a.actor_id) as actor_assigned,
@@ -199,6 +204,7 @@ export async function listAudit(q: AuditQuery = {}): Promise<AuditRow[]> {
     from audit_log a
     left join users u on u.id = a.actor_id
     left join support_cases c on c.id = a.case_id
+    left join programs pg on pg.id = c.program_id
     -- 사례만 적힌 줄에서도 누구인지 찾는다. 15초 다시보기는 사례 열쇠만 들고 온다.
     left join participants p on p.id = coalesce(a.participant_id, c.participant_id)
     left join participant_pii v on v.participant_id = p.id

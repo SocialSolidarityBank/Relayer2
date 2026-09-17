@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { issueCookie } from '../src/auth.ts';
 import { DATABASE_URL, sql } from '../src/db.ts';
 import { app } from '../src/routes.ts';
+import { ensureProgram } from './voice-fixture.ts';
 
 const enabled = process.env.RELAYER_INTEGRATION === '1';
 if (enabled) {
@@ -31,7 +32,7 @@ async function fixture() {
     returning id`;
   const created = await request('/cases', actor, 'POST', {
     name: 'AI 승인 합성',
-    program_name: '회귀 검증',
+    program_id: await ensureProgram('회귀 검증'),
     consents: [
       { domain: 'personal_data_collection_use', decision: 'grant' },
       { domain: 'sensitive_information_processing', decision: 'grant' },

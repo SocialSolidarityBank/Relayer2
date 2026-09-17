@@ -21,7 +21,7 @@ import {
   SttUnavailable,
   withdrawCaseRecordings,
 } from './stt.ts';
-import { AiUnavailable, approveDraft, draftSession, latestDraft } from './ai.ts';
+import { AiUnavailable, approveDraft, draftSession, latestDraft, openAiKey } from './ai.ts';
 import { audit, auditCsv, auditSummary, listAudit, AUDIT_KIND_LIST } from './audit.ts';
 import { accessState, issueAccess, openAccess, revokeAccess } from './participant-access.ts';
 import {
@@ -39,11 +39,13 @@ import { sql } from './db.ts';
 import {
   AccessDenied,
   assertCaseAccess,
+  assertProgramActive,
   CaseClosed,
   caseIdOfDocument,
   caseIdOfRecording,
   caseIdOfSession,
   NotFound,
+  ProgramRetired,
 } from './access.ts';
 
 // 영역은 국가 표준 10종+기타 하나뿐이다(SPEC §8). 여기에 목록을 또 적으면 이번처럼 어긋난다.
@@ -78,8 +80,8 @@ app.onError((err, c) => {
   if (err instanceof NotFound) return c.json({ error: err.message }, 404);
   if (err instanceof AccessDenied) return c.json({ error: err.message }, 403);
   if (err instanceof service.ConsentRequired) return c.json({ error: err.message }, 409);
-  // 종결 사례에 새 녹음·전사를 보내는 것도 상태 충돌이다.
-  if (err instanceof CaseClosed || err instanceof service.SessionAlreadyStarted) {
+  // 종결 사례에 새 녹음·전사를 보내는 것도, 종료된 사업에 새 기록을 쓰는 것도 상태 충돌이다.
+  if (err instanceof CaseClosed || err instanceof ProgramRetired || err instanceof service.SessionAlreadyStarted) {
     return c.json({ error: err.message }, 409);
   }
   // AI 는 없어도 제품이 돌아간다. 없는 것을 있는 것처럼 답하지 않는다.
@@ -142,6 +144,28 @@ app.post('/auth/invite/:token', async (c) => {
     .parse(await c.req.json());
   const out = await settings.signUpWithInvite({ token: c.req.param('token'), ...body });
   if ('error' in out) return c.json(out, 409);
+  c.header('set-cookie', issueCookie(out.userId));
+  return c.json({ ok: true });
+});
+
+/**
+ * 기관을 여는 첫 가입(2026-09-17 Q). 활성 관리자가 없을 때만 열린다 — 그 뒤는 초대 링크뿐이다.
+ * 열렸는지(GET)와 가입(POST) 둘 다 로그인 앞이다. 응답 모양은 초대 수락과 같다(쿠키 + ok).
+ */
+app.get('/auth/signup', async (c) => c.json({ open: await settings.signupOpen() }));
+
+app.post('/auth/signup', async (c) => {
+  const body = z
+    .object({
+      org_name: z.string().trim().min(1, '기관 이름을 적어 주세요.'),
+      slug: z.string().trim().regex(/^[a-z0-9-]+$/, '주소 이름은 영문 소문자·숫자·붙임표만 써요.'),
+      email: z.string().trim().min(2, '아이디를 적어 주세요.'),
+      password: z.string().min(4, '비밀번호는 네 자 이상이어야 해요.'),
+      name: z.string().trim().min(1, '이름을 적어 주세요.'),
+    })
+    .parse(await c.req.json());
+  const out = await settings.bootstrapOrg(body);
+  if ('error' in out) return c.json({ error: out.error }, out.status);
   c.header('set-cookie', issueCookie(out.userId));
   return c.json({ ok: true });
 });
@@ -225,7 +249,8 @@ const documentAccess = async (raw: string, actorId: number): Promise<number> => 
   return documentId;
 };
 
-app.get('/me', (c) => c.json(c.get('actor')));
+// 마법사를 마쳤는지도 함께 싣는다 — 화면이 이것으로 관리자를 #/onboarding 에 붙들어 둔다(서버 잠금 없음).
+app.get('/me', async (c) => c.json({ ...c.get('actor'), onboarded: await settings.isOnboarded() }));
 
 app.post('/cases', async (c) => {
   const body = z
@@ -235,7 +260,7 @@ app.post('/cases', async (c) => {
       email: z.string().optional(),
       birth: z.string().optional(),
       address: z.string().optional(),
-      program_name: z.string().min(1),
+      program_id: z.number().int().positive(),
       sessions_planned: z.number().int().positive().optional(),
       consents: z
         .array(z.object({ domain: z.enum(CONSENT_DOMAINS), decision: z.enum(CONSENT_DECISIONS) }))
@@ -346,6 +371,7 @@ app.get('/cases/:id/consents', async (c) => {
 
 app.post('/cases/:id/consents', async (c) => {
   const caseId = await caseAccess(c.req.param('id'), c.get('actor').id);
+  await assertProgramActive(caseId);
   const body = consentInput.parse(await c.req.json());
   const view = await service.recordConsent(caseId, { ...body, actorId: c.get('actor').id });
   // 녹음·보유기간 동의를 거두면 그 사례의 음성 원본을 그 자리에서 지운다 — 문안이 그렇게 약속한다.
@@ -409,6 +435,7 @@ app.get('/cases/:id/access', async (c) => {
 
 app.post('/cases/:id/access', async (c) => {
   const caseId = await caseAccess(c.req.param('id'), c.get('actor').id);
+  await assertProgramActive(caseId);
   const issued = await issueAccess(caseId, c.get('actor').id);
   await audit({
     actorId: c.get('actor').id,
@@ -533,6 +560,7 @@ app.post('/sessions/:id/transcript/approve', async (c) => {
  */
 app.post('/cases/:id/documents', async (c) => {
   const caseId = await caseAccess(c.req.param('id'), c.get('actor').id);
+  await assertProgramActive(caseId);
   const rawSessionId = c.req.query('session_id');
   let sessionId: number | null = null;
   if (rawSessionId !== undefined) {
@@ -688,7 +716,7 @@ app.put('/settings/org', async (c) => {
   if (adminOnly(c)) return c.json(DENY, 403);
   const body = z
     .object({
-      name: z.string().trim(),
+      name: z.string().trim().min(1, '기관 이름을 적어 주세요.'),
       reg_no: z.string().trim().nullable().default(null),
       address: z.string().trim().nullable().default(null),
       phone: z.string().trim().nullable().default(null),
@@ -700,18 +728,102 @@ app.put('/settings/org', async (c) => {
 // 사업 목록은 누구나 읽는다 — 당사자 등록에서 고르는 선택지다.
 app.get('/settings/programs', async (c) => c.json(await settings.listPrograms(c.req.query('all') === '1')));
 
+// 날짜는 YYYY-MM-DD 만. 시작이 끝보다 늦으면 보낸 쪽 잘못이다(DB 제약이 뒤를 받친다).
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '날짜 형식이 맞지 않아요.');
+const programInput = z
+  .object({
+    name: z.string().trim().min(1, '사업 이름을 적어 주세요.'),
+    starts_on: isoDate.nullable().default(null),
+    ends_on: isoDate.nullable().default(null),
+    description: z.string().trim().nullable().default(null),
+  })
+  .refine((p) => !p.starts_on || !p.ends_on || p.starts_on <= p.ends_on, {
+    message: '사업 기간의 끝이 시작보다 빠를 수 없어요.',
+    path: ['ends_on'],
+  });
+
 app.post('/settings/programs', async (c) => {
   if (adminOnly(c)) return c.json(DENY, 403);
-  const { name } = z.object({ name: z.string().trim().min(1, '사업 이름을 적어 주세요.') }).parse(await c.req.json());
-  return c.json(await settings.addProgram(c.get('actor').id, name));
+  const body = programInput.parse(await c.req.json());
+  const out = await settings.addProgram(c.get('actor').id, body);
+  if ('error' in out) return c.json(out, 409);
+  return c.json(out.program, 201);
 });
 
+app.patch('/settings/programs/:id', async (c) => {
+  if (adminOnly(c)) return c.json(DENY, 403);
+  const body = z
+    .object({
+      name: z.string().trim().min(1, '사업 이름을 적어 주세요.').optional(),
+      starts_on: isoDate.nullable().optional(),
+      ends_on: isoDate.nullable().optional(),
+      description: z.string().trim().nullable().optional(),
+    })
+    .refine((p) => !p.starts_on || !p.ends_on || p.starts_on <= p.ends_on, {
+      message: '사업 기간의 끝이 시작보다 빠를 수 없어요.',
+      path: ['ends_on'],
+    })
+    .parse(await c.req.json());
+  const out = await settings.updateProgram(c.get('actor').id, positiveId(c.req.param('id')), body);
+  if ('error' in out) return c.json({ error: out.error }, out.status);
+  return c.json(out.program);
+});
+
+/**
+ * 사업 종료. 열린 사례·예정 회차가 있으면 409 로 건수를 돌려주고 멈춘다 —
+ * `?confirm=1` 로 다시 보내면 종료한다. 화면이 그 사이에 백업(scripts/backup.sh)을 권한다.
+ */
 app.delete('/settings/programs/:id', async (c) => {
   if (adminOnly(c)) return c.json(DENY, 403);
-  return c.json(await settings.retireProgram(c.get('actor').id, Number(c.req.param('id'))));
+  const out = await settings.retireProgram(
+    c.get('actor').id,
+    positiveId(c.req.param('id')),
+    c.req.query('confirm') === '1',
+  );
+  if ('error' in out) return c.json(out, 404);
+  if ('warning' in out) return c.json(out.warning, 409);
+  return c.json(out);
 });
 
-app.get('/settings/workers', async (c) => c.json(await settings.listWorkers()));
+app.post('/settings/programs/:id/reopen', async (c) => {
+  if (adminOnly(c)) return c.json(DENY, 403);
+  const out = await settings.reopenProgram(c.get('actor').id, positiveId(c.req.param('id')));
+  if ('error' in out) return c.json(out, 404);
+  return c.json(out);
+});
+
+// `?program=<id>` 면 그 사업의 열린 사례를 맡은 실무자만 — 사업 담당은 배정에서 파생된다.
+app.get('/settings/workers', async (c) => {
+  const raw = c.req.query('program');
+  return c.json(await settings.listWorkers(raw === undefined ? null : positiveId(raw)));
+});
+
+app.put('/settings/workers/:id/role', async (c) => {
+  if (adminOnly(c)) return c.json(DENY, 403);
+  const { role } = z.object({ role: z.enum(['worker', 'admin']) }).parse(await c.req.json());
+  const out = await settings.setRole(c.get('actor').id, positiveId(c.req.param('id')), role);
+  if ('error' in out) return c.json({ error: out.error }, out.status);
+  return c.json(out);
+});
+
+/** 마법사 완료. 관리자 전용. 두 번 눌러도 처음 시각을 지킨다. */
+app.post('/settings/onboarding/complete', async (c) => {
+  if (adminOnly(c)) return c.json(DENY, 403);
+  await settings.completeOnboarding(c.get('actor').id);
+  return c.json({ ok: true, onboarded: true });
+});
+
+/**
+ * OpenAI 키 넣기·지우기. 저장 전 OpenAI 에 검증하고 실패하면 400 — 저장하지 않는다.
+ * 키 값은 응답에 되돌려주지 않는다. 연결 상태는 `/settings/connections` 가 출처(db|env)만 말한다.
+ */
+app.put('/settings/ai-key', async (c) => {
+  if (adminOnly(c)) return c.json(DENY, 403);
+  const { key } = z.object({ key: z.string().trim().min(1).nullable() }).parse(await c.req.json());
+  const out = await settings.setAiKey(c.get('actor').id, key);
+  if ('error' in out) return c.json(out, 400);
+  return c.json(out);
+});
 
 app.get('/settings/workers/:id/cases', async (c) => {
   const userId = positiveId(c.req.param('id'));
@@ -823,12 +935,16 @@ app.get('/consent-copy', async (c) => {
 app.get('/settings/connections', async (c) => {
   if (adminOnly(c)) return c.json(DENY, 403);
   const [{ now }] = await sql<Array<{ now: string }>>`select now()`;
+  const provider = process.env.AI_PROVIDER ?? 'openai';
+  // 출처만 말한다(db|env|null). 키 값은 어떤 응답에도 싣지 않는다.
+  const ai = provider === 'openai' ? await openAiKey() : null;
   return c.json({
     ai: {
-      connected: Boolean(process.env.OPENAI_API_KEY),
-      provider: process.env.AI_PROVIDER ?? 'openai',
+      connected: provider === 'openai' ? ai !== null : Boolean(process.env.GEMINI_API_KEY),
+      provider,
       model: process.env.AI_MODEL ?? 'gpt-5.5',
       env: 'OPENAI_API_KEY',
+      source: ai?.source ?? null,
     },
     stt: {
       connected: Boolean(process.env.AZURE_SPEECH_KEY),

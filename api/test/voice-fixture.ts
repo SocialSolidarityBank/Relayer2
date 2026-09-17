@@ -43,6 +43,13 @@ export const ALL_VOICE_CONSENTS = [
   'voice_original_retention_period',
   'external_stt_processing',
 ] as const;
+/** 이름으로 사업 하나를 보장한다. 사례는 이제 이름이 아니라 id 로 사업에 묶인다(0024). */
+export async function ensureProgram(name: string): Promise<number> {
+  const [row] = await sql<Array<{ id: number }>>`
+    insert into programs (name) values (${name})
+    on conflict (name) do update set retired_at = null returning id`;
+  return row.id;
+}
 
 /** 실무자 하나와 동의를 갖춘 사례 하나. */
 export async function fixture(consents: readonly string[] = ALL_VOICE_CONSENTS) {
@@ -51,7 +58,7 @@ export async function fixture(consents: readonly string[] = ALL_VOICE_CONSENTS) 
     insert into users (email, name, role) values (${prefix + 'w'}, '음성 실무자', 'worker') returning id`;
   const created = await req('/cases', worker.id, 'POST', {
     name: '음성 합성',
-    program_name: '음성 검증',
+    program_id: await ensureProgram('음성 검증'),
     consents: consents.map((domain) => ({ domain, decision: 'grant' })),
   });
   if (created.status !== 201) throw new Error(`fixture case failed: ${created.status}`);

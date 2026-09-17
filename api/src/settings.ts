@@ -10,7 +10,21 @@ import { randomBytes, createHash } from 'node:crypto';
 import { sql } from './db.ts';
 import { audit } from './audit.ts';
 import { hashPassword } from './auth.ts';
+import { encryptPii } from './pii.ts';
+import { assertProgramActive } from './access.ts';
 import type { Assignee } from './domain/types.ts';
+
+/**
+ * 관리자 수를 바꾸는 트랜잭션은 모두 이 잠금을 먼저 잡는다(가입·초대 수락·역할 변경·탈퇴).
+ * 한 행이라 직렬화가 곧 "마지막 관리자" 판정의 정확성이다.
+ */
+const lockOrg = (tx: typeof sql) => tx`select id from organization where id = 1 for update`;
+
+const activeAdmins = async (tx: typeof sql): Promise<number> => {
+  const [{ count }] = await tx<Array<{ count: string }>>`
+    select count(*) from users where role = 'admin' and deactivated_at is null`;
+  return Number(count);
+};
 
 export type Me = {
   id: number;
@@ -44,40 +58,45 @@ export async function updateProfile(
  * 이 사람이 남긴 기록(상담 회차, 감사, 승인)은 사례의 것이지 계정의 것이 아니다.
  * 계정을 지우면 "누가 기록했나"가 통째로 빈칸이 된다. 로그인만 막는 것이 옳다.
  *
- * **마지막 관리자는 못 나간다.** 나가면 아무도 워크스페이스를 고칠 수 없다.
+ * **마지막 관리자는 못 나간다.** 나가면 아무도 기관 설정을 고칠 수 없다.
  */
 export async function deactivate(userId: number): Promise<{ ok: true } | { error: string }> {
-  const [me] = await sql<Array<{ role: string }>>`select role from users where id = ${userId}`;
-  if (!me) return { error: '계정을 찾지 못했어요.' };
-  if (me.role === 'admin') {
-    const [{ count }] = await sql<Array<{ count: string }>>`
-      select count(*) from users where role = 'admin' and deactivated_at is null`;
-    if (Number(count) <= 1) {
-      return { error: '마지막 관리자예요. 다른 사람을 관리자로 세운 뒤에 나갈 수 있어요.' };
+  const result = await sql.begin(async (tx) => {
+    await lockOrg(tx as unknown as typeof sql);
+    const [me] = await tx<Array<{ role: string }>>`select role from users where id = ${userId}`;
+    if (!me) return { error: '계정을 찾지 못했어요.' } as const;
+    if (me.role === 'admin' && (await activeAdmins(tx as unknown as typeof sql)) <= 1) {
+      return { error: '마지막 관리자예요. 다른 사람을 관리자로 세운 뒤에 나갈 수 있어요.' } as const;
     }
-  }
-  const [{ count: mine }] = await sql<Array<{ count: string }>>`
-    select count(*) from case_assignments a
-    join support_cases c on c.id = a.case_id
-    where a.user_id = ${userId} and c.status = 'open'`;
-  if (Number(mine) > 0) {
-    return { error: `아직 맡고 있는 당사자가 ${mine}명 있어요. 다른 실무자에게 넘긴 뒤에 나갈 수 있어요.` };
-  }
-  await sql`update users set deactivated_at = now() where id = ${userId}`;
+    const [{ count: mine }] = await tx<Array<{ count: string }>>`
+      select count(*) from case_assignments a
+      join support_cases c on c.id = a.case_id
+      where a.user_id = ${userId} and c.status = 'open'`;
+    if (Number(mine) > 0) {
+      return { error: `아직 맡고 있는 당사자가 ${mine}명 있어요. 다른 실무자에게 넘긴 뒤에 나갈 수 있어요.` } as const;
+    }
+    await tx`update users set deactivated_at = now() where id = ${userId}`;
+    return { ok: true } as const;
+  });
+  if ('error' in result) return result;
   await audit({ actorId: userId, action: 'user.deactivate', fields: [`user=${userId}`] });
-  return { ok: true };
+  return result;
 }
 
 // ── 기관 정보 ──────────────────────────────────────────────────────────────
 
 export type Org = { name: string; reg_no: string | null; address: string | null; phone: string | null };
+export type OrgView = Org & { slug: string | null; onboarded: boolean };
 
-export async function getOrg(): Promise<Org> {
-  const [row] = await sql<Org[]>`select name, reg_no, address, phone from organization where id = 1`;
-  return row ?? { name: '', reg_no: null, address: null, phone: null };
+export async function getOrg(): Promise<OrgView> {
+  const [row] = await sql<Array<Org & { slug: string | null; onboarded_at: string | null }>>`
+    select name, reg_no, address, phone, slug, onboarded_at from organization where id = 1`;
+  if (!row) return { name: '', reg_no: null, address: null, phone: null, slug: null, onboarded: false };
+  const { onboarded_at, ...org } = row;
+  return { ...org, onboarded: onboarded_at !== null };
 }
 
-export async function updateOrg(actorId: number, patch: Org): Promise<Org> {
+export async function updateOrg(actorId: number, patch: Org): Promise<OrgView> {
   await sql`
     update organization
     set name = ${patch.name}, reg_no = ${patch.reg_no}, address = ${patch.address},
@@ -87,35 +106,196 @@ export async function updateOrg(actorId: number, patch: Org): Promise<Org> {
   return getOrg();
 }
 
+/** 가입 문이 열려 있나 — 활성 관리자가 한 명도 없을 때만. 로그인 앞에서 부른다. */
+export async function signupOpen(): Promise<boolean> {
+  return (await activeAdmins(sql)) === 0;
+}
+
+/**
+ * 기관을 여는 첫 가입(2026-09-17 Q). 초대 규율의 **유일한 예외**다 — 그 뒤 합류는 초대 링크뿐이다.
+ *
+ * 기관 행을 잠근 채 활성 관리자 수를 세고, 0 일 때만 계정을 만들고 이름·슬러그를 적는다.
+ * 동시에 두 번 와도 잠금 뒤에 다시 센 쪽은 닫힌 문을 본다. 해싱은 잠금 밖이다(초대 수락과 같은 모양).
+ */
+export async function bootstrapOrg(input: {
+  org_name: string;
+  slug: string;
+  email: string;
+  password: string;
+  name: string;
+}): Promise<{ userId: number } | { error: string; status: 403 | 409 }> {
+  const passwordHash = await hashPassword(input.password);
+  try {
+    return await sql.begin(async (tx) => {
+      await lockOrg(tx as unknown as typeof sql);
+      if ((await activeAdmins(tx as unknown as typeof sql)) > 0) {
+        return { error: '이미 관리자가 있는 기관이에요. 초대 링크로 들어와 주세요.', status: 403 } as const;
+      }
+      const [user] = await tx<Array<{ id: number }>>`
+        insert into users (email, password_hash, name, role)
+        values (${input.email}, ${passwordHash}, ${input.name}, 'admin')
+        returning id`;
+      await tx`
+        update organization set name = ${input.org_name}, slug = ${input.slug},
+          updated_at = now(), updated_by = ${user.id}
+        where id = 1`;
+      await audit({ actorId: user.id, action: 'org.bootstrap', fields: ['name', 'slug', `user=${user.id}`] });
+      return { userId: user.id };
+    });
+  } catch {
+    // 같은 아이디가 이미 있다(실무자·당사자 계정). 유일 제약이 막는다.
+    return { error: '이미 쓰는 아이디예요.', status: 409 };
+  }
+}
+
+/** 마법사 완료. 한 번 찍힌 시각은 다시 찍지 않는다. */
+export async function completeOnboarding(actorId: number): Promise<void> {
+  await sql`
+    update organization set onboarded_at = coalesce(onboarded_at, now()), updated_at = now(), updated_by = ${actorId}
+    where id = 1`;
+}
+
+export async function isOnboarded(): Promise<boolean> {
+  const [row] = await sql<Array<{ onboarded_at: string | null }>>`select onboarded_at from organization where id = 1`;
+  return row?.onboarded_at != null;
+}
+
+// ── AI 키 ──────────────────────────────────────────────────────────────────
+
+/**
+ * OpenAI 키를 검증하고 암호문으로 넣는다(2026-09-17 Q). 키 값은 어떤 응답·감사·로그에도 싣지 않는다.
+ * 검증에 실패한 키는 저장하지 않는다 — 안 되는 열쇠를 넣어 두면 "연결됨"이 거짓이 된다.
+ * `null` 이면 지운다. 그 뒤 호출은 환경 변수 키로 떨어진다(ai.ts).
+ */
+export async function setAiKey(actorId: number, key: string | null): Promise<{ ok: true } | { error: string }> {
+  if (key !== null) {
+    const res = await fetch('https://api.openai.com/v1/models', {
+      headers: { authorization: `Bearer ${key}` },
+    }).catch(() => null);
+    if (!res?.ok) return { error: 'OpenAI 가 이 키를 받지 않았어요. 키를 다시 확인해 주세요.' };
+  }
+  await sql`
+    update organization set enc_openai_key = ${encryptPii(key)}, updated_at = now(), updated_by = ${actorId}
+    where id = 1`;
+  await audit({ actorId, action: 'ai.key.set', fields: [key === null ? 'removed=1' : 'provider=openai'] });
+  return { ok: true };
+}
+
 // ── 사업 목록 ──────────────────────────────────────────────────────────────
 
-export type Program = { id: number; name: string; retired_at: string | null; cases: number };
+export type Program = {
+  id: number;
+  name: string;
+  starts_on: string | null;
+  ends_on: string | null;
+  description: string | null;
+  retired_at: string | null;
+  /** 이 사업에 속한 사례 수(종결 포함). */
+  cases: number;
+  open_cases: number;
+};
+
+export type ProgramInput = {
+  name: string;
+  starts_on: string | null;
+  ends_on: string | null;
+  description: string | null;
+};
 
 /** `all` 이 아니면 살아 있는 사업만. 당사자 등록 선택지가 이것을 쓴다. */
 export async function listPrograms(all = false): Promise<Program[]> {
   return sql<Program[]>`
-    select p.id, p.name, p.retired_at,
-           (select count(*) from support_cases c where c.program_name = p.name)::int as cases
+    select p.id, p.name, p.starts_on::text, p.ends_on::text, p.description, p.retired_at,
+           (select count(*) from support_cases c where c.program_id = p.id)::int as cases,
+           (select count(*) from support_cases c where c.program_id = p.id and c.status = 'open')::int as open_cases
     from programs p
     where ${all ? sql`true` : sql`p.retired_at is null`}
     order by p.retired_at nulls first, p.name`;
 }
 
-export async function addProgram(actorId: number, name: string): Promise<Program[]> {
-  await sql`insert into programs (name) values (${name}) on conflict (name) do update set retired_at = null`;
-  await audit({ actorId, action: 'program.add', fields: [`name=${name}`] });
-  return listPrograms(true);
-}
+const isUnique = (e: unknown): boolean => (e as { code?: string })?.code === '23505';
 
 /**
- * 사업을 내린다 — 지우지 않는다. 이미 그 사업으로 열린 사례가 있고,
- * 이름이 사라지면 그 사례들이 무엇이었는지 설명할 말이 없어진다.
- * 내린 사업은 새 당사자 등록에서만 안 보인다.
+ * 사업을 더한다. 이름이 겹치면 **되살리지 않고 409** 다(2026-09-17 Q) —
+ * 종료된 사업과 같은 이름이면 다시 열기가 맞는 길이고, 그 안내는 화면이 한다.
  */
-export async function retireProgram(actorId: number, id: number): Promise<Program[]> {
-  await sql`update programs set retired_at = now() where id = ${id}`;
+export async function addProgram(
+  actorId: number,
+  input: ProgramInput,
+): Promise<{ program: Program } | { error: string }> {
+  let id: number;
+  try {
+    [{ id }] = await sql<Array<{ id: number }>>`
+      insert into programs (name, starts_on, ends_on, description)
+      values (${input.name}, ${input.starts_on}, ${input.ends_on}, ${input.description})
+      returning id`;
+  } catch (e) {
+    if (isUnique(e)) return { error: '같은 이름의 사업이 이미 있어요. 종료된 사업이면 다시 열기를 써 주세요.' };
+    throw e;
+  }
+  await audit({ actorId, action: 'program.add', fields: [`program=${id}`] });
+  return { program: (await listPrograms(true)).find((p) => p.id === id)! };
+}
+
+/** 사업 고치기. id 는 고정이고 종료된 사업은 다시 열기 뒤에만 고친다. */
+export async function updateProgram(
+  actorId: number,
+  id: number,
+  patch: Partial<ProgramInput>,
+): Promise<{ program: Program } | { error: string; status: 404 | 409 }> {
+  const [current] = await sql<Array<{ retired_at: string | null }>>`select retired_at from programs where id = ${id}`;
+  if (!current) return { error: '없는 사업이에요.', status: 404 };
+  if (current.retired_at) return { error: '종료된 사업은 고칠 수 없어요. 먼저 다시 열어 주세요.', status: 409 };
+  try {
+    await sql`
+      update programs set
+        name = coalesce(${patch.name ?? null}, name),
+        starts_on = ${patch.starts_on === undefined ? sql`starts_on` : patch.starts_on},
+        ends_on = ${patch.ends_on === undefined ? sql`ends_on` : patch.ends_on},
+        description = ${patch.description === undefined ? sql`description` : patch.description}
+      where id = ${id}`;
+  } catch (e) {
+    if (isUnique(e)) return { error: '같은 이름의 사업이 이미 있어요.', status: 409 };
+    throw e;
+  }
+  await audit({
+    actorId,
+    action: 'program.update',
+    fields: [`program=${id}`, ...Object.keys(patch).filter((k) => patch[k as keyof ProgramInput] !== undefined)],
+  });
+  return { program: (await listPrograms(true)).find((p) => p.id === id)! };
+}
+
+export type RetireWarning = { open_cases: number; planned_sessions: number };
+
+/**
+ * 사업 종료 — 지우지 않고 `retired_at` 을 찍는다. 열린 사례·예정 회차가 남아 있으면
+ * 건수를 돌려주고 멈춘다. `confirm` 이면 그대로 종료한다. 속한 사례는 정리(종결·회수·배정)만 된다.
+ */
+export async function retireProgram(
+  actorId: number,
+  id: number,
+  confirm: boolean,
+): Promise<{ ok: true } | { warning: RetireWarning } | { error: string }> {
+  const [row] = await sql<Array<{ open_cases: number; planned_sessions: number }>>`
+    select (select count(*) from support_cases c where c.program_id = p.id and c.status = 'open')::int as open_cases,
+           (select count(*) from sessions s join support_cases c on c.id = s.case_id
+             where c.program_id = p.id and c.status = 'open' and s.status = 'planned')::int as planned_sessions
+    from programs p where p.id = ${id}`;
+  if (!row) return { error: '없는 사업이에요.' };
+  if (!confirm && (row.open_cases > 0 || row.planned_sessions > 0)) return { warning: row };
+  await sql`update programs set retired_at = coalesce(retired_at, now()) where id = ${id}`;
   await audit({ actorId, action: 'program.retire', fields: [`program=${id}`] });
-  return listPrograms(true);
+  return { ok: true };
+}
+
+/** 다시 열기. `retired_at` 만 되돌린다 — 종결된 사례는 그대로 종결이다. */
+export async function reopenProgram(actorId: number, id: number): Promise<{ ok: true } | { error: string }> {
+  const [row] = await sql<Array<{ id: number }>>`
+    update programs set retired_at = null where id = ${id} returning id`;
+  if (!row) return { error: '없는 사업이에요.' };
+  await audit({ actorId, action: 'program.reopen', fields: [`program=${id}`] });
+  return { ok: true };
 }
 
 // ── 실무자 ────────────────────────────────────────────────────────────────
@@ -129,7 +309,11 @@ export type Worker = {
   open_cases: number;
 };
 
-export async function listWorkers(): Promise<Worker[]> {
+/**
+ * 실무자 목록. `programId` 를 주면 **그 사업의 열린 사례를 맡은 사람만** — 사업 담당은
+ * 배정에서 파생되고 따로 적지 않는다(2026-09-17 Q). 명시 배정 표를 만들지 않는다.
+ */
+export async function listWorkers(programId: number | null = null): Promise<Worker[]> {
   return sql<Worker[]>`
     select u.id, u.name, u.email, u.role, u.deactivated_at,
            (select count(*) from case_assignments a
@@ -137,7 +321,39 @@ export async function listWorkers(): Promise<Worker[]> {
              where a.user_id = u.id and c.status = 'open')::int as open_cases
     from users u
     where u.role in ('worker', 'admin')
+      and ${
+        programId === null
+          ? sql`true`
+          : sql`exists (select 1 from case_assignments a join support_cases c on c.id = a.case_id
+                        where a.user_id = u.id and c.status = 'open' and c.program_id = ${programId})`
+      }
     order by u.deactivated_at nulls first, u.name`;
+}
+
+/**
+ * 역할 바꾸기(2026-09-17 Q). 실무자↔관리자. 자기 자신을 내리는 것도 되지만
+ * **마지막 활성 관리자는 못 내린다** — 탈퇴와 같은 잠금 아래에서 센다.
+ */
+export async function setRole(
+  actorId: number,
+  userId: number,
+  role: 'worker' | 'admin',
+): Promise<{ ok: true } | { error: string; status: 404 | 409 }> {
+  const result = await sql.begin(async (tx) => {
+    await lockOrg(tx as unknown as typeof sql);
+    const [target] = await tx<Array<{ role: string; deactivated_at: string | null }>>`
+      select role, deactivated_at from users where id = ${userId} and role in ('worker', 'admin')`;
+    if (!target) return { error: '실무자를 찾지 못했어요.', status: 404 } as const;
+    if (target.deactivated_at) return { error: '나간 계정의 역할은 바꿀 수 없어요.', status: 409 } as const;
+    if (target.role === 'admin' && role === 'worker' && (await activeAdmins(tx as unknown as typeof sql)) <= 1) {
+      return { error: '마지막 관리자예요. 다른 사람을 관리자로 세운 뒤에 내릴 수 있어요.', status: 409 } as const;
+    }
+    await tx`update users set role = ${role} where id = ${userId}`;
+    return { ok: true } as const;
+  });
+  if ('error' in result) return result;
+  await audit({ actorId, action: 'user.role.update', fields: [`user=${userId}`, `role=${role}`] });
+  return result;
 }
 
 export type WorkerCase = { id: number; pseudonym: string; program_name: string; status: string };
@@ -145,9 +361,10 @@ export type WorkerCase = { id: number; pseudonym: string; program_name: string; 
 /** 한 실무자가 맡은 당사자들. 관리자도 이 목록 밖의 상담 자료는 열 수 없다. */
 export async function workerCases(userId: number): Promise<WorkerCase[]> {
   return sql<WorkerCase[]>`
-    select c.id, p.pseudonym, c.program_name, c.status
+    select c.id, p.pseudonym, pg.name as program_name, c.status
     from case_assignments a
     join support_cases c on c.id = a.case_id
+    join programs pg on pg.id = c.program_id
     join participants p on p.id = c.participant_id
     where a.user_id = ${userId}
     order by c.status, c.id desc`;
@@ -156,6 +373,7 @@ export async function workerCases(userId: number): Promise<WorkerCase[]> {
 export type AssignmentCase = {
   id: number;
   pseudonym: string;
+  program_id: number;
   program_name: string;
   status: string;
   assignees: Assignee[];
@@ -164,11 +382,13 @@ export type AssignmentCase = {
 /** 관리자 배정 화면. 가명·사업·상태·담당자만 — 상담 내용은 없다. */
 export async function listAssignments(): Promise<AssignmentCase[]> {
   return sql<AssignmentCase[]>`
-    select c.id, p.pseudonym, c.program_name, c.status,
+    select c.id, p.pseudonym, c.program_id, pg.name as program_name, c.status,
            (select coalesce(jsonb_agg(jsonb_build_object('id', u.id, 'name', u.name) order by u.name), '[]'::jsonb)
               from case_assignments a join users u on u.id = a.user_id
              where a.case_id = c.id) as assignees
-    from support_cases c join participants p on p.id = c.participant_id
+    from support_cases c
+    join programs pg on pg.id = c.program_id
+    join participants p on p.id = c.participant_id
     order by c.status, c.id desc`;
 }
 
@@ -312,6 +532,8 @@ export async function signUpWithInvite(input: {
    */
   try {
     return await sql.begin(async (tx) => {
+      // 관리자 초대는 관리자 수를 바꾼다 — 가입·역할 변경·탈퇴와 같은 잠금을 잡는다.
+      await lockOrg(tx as unknown as typeof sql);
       const [invite] = await tx<Array<{ id: number; role: 'worker' | 'admin' }>>`
         select id, role from invites
         where token_hash = ${hashToken(input.token)}
@@ -355,10 +577,11 @@ export type RequestRow = {
 
 export async function listRequests(mineOnly: number | null): Promise<RequestRow[]> {
   return sql<RequestRow[]>`
-    select r.id, r.case_id, p.pseudonym, c.program_name, r.requested_by as requester_id, u.name as requester,
+    select r.id, r.case_id, p.pseudonym, pg.name as program_name, r.requested_by as requester_id, u.name as requester,
            r.reason, r.created_at, r.decided_at, r.decision
     from assignment_requests r
     join support_cases c on c.id = r.case_id
+    join programs pg on pg.id = c.program_id
     join participants p on p.id = c.participant_id
     join users u on u.id = r.requested_by
     where ${mineOnly === null ? sql`true` : sql`r.requested_by = ${mineOnly}`}
@@ -371,6 +594,8 @@ export async function requestAssignment(
   caseId: number,
   reason: string | null,
 ): Promise<{ ok: true } | { error: string }> {
+  // 종료된 사업의 사례는 새 담당을 받지 않는다. 관리자 배정 변경(assign)은 정리라서 예외다.
+  await assertProgramActive(caseId);
   try {
     const result = await sql.begin(async (tx) => {
       // 배정 교체와 같은 사례 잠금 아래에서 확인·요청한다. 확인 뒤 배정이 바뀌어

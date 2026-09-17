@@ -27,7 +27,7 @@ import { openCards, resolveOutcomes, type OutcomeSubmission } from './domain/car
 import { carryOverOnRecord } from './domain/goals.ts';
 import { buildSessionLine } from './domain/session-line.ts';
 import type { Assignee, Card, CardOutcome, FactChange, Session, SupportCase } from './domain/types.ts';
-import { assertCaseOpen, NotFound } from './access.ts';
+import { assertCaseOpen, assertProgramActive, NotFound, ProgramRetired } from './access.ts';
 
 const ANIMALS = [
   'swallow', 'otter', 'heron', 'badger', 'marten', 'crane', 'gecko', 'finch', 'ibex', 'lynx',
@@ -61,13 +61,18 @@ export async function createCase(input: {
   email?: string;
   birth?: string;
   address?: string;
-  program_name: string;
+  program_id: number;
   sessions_planned?: number;
   /** 등록 화면에서 받은 동의. 영역마다 동의·거부를 그 자리에서 사건으로 남긴다(P1). */
   consents?: Array<{ domain: ConsentDomain; decision: ConsentDecision }>;
   actorId: number;
 }): Promise<{ case_id: number; participant_id: number; pseudonym: string }> {
   return await sql.begin(async (tx) => {
+    // 사업은 살아 있는 것만 고른다. 종료된 사업에 새 사례를 여는 것은 잠긴 쓰기다.
+    const [program] = await tx<Array<{ retired_at: string | null }>>`
+      select retired_at from programs where id = ${input.program_id}`;
+    if (!program) throw new NotFound('사업을 찾지 못했어요.');
+    if (program.retired_at) throw new ProgramRetired('종료된 사업이에요. 다시 열어야 새 당사자를 등록할 수 있어요.');
     const pseudonym = await nextPseudonym(tx as unknown as typeof sql);
     const [participant] = await tx<{ id: number }[]>`
       insert into participants (pseudonym) values (${pseudonym}) returning id`;
@@ -75,8 +80,8 @@ export async function createCase(input: {
       values (${participant.id}, ${encryptPii(input.name)}, ${encryptPii(input.phone)},
               ${encryptPii(input.email)}, ${encryptPii(input.birth)}, ${encryptPii(input.address)}, ${KEY_VERSION})`;
     const [c] = await tx<{ id: number }[]>`
-      insert into support_cases (participant_id, program_name, sessions_planned)
-      values (${participant.id}, ${input.program_name}, ${input.sessions_planned ?? null})
+      insert into support_cases (participant_id, program_id, sessions_planned)
+      values (${participant.id}, ${input.program_id}, ${input.sessions_planned ?? null})
       returning id`;
     // 등록한 사람이 첫 담당이다(2026-09-16 Q). 맡은 사람만 사례를 여는 규칙이라
     // 배정 없이 만들면 만든 사람조차 못 여는 사례가 생긴다.
@@ -168,6 +173,7 @@ export async function saveIntake(
   },
 ): Promise<{ session_id: number }> {
   // 상담 자유 글에는 건강·채무 같은 민감정보가 섞인다. 동의 없이 저장하지 않는다(P1).
+  await assertProgramActive(caseId);
   await assertConsent(caseId, 'sensitive_information_processing');
   return await sql.begin(async (tx) => {
     // 첫 인테이크 저장은 회차를 만든다 — 일정 등록과 같은 이유로 사례 행을 먼저 잠근다.
@@ -256,6 +262,7 @@ export async function planSession(
     is_closing?: boolean;
   },
 ): Promise<{ session_id: number; seq: number }> {
+  await assertProgramActive(caseId);
   return await sql.begin(async (tx) => {
     // 사례 행을 먼저 잠근다(2026-09-16 검수). 안 잠그면 일정 등록을 빨리 두 번 눌렀을 때
     // 두 요청이 같은 `max(seq)+1` 을 읽고, 뒤엣것이 `unique (case_id, seq)` 에 걸려 500 이 난다.
@@ -282,6 +289,8 @@ export async function startSession(
   input: { session_id?: number; method?: string; is_closing?: boolean; actorId?: number },
 ): Promise<{ session_id: number; seq: number }> {
   await assertCaseOpen(caseId);
+  // 이미 잡힌 예정 회차는 사업이 종료돼도 기록한다. 새 회차만 잠긴다.
+  if (input.session_id === undefined) await assertProgramActive(caseId);
   await assertConsent(caseId, 'sensitive_information_processing');
   return await sql.begin(async (tx) => {
     await tx`select id from support_cases where id = ${caseId} for update`;
@@ -333,8 +342,13 @@ export async function recordSession(
     is_closing?: boolean;
   },
 ): Promise<{ session_id: number; unchecked: number }> {
-  const [owner] = await sql<Array<{ case_id: number }>>`select case_id from sessions where id = ${sessionId}`;
-  if (owner) await assertConsent(owner.case_id, 'sensitive_information_processing');
+  const [owner] = await sql<Array<{ case_id: number; status: string }>>`
+    select case_id, status from sessions where id = ${sessionId}`;
+  if (owner) {
+    // 이미 잡힌 예정 회차의 기록은 사업이 종료돼도 된다. 기록된 회차를 고쳐 쓰는 것은 잠긴다.
+    if (owner.status !== 'planned') await assertProgramActive(owner.case_id);
+    await assertConsent(owner.case_id, 'sensitive_information_processing');
+  }
   return await sql.begin(async (tx) => {
     const [target] = await tx<Session[]>`select * from sessions where id = ${sessionId} for update`;
     if (!target) throw new Error('session not found');
@@ -573,7 +587,10 @@ async function approvedSummaries(sessionIds: number[]): Promise<Record<number, A
 }
 
 async function loadCase(caseId: number) {
-  const [supportCase] = await sql<SupportCase[]>`select * from support_cases where id = ${caseId}`;
+  // 사업 이름은 사업 표에서 가져온다 — 이름을 바꾸면 지난 사례도 새 이름으로 보인다.
+  const [supportCase] = await sql<SupportCase[]>`
+    select c.*, p.name as program_name from support_cases c
+    join programs p on p.id = c.program_id where c.id = ${caseId}`;
   if (!supportCase) return null;
   const [participant] = await sql<{ pseudonym: string }[]>`
     select pseudonym from participants where id = ${supportCase.participant_id}`;
@@ -826,6 +843,7 @@ export type ParticipantRow = {
   participant_id: number | null;
   pseudonym: string;
   name: string | null;
+  program_id: number;
   program_name: string;
   status: 'open' | 'closed';
   /** 이 사례를 맡은 사람들. 없으면 아직 아무도 맡지 않은 사람이다. */
@@ -855,7 +873,8 @@ export async function listParticipants(actorId: number): Promise<ParticipantRow[
            p.id as participant_id,
            p.pseudonym,
            v.enc_name,
-           c.program_name,
+           c.program_id,
+           pg.name as program_name,
            c.status,
            (select coalesce(jsonb_agg(jsonb_build_object('id', u.id, 'name', u.name) order by u.name), '[]'::jsonb)
               from case_assignments a join users u on u.id = a.user_id
@@ -865,6 +884,7 @@ export async function listParticipants(actorId: number): Promise<ParticipantRow[
            (select max(seq) from sessions s where s.case_id = c.id and s.status = 'done') as last_session_seq,
            (select min(scheduled_at) from sessions s where s.case_id = c.id and s.status = 'planned') as next_scheduled_at
     from support_cases c
+    join programs pg on pg.id = c.program_id
     join participants p on p.id = c.participant_id
     left join participant_pii v on v.participant_id = p.id
     order by c.opened_at desc`;
@@ -901,12 +921,14 @@ export type ScheduleRow = {
 export async function listSchedules(actorId: number, from: string, to: string): Promise<ScheduleRow[]> {
   const rows = await sql<Array<Omit<ScheduleRow, 'name'> & { enc_name: string | null }>>`
     select s.id as session_id, s.case_id, s.seq, s.scheduled_at, s.method, s.place, s.plan_memo,
-           p.pseudonym, v.enc_name, c.program_name
+           p.pseudonym, v.enc_name, pg.name as program_name
     from sessions s
     join support_cases c on c.id = s.case_id
+    join programs pg on pg.id = c.program_id
     join participants p on p.id = c.participant_id
     left join participant_pii v on v.participant_id = p.id
-    where s.status = 'planned' and s.scheduled_at between ${from} and ${to}
+    -- 닫힌 사례에 남은 예정 회차는 일정이 아니다(2026-09-17 Q). 취소 API 가 없으니 여기서 숨긴다.
+    where s.status = 'planned' and c.status = 'open' and s.scheduled_at between ${from} and ${to}
       and exists (select 1 from case_assignments a
                    where a.case_id = c.id and a.user_id = ${actorId})
     order by s.scheduled_at`;

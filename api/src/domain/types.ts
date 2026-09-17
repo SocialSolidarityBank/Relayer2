@@ -94,6 +94,8 @@ export type Session = {
 export type SupportCase = {
   id: number;
   participant_id: number;
+  program_id: number;
+  /** 사업 표에서 join 으로 붙는 이름. 사례 행에는 없다(0024). */
   program_name: string;
   status: 'open' | 'closed';
   overall_goal: string | null;

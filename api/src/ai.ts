@@ -151,9 +151,23 @@ async function callGemini(prompt: string): Promise<Shape> {
   return JSON.parse(text) as Shape;
 }
 
+/**
+ * OpenAI 키의 출처(2026-09-17 Q). 기관이 화면에서 넣은 키(DB 암호문)가 먼저고, 없으면 환경 변수다.
+ * 호출마다 다시 읽는다 — 키를 바꾸면 다음 호출부터 바로 적용된다. 값은 절대 응답·로그에 싣지 않는다.
+ */
+export async function openAiKey(): Promise<{ key: string; source: 'db' | 'env' } | null> {
+  const [row] = await sql<Array<{ enc_openai_key: string | null }>>`
+    select enc_openai_key from organization where id = 1`;
+  const stored = decryptPii(row?.enc_openai_key ?? null);
+  if (stored) return { key: stored, source: 'db' };
+  const env = process.env.OPENAI_API_KEY;
+  return env ? { key: env, source: 'env' } : null;
+}
+
 async function callOpenAi(prompt: string): Promise<Shape> {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) throw new AiUnavailable('OPENAI_API_KEY 가 없어 AI 정리를 할 수 없어요.');
+  const found = await openAiKey();
+  if (!found) throw new AiUnavailable('OpenAI API 키가 없어 AI 정리를 할 수 없어요. 설정 › 시스템 연결에서 키를 넣어 주세요.');
+  const { key } = found;
 
   const res = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
