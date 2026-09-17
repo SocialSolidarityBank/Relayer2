@@ -151,6 +151,12 @@ async function callGemini(prompt: string): Promise<Shape> {
   return JSON.parse(text) as Shape;
 }
 
+/**
+ * OpenAI 에 응답 보관을 맡기지 않는다 — 동의 문안이 그렇게 약속한다(2026-09-17 Q).
+ * 요청 본문과 감사 기록이 같은 값을 읽는다. 둘이 어긋나면 감사가 거짓이 된다.
+ */
+const OPENAI_STORE = false;
+
 async function callOpenAi(prompt: string): Promise<Shape> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) throw new AiUnavailable('AI 정리 불가, OPENAI_API_KEY 없음');
@@ -163,8 +169,8 @@ async function callOpenAi(prompt: string): Promise<Shape> {
       // 추론을 길게 돌릴 일이 아니다. 적힌 말을 정리할 뿐이다.
       // gpt-5.4 이상은 'minimal' 을 받지 않는다. 'none' 이 같은 자리다.
       reasoning: { effort: MODEL.startsWith('gpt-5.') ? 'none' : 'minimal' },
-      // 응답 재사용용 보관을 끈다 — 동의 문안이 그렇게 약속한다(2026-09-17 Q). 남용 감시 30일은 별건이다.
-      store: false,
+      // 응답 재사용용 보관을 끈다. 남용 감시 30일은 별건이다.
+      store: OPENAI_STORE,
       input: [
         { role: 'system', content: SYSTEM },
         { role: 'user', content: prompt },
@@ -265,6 +271,8 @@ export async function draftSession(sessionId: number, actorId: number): Promise<
       `recipient=${AI_PROVIDERS[PROVIDER].legalRecipient}`,
       `country=${AI_PROVIDERS[PROVIDER].country}`,
       `model=${MODEL}`,
+      // 어떤 보관 설정으로 보냈는지가 증거다. Gemini 경로에는 그 설정이 없어 남기지 않는다.
+      ...(PROVIDER === 'openai' ? [`store=${OPENAI_STORE}`] : []),
       ...Object.entries(hits).map(([kind, n]) => `masked:${kind}=${n}`),
     ],
   });
