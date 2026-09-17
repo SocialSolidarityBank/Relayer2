@@ -510,3 +510,82 @@ body { margin: 0; }
   .recording-head { flex-direction: column; align-items: stretch; }
   .recording-actions { justify-content: flex-end; }
 }
+/* ==== L4 설정 (UI 개편 2026-09-18, ui-plan §1 I·J·K·L) ================================== */
+/* 카드 머리 오른쪽 끝 행동(I2·K3·L4). `Card` 의 action 슬롯을 감싸는 이름표 — 이식 `.wire-card-head`
+   가 둘째 자식부터 `margin-left:auto` 로 오른쪽 끝에 세우고 세로 가운데는 flex 가 이미 맞춘다. */
+.wire-card-action { display: inline-flex; align-items: center; flex: none; }
+
+/* 내 정보(I1): 읽는 값 셋이 한 행. 이식 `.wire-data-row` 는 [라벨 | 값] 두 열이라 셋을 가로로 세우려면
+   행 자체를 세로 쌓기(라벨 위, 값 아래)로 바꾸고 세 행을 3열에 앉힌다. 줄 사이 선은 없다. */
+.me-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-5); }
+.me-facts > .wire-data-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); padding: 0; }
+.me-facts > .wire-data-row + .wire-data-row { border-top: 0; }
+@media (max-width: 767px) {
+  .me-facts { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* 시스템 항목 한 행(L1): 제목 · 설명(남는 폭) · 버튼, 세로 가운데. */
+.system-row { display: flex; align-items: center; gap: var(--space-4); min-width: 0; }
+.system-row > .wire-item-title { flex: none; }
+.system-row > .wire-item-desc { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 배정 요청 두 카드(J2)는 항상 나란히 — 이식 `.card-grid` 의 auto-fit 은 1031 에서 3열까지 열려 셋째 칸이 빈다. */
+.assign-requests { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 767px) {
+  .assign-requests { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* 배정 목록 업무 바(J3): 왼쪽 검색칸, 오른쪽 사업 걸개 — 당사자 목록 업무 바와 같은 배치. */
+.assign-toolbar, .log-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.log-toolbar { margin-bottom: var(--space-4); }
+.assign-toolbar-search, .log-toolbar-search { flex: 1 1 360px; max-width: 540px; min-width: 0; min-height: var(--pill-height); padding: 0 var(--space-2); }
+.log-toolbar-actions { display: flex; align-items: center; gap: var(--space-2); flex: none; }
+.assign-toolbar > .wire-input-box[data-control='select'] { flex: none; width: auto; }
+@media (max-width: 767px) {
+  .assign-toolbar, .log-toolbar { flex-wrap: wrap; }
+  .assign-toolbar-search, .log-toolbar-search { flex-basis: 100%; max-width: none; }
+  .log-toolbar-actions { flex-wrap: wrap; }
+}
+/* 배정 행(J3): 이름 · 아이디·사업·연락처 · 상태·담당 · 버튼이 한 행, 세로 가운데. 행 사이는 가로선이다
+   (카드 안 카드 없음 — D5 와 같은 결). 이름은 굵게, 나머지는 남는 폭을 나눠 쓰고 넘치면 말줄임한다. */
+.assign-case-list { display: grid; }
+.assign-case-row { display: flex; align-items: center; gap: var(--space-4); min-width: 0; padding: var(--space-3) 0; }
+.assign-case-row + .assign-case-row { border-top: 1px solid var(--line); }
+.assign-case-name { flex: none; font-weight: 600; color: var(--ink); }
+.assign-case-row > .wire-meta-row, .assign-case-workers { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm); color: var(--sub); }
+.assign-case-row > .wire-button { flex: none; }
+/* 쪽 넘기기는 가운데다 — 당사자 목록과 같은 모양. */
+.assign-pager { display: flex; align-items: center; justify-content: center; gap: var(--space-4); }
+.assign-pager .wire-button { min-width: 32px; min-height: 32px; padding-inline: 0; }
+.assign-pager-label { margin: 0; font-size: var(--text-sm); color: var(--sub); }
+/* 드로어 안 담당 목록: 행마다 이름 · 역할·아이디 · 배지 · `−`. 더하는 줄은 선택창 + `+`. */
+.assign-pick-list { display: grid; }
+.assign-pick-row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) 0; }
+.assign-pick-row + .assign-pick-row { border-top: 1px solid var(--line); }
+.assign-pick-row > .wire-meta-row { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm); color: var(--sub); }
+.assign-pick-row > .wire-button, .assign-add-row > .wire-button { flex: none; min-width: var(--pill-height); padding-inline: 0; }
+.assign-add-row { align-items: center; grid-template-columns: minmax(0, 1fr) auto; }
+
+/* 실무자 접힘 카드 사이(J1) — 연결 아코디언과 같은 16. */
+.worker-list { display: grid; gap: var(--space-4); }
+/* 담당 중인 당사자 팝업(J1). 확인 대화상자와 같은 면·라운드, 표가 들어가게 폭만 넓다. */
+.assignee-dialog { width: min(760px, calc(100vw - var(--space-6) * 2)); max-height: calc(100dvh - var(--space-6) * 2); overflow-y: auto; padding: var(--space-6); border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--panel); color: var(--ink); }
+.assignee-dialog::backdrop { background: rgb(0 0 0 / 40%); }
+.assignee-dialog h2 { margin: 0 0 var(--space-4); font-size: var(--text-lg); font-weight: 600; }
+.assignee-dialog .wire-form-actions { margin-top: var(--space-5); }
+
+/* 사업 추가 한 행(K2): 입력칸은 절반 폭, 버튼은 그 옆 세로 가운데. */
+.program-add-row { grid-template-columns: minmax(0, 360px) auto; justify-content: start; align-items: center; }
+/* 사업 접힘 머리 한 행(K1): 이름 · 기간·당사자 수·설명 · `사업 종료`. `Fold` 의 제목 조각은 한 줄 말줄임이라
+   행 하나가 들어가게 풀어 준다(회차 머리 `.seq-head-no` 와 같은 수법). */
+.wire-card-summary > .wire-card-title:has(.program-row) { flex: 1 1 0; }
+.fold-title-text:has(> .program-row) { flex: 1 1 0; min-width: 0; overflow: visible; white-space: normal; }
+.program-row { display: flex; align-items: center; gap: var(--space-4); min-width: 0; }
+.program-row-name { flex: none; }
+.program-row > .wire-meta-row { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; font-size: var(--text-sm); color: var(--sub); }
+.program-row > .wire-button { flex: none; }
+.wire-card-details[open]:not(.is-crisis) > .wire-card-summary .program-row > .wire-meta-row { color: var(--on-action); }
+
+/* 카드 밖 한 줄 안내(L4). 경고는 코랄. */
+.wire-note { margin: 0; font-size: var(--text-sm); color: var(--sub); }
+.wire-note[data-tone='warn'] { color: var(--discrepancy); }

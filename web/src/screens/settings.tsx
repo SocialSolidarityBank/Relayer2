@@ -11,10 +11,10 @@
  * 기관에 있는 것(`실무자 초대하기`·`실무자 목록`)과 이 사람을 맡은 것(`담당 배정하기`)은
  * 다르다. 방금 초대한 사람은 아무도 안 맡았는데 `담당자`라 부르면 화면이 거짓말한다.
  */
-import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
+  ASSIGN_PAGE_SIZE,
   addProgram,
-  assignCase,
   createInvite,
   deactivateMe,
   decideRequest,
@@ -22,25 +22,28 @@ import {
   getConsentCopy,
   getOrg,
   getProfile,
+  listAssignCases,
   listInvites,
-  listAssignmentCases,
   listPrograms,
   listRequests,
   listWorkers,
   auditCsvHref,
+  putConsentCopy,
   reopenProgram,
   retireProgram,
   revokeInvite,
   saveOrg,
   saveProfile,
   setAiKey,
+  setAssignments,
   setWorkerRole,
   updateProgram,
   Unauthorized,
-  workerCases,
-  type AssignmentCase,
+  workerCaseRows,
+  type AssignCase,
   type Connections,
   type ConsentCopy,
+  type ConsentCopyInput,
   type Invite,
   type Org,
   type OrgView,
@@ -51,14 +54,13 @@ import {
   type RetireWarning,
   type AuditKind,
   type Worker,
-  type WorkerCase,
+  type WorkerCaseRow,
 } from '../api.ts';
 import {
   Badge,
   Button,
   Card,
-  Choice,
-  ChoiceGroup,
+  Chevron,
   Confirm,
   ConsentDetail,
   DataRows,
@@ -70,6 +72,7 @@ import {
   Item,
   Meta,
   PageHeader,
+  Select,
 } from '../ui.tsx';
 import { setTheme, themeChoice, type ThemeChoice } from '../theme.ts';
 import { DatePicker } from '../date-picker.tsx';
@@ -97,9 +100,9 @@ export const SETTINGS_GROUPS = [
     key: 'me',
     title: '내 정보',
     items: [
-      { key: 'profile', label: '내 정보', desc: '이름·연락처·이메일 수정', admin: false },
-      { key: 'theme', label: '화면 테마', desc: '밝게·어둡게·기기 설정 따라', admin: false },
-      { key: 'leave', label: '계정 삭제하기', desc: '로그인 차단, 기록은 유지', admin: false },
+      { key: 'profile', label: '내 정보', desc: '이름, 연락처, 이메일', admin: false },
+      { key: 'theme', label: '테마', desc: '밝게, 어둡게, 기기 설정', admin: false },
+      { key: 'leave', label: '계정 삭제', desc: '로그인 차단, 기록은 유지', admin: false },
     ],
   },
   {
@@ -128,10 +131,10 @@ export const SETTINGS_GROUPS = [
     // 서로 상관이 없어, 한 페이지에 쌓으면 무엇을 보러 왔는지 잃는다.
     nested: true,
     items: [
-      { key: 'connections', label: '외부 서비스 연결', desc: 'AI 정리·녹음 글로 옮기기·데이터베이스 연결 상태', admin: true },
+      { key: 'connections', label: '외부 서비스 연결', desc: 'AI 정리, 녹음 글로 옮기기, 데이터베이스 연결 상태', admin: true },
       { key: 'audit', label: '열람 기록 관리', desc: '누가 언제 무엇을 열었는지 검색', admin: true },
-      { key: 'consent', label: '동의서 관리', desc: '지금 쓰는 동의 문안', admin: true },
-      { key: 'download', label: '자료 다운로드', desc: '기간·실무자·종류를 정해 CSV 받기', admin: true },
+      { key: 'consent', label: '동의서 관리', desc: '지금 쓰는 동의 문안, 수정' , admin: true },
+      { key: 'download', label: '자료 다운로드', desc: '기간, 실무자, 종류별 CSV 내려받기', admin: true },
     ],
   },
 ] as const;
@@ -252,14 +255,15 @@ export function SettingsScreen({
       <>
         <PageHeader title={g.title} meta={isAdmin ? '관리자' : '실무자'} />
         {/* 묶음 카드를 걷고 항목 넷을 **각자 카드로 올린다**(2026-09-17 Q). `무엇을 볼까요`
-            한 장 안에 상자 넷을 넣으면 상자가 두 겹이고, 정작 고르는 대상은 안쪽 상자다. */}
+            한 장 안에 상자 넷을 넣으면 상자가 두 겹이고, 정작 고르는 대상은 안쪽 상자다.
+            한 항목은 **한 행**이다(2026-09-18 L1): 제목 · 설명(남는 폭) · 버튼, 세로 가운데. */}
         {g.items.map((i) => (
           <Card key={i.key}>
-            <Item
-              title={i.label}
-              desc={i.desc}
-              action={<Button onClick={() => (window.location.hash = `#/settings/${i.key}`)}>열기</Button>}
-            />
+            <div className="system-row">
+              <span className="wire-item-title" title={i.label}>{i.label}</span>
+              <span className="wire-item-desc" title={i.desc}>{i.desc}</span>
+              <Button onClick={() => (window.location.hash = `#/settings/${i.key}`)}>열기</Button>
+            </div>
           </Card>
         ))}
       </>
@@ -278,12 +282,18 @@ export function SettingsScreen({
 
 // ── 공통 ──────────────────────────────────────────────────────────────────
 
+/**
+ * 내 정보(2026-09-18 L4 I1·I2). 읽는 값(아이디·역할·기관)은 한 행, 고치는 칸(이름·연락처·이메일)도
+ * 한 행이다. `저장` 은 카드 머리 오른쪽 끝 — 본문 맨 아래까지 내려가 찾을 일이 없다.
+ */
 function ProfilePane() {
   const [p, setP] = useState<Profile | null>(null);
+  const [orgName, setOrgName] = useState('');
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
     void getProfile().then(setP);
+    void getOrg().then((o) => setOrgName(o.name));
   }, []);
   if (!p) return <Empty>불러오는 중</Empty>;
 
@@ -298,33 +308,52 @@ function ProfilePane() {
   };
 
   return (
-    <Card title="내 정보">
-      <DataRows
-        rows={[
+    <Card
+      title="내 정보"
+      className="me-profile"
+      action={
+        <span className="wire-card-action">
+          <Button variant="primary" disabled={!p.name.trim()} onClick={() => void save()}>
+            저장
+          </Button>
+        </span>
+      }
+    >
+      {err && <ErrorText>{err}</ErrorText>}
+      {saved && !err && <p className="panel-meta">저장됨</p>}
+      <dl className="wire-data-rows me-facts">
+        {([
           ['로그인 아이디', p.email],
           ['역할', p.role === 'admin' ? '관리자' : '실무자'],
-        ]}
-      />
-      <Field label="이름" htmlFor="pf-name">
-        <input id="pf-name" value={p.name} onChange={(e) => setP({ ...p, name: e.target.value })} />
-      </Field>
-      <Field label="연락처" htmlFor="pf-phone" hint="예: 010-1234-5678">
-        <input id="pf-phone" value={p.phone ?? ''} onChange={(e) => setP({ ...p, phone: e.target.value })} />
-      </Field>
-      <Field label="이메일" htmlFor="pf-mail" hint="예: minhee@example.org">
-        <input
-          id="pf-mail"
-          value={p.contact_email ?? ''}
-          onChange={(e) => setP({ ...p, contact_email: e.target.value })}
-        />
-      </Field>
-      <FormActions>
-        {err && <ErrorText>{err}</ErrorText>}
-        {saved && !err && <span className="panel-meta">저장됨</span>}
-        <Button variant="primary" onClick={() => void save()}>
-          저장하기
-        </Button>
-      </FormActions>
+          ['기관', orgName || '기관 이름 없음'],
+        ] as Array<[string, string]>).map(([k, v]) => (
+          <div className="wire-data-row" key={k}>
+            <dt>{k}</dt>
+            <dd>{v}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="form-row" data-cols="3">
+        <Field label="이름" htmlFor="pf-name" required>
+          <input id="pf-name" value={p.name} onChange={(e) => setP({ ...p, name: e.target.value })} />
+        </Field>
+        <Field label="연락처" htmlFor="pf-phone">
+          <input
+            id="pf-phone"
+            placeholder="010-1234-5678"
+            value={p.phone ?? ''}
+            onChange={(e) => setP({ ...p, phone: e.target.value })}
+          />
+        </Field>
+        <Field label="이메일" htmlFor="pf-mail">
+          <input
+            id="pf-mail"
+            placeholder="minhee@example.org"
+            value={p.contact_email ?? ''}
+            onChange={(e) => setP({ ...p, contact_email: e.target.value })}
+          />
+        </Field>
+      </div>
     </Card>
   );
 }
@@ -332,37 +361,45 @@ function ProfilePane() {
 // 설명은 보기 안에서 끝낸다(2026-09-17 Q "설명은 짧게 선택창 안에서") — 세 줄 카드로
 // 늘어놓으면 고르는 일보다 읽는 일이 커진다(§13 설명형 글은 기본으로 두지 않는다).
 const THEMES: ReadonlyArray<[ThemeChoice, string]> = [
-  ['light', '밝게, 흰 바탕'],
-  ['dark', '어둡게, 어두운 바탕'],
-  ['system', '기기 설정 따라, 기기가 어두워지면 같이'],
+  ['light', '밝게'],
+  ['dark', '어둡게'],
+  ['system', '기기 설정'],
 ];
 
+/** 테마(2026-09-18 L4 I3). 제목 줄 없는 카드 한 행 — 이름 왼쪽, 선택창 오른쪽. 고르는 즉시 칠한다. */
 function ThemePane() {
   const [t, setT] = useState<ThemeChoice>(themeChoice());
   return (
-    <Card title="화면 테마">
-      {/* 고르는 즉시 칠한다 — 저장 버튼을 두면 이미 바뀐 화면을 두고 한 번 더 누르게 된다. */}
-      <Field label="테마" htmlFor="theme" control="select">
-        <select
-          id="theme"
-          value={t}
-          onChange={(e) => {
-            const choice = e.target.value as ThemeChoice;
-            setTheme(choice);
-            setT(choice);
-          }}
-        >
-          {THEMES.map(([key, label]) => (
-            <option key={key} value={key}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </Field>
+    <Card>
+      <Item
+        title="테마"
+        action={
+          <Select
+            id="theme"
+            aria-label="테마"
+            value={t}
+            onChange={(v) => {
+              const choice = v as ThemeChoice;
+              setTheme(choice);
+              setT(choice);
+            }}
+          >
+            {THEMES.map(([key, label]) => (
+              <option key={key} value={key}>
+                {label}
+              </option>
+            ))}
+          </Select>
+        }
+      />
     </Card>
   );
 }
 
+/**
+ * 계정 삭제(2026-09-18 L4 I4). 접힌 카드 한 행 — 제목 왼쪽, `삭제` 오른쪽 끝. 펼치면 확인 칸 하나가
+ * 있고 `나가기` 를 적어야 버튼이 열린다. 설명 문장은 두지 않는다 — 칸의 placeholder 가 그 말이다.
+ */
 function LeavePane() {
   const [confirm, setConfirm] = useState('');
   const [err, setErr] = useState<string | null>(null);
@@ -376,30 +413,55 @@ function LeavePane() {
     }
   };
   return (
-    <Card title="계정 삭제하기" tone="warn">
-      <Field label="확인" htmlFor="leave-c" tone="warn" hint="`나가기` 입력">
-        <input id="leave-c" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-      </Field>
-      <FormActions>
+    <div className="leave-fold">
+      <Fold
+        title={<span className="fold-title">계정 삭제</span>}
+        action={
+          <Button
+            variant="danger"
+            disabled={confirm !== '나가기'}
+            onClick={(e) => {
+              e.stopPropagation();
+              void go();
+            }}
+          >
+            삭제
+          </Button>
+        }
+      >
+        <Field label="확인" htmlFor="leave-c" tone="warn" hideLabel>
+          <input
+            id="leave-c"
+            aria-label="확인"
+            placeholder="나가기 입력"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+          />
+        </Field>
         {err && <ErrorText>{err}</ErrorText>}
-        <Button variant="danger" disabled={confirm !== '나가기'} onClick={() => void go()}>
-          계정 삭제하기
-        </Button>
-      </FormActions>
-    </Card>
+      </Fold>
+    </div>
   );
 }
 
 // ── 관리자 ────────────────────────────────────────────────────────────────
 
+/**
+ * 담당 배정(2026-09-18 L4 J2·J3). 위는 요청 두 카드가 나란히(승인할 것 · 내 것), 아래는 당사자
+ * 한 사람이 **한 행**인 배정 목록이다 — 찾기·사업 걸개·열 장씩 쪽 넘기기. `실무자 배정` 을
+ * 누르면 오른쪽 드로어에서 여러 명을 더하고 빼고 저장한다(D7: 담당은 모두 같은 권한).
+ * 목록 모양은 L5 계약(`GET /assign/cases`)이고 채우는 일은 `api.ts` 가 한다.
+ */
 function AssignPane({ me }: { me: { id: number } }) {
   const [workers, setWorkers] = useState<Worker[] | null>(null);
   const [reqs, setReqs] = useState<RequestRow[]>([]);
-  const [dir, setDir] = useState<AssignmentCase[] | null>(null);
+  const [programs, setPrograms] = useState<Program[]>([]);
+  const [q, setQ] = useState('');
+  const [program, setProgram] = useState('all');
+  const [page, setPage] = useState(1);
+  const [dir, setDir] = useState<{ items: AssignCase[]; total: number } | null>(null);
   const [dirError, setDirError] = useState('');
-  const [openCase, setOpenCase] = useState<number | null>(null);
-  const [picked, setPicked] = useState<number[]>([]);
-  const [confirmClear, setConfirmClear] = useState(false);
+  const [editing, setEditing] = useState<AssignCase | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   // 늦게 온 목록 응답이 새 것을 덮지 못하게 번호를 매긴다.
@@ -408,22 +470,22 @@ function AssignPane({ me }: { me: { id: number } }) {
   const loadDir = async () => {
     const seq = ++dirSeq.current;
     try {
-      const rows = await listAssignmentCases();
+      const out = await listAssignCases({ q, program: program === 'all' ? null : Number(program), page });
       if (seq === dirSeq.current) {
-        setDir(rows);
+        setDir(out);
         setDirError('');
       }
     } catch (e) {
-      if (seq === dirSeq.current)
-        setDirError(e instanceof Error ? e.message : '불러오기 실패')
+      if (seq === dirSeq.current) setDirError(e instanceof Error ? e.message : '불러오기 실패');
     }
   };
 
   const reload = async () => {
     try {
-      const [staff, requests] = await Promise.all([listWorkers(), listRequests()]);
+      const [staff, requests, progs] = await Promise.all([listWorkers(), listRequests(), listPrograms(true)]);
       setWorkers(staff);
       setReqs(requests);
+      setPrograms(progs);
       await loadDir();
     } catch (e) {
       setDirError(e instanceof Error ? e.message : '배정 정보 불러오기 실패');
@@ -431,11 +493,21 @@ function AssignPane({ me }: { me: { id: number } }) {
   };
   useEffect(() => {
     void reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // 찾기·걸개를 바꾸면 첫 쪽으로. 쪽만 바꾸면 그 쪽을 다시 부른다.
+  useEffect(() => {
+    setPage(1);
+  }, [q, program]);
+  useEffect(() => {
+    void loadDir();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, program, page]);
 
   const live = (workers ?? []).filter((w) => !w.deactivated_at);
   const toApprove = reqs.filter((r) => !r.decided_at && r.requester_id !== me.id);
   const mine = reqs.filter((r) => r.requester_id === me.id);
+  const pages = Math.max(1, Math.ceil((dir?.total ?? 0) / ASSIGN_PAGE_SIZE));
 
   const decide = async (id: number, decision: 'approved' | 'rejected') => {
     setSaving(true);
@@ -450,29 +522,12 @@ function AssignPane({ me }: { me: { id: number } }) {
     }
   };
 
-  const openEditor = (c: AssignmentCase) => {
-    if (openCase === c.id) {
-      setOpenCase(null);
-      return;
-    }
-    setOpenCase(c.id);
-    setPicked(c.assignees.map((a) => a.id));
-    setConfirmClear(false);
-    setSaveError('');
-  };
-
-  const toggle = (id: number) => {
-    setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
-    setConfirmClear(false);
-  };
-
   const save = async (caseId: number, userIds: number[]) => {
     setSaving(true);
     setSaveError('');
     try {
-      await assignCase(caseId, userIds);
-      if (openCase === caseId) setOpenCase(null);
-      setConfirmClear(false);
+      await setAssignments(caseId, userIds);
+      setEditing(null);
       await reload();
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : '저장 실패');
@@ -481,79 +536,93 @@ function AssignPane({ me }: { me: { id: number } }) {
     }
   };
 
-  const trySave = (c: AssignmentCase) => {
-    // 아무도 고르지 않은 채 저장하면 담당이 전부 거둬진다 — 되돌릴 수 없으니
-    // 같은 자리에서 한 번 더 묻는다(브라우저 confirm 은 이 화면에 없다).
-    if (picked.length === 0 && c.assignees.length > 0 && !confirmClear) {
-      setConfirmClear(true);
-      return;
-    }
-    void save(c.id, picked);
-  };
+  const request = (r: RequestRow, action: ReactNode) => (
+    <div className="wire-repeat-card" key={r.id}>
+      <Item
+        title={<Meta parts={[r.pseudonym, r.program_name]} />}
+        desc={`${r.requester}, ${date(r.created_at)}${r.reason ? `, ${r.reason}` : ''}`}
+        action={action}
+      />
+    </div>
+  );
 
   return (
     <>
-      {/* 승인할 것과 내가 올린 것을 한자리에 둔다(2026-09-16 Q) —
-          관리자도 당사자를 맡는 사람이라 둘이 같이 있어야 흐름이 끊기지 않는다. */}
-      <Card title="담당 배정 요청">
-        {saveError && <ErrorText>{saveError}</ErrorText>}
-        <h3 className="wire-subhead">승인할 배정 요청 목록</h3>
-        {toApprove.length === 0 ? (
-          <Empty>대기 중인 요청 없음</Empty>
-        ) : (
-          toApprove.map((r) => (
-            <div className="wire-repeat-card" key={r.id}>
-              <Item
-                title={<Meta parts={[r.pseudonym, r.program_name]} />}
-                desc={`${r.requester}, ${date(r.created_at)}${r.reason ? `, ${r.reason}` : ''}`}
-                action={
+      {/* 승인할 것과 내가 올린 것을 한자리에 둔다(2026-09-16 Q) — 관리자도 당사자를 맡는 사람이라
+          둘이 같이 있어야 흐름이 끊기지 않는다. 두 카드는 나란히 서고 위를 맞춘다(J2). */}
+      <div className="card-grid assign-requests" data-align="start">
+        <Card title="승인할 배정 요청">
+          {saveError && <ErrorText>{saveError}</ErrorText>}
+          {toApprove.length === 0 ? (
+            <Empty>대기 중인 요청 없음</Empty>
+          ) : (
+            toApprove.map((r) =>
+              request(
+                r,
+                <>
+                  <Button variant="primary" disabled={saving} onClick={() => void decide(r.id, 'approved')}>
+                    배정
+                  </Button>
+                  <Button disabled={saving} onClick={() => void decide(r.id, 'rejected')}>
+                    거절
+                  </Button>
+                </>,
+              ),
+            )
+          )}
+        </Card>
+        <Card title="내 배정 요청">
+          {mine.length === 0 ? (
+            <Empty>내가 올린 요청 없음</Empty>
+          ) : (
+            mine.map((r) =>
+              request(
+                r,
+                r.decided_at ? (
+                  <Badge tone={r.decision === 'approved' ? 'mint' : undefined}>
+                    {r.decision === 'approved' ? '배정됨' : '거절됨'}
+                  </Badge>
+                ) : (
                   <>
-                    <Button
-                      variant="primary"
-                      disabled={saving}
-                      onClick={() => void decide(r.id, 'approved')}
-                    >
-                      배정하기
+                    <Badge tone="blue">기다리는 중</Badge>
+                    <Button disabled={saving} onClick={() => void decide(r.id, 'approved')}>
+                      배정 확정
                     </Button>
-                    <Button disabled={saving} onClick={() => void decide(r.id, 'rejected')}>거절</Button>
+                    <Button disabled={saving} onClick={() => void decide(r.id, 'rejected')}>
+                      요청 취소
+                    </Button>
                   </>
-                }
-              />
-            </div>
-          ))
-        )}
+                ),
+              ),
+            )
+          )}
+        </Card>
+      </div>
 
-        <h3 className="wire-subhead">내 요청</h3>
-        {mine.length === 0 ? (
-          <Empty>내가 올린 요청 없음</Empty>
-        ) : (
-          mine.map((r) => (
-            <div className="wire-repeat-card" key={r.id}>
-              <Item
-                title={<Meta parts={[r.pseudonym, r.program_name]} />}
-                desc={`${date(r.created_at)} 올림${r.reason ? `, ${r.reason}` : ''}`}
-                action={
-                  r.decided_at ? (
-                    <Badge tone={r.decision === 'approved' ? 'mint' : undefined}>
-                      {r.decision === 'approved' ? '배정됨' : '거절됨'}
-                    </Badge>
-                  ) : (
-                    <>
-                      <Badge tone="blue">기다리는 중</Badge>
-                      <Button disabled={saving} onClick={() => void decide(r.id, 'approved')}>배정 확정</Button>
-                      <Button disabled={saving} onClick={() => void decide(r.id, 'rejected')}>요청 취소</Button>
-                    </>
-                  )
-                }
-              />
-            </div>
-          ))
-        )}
-      </Card>
-
-      {/* 사례를 먼저 고르고, 그 안에서 담당을 여럿 고른다. 목록에는 가명·사업·담당
-          이름만 온다 — 관리자라도 맡지 않은 사례의 임상 내용은 서버가 안 준다. */}
+      {/* 당사자 한 사람이 한 행이다. 목록에는 가명·사업·담당 이름만 온다 — 관리자라도 맡지 않은
+          사례의 임상 내용은 서버가 안 준다. 연락처·이메일은 L5 가 주면 그대로 선다. */}
       <Card title="담당 실무자 배정">
+        <div className="work-toolbar assign-toolbar">
+          <div className="wire-input-box assign-toolbar-search">
+            <input
+              id="assign-q"
+              type="search"
+              aria-label="찾기"
+              placeholder="이름, 아이디, 사업 이름, 실무자"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+          </div>
+          <Select id="assign-program" aria-label="사업 걸개" value={program} onChange={setProgram}>
+            <option value="all">사업 전체</option>
+            {programs.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+                {p.retired_at ? ' (종료됨)' : ''}
+              </option>
+            ))}
+          </Select>
+        </div>
         {dirError ? (
           <>
             <ErrorText>{dirError}</ErrorText>
@@ -563,55 +632,190 @@ function AssignPane({ me }: { me: { id: number } }) {
           </>
         ) : dir === null || workers === null ? (
           <Empty>불러오는 중</Empty>
-        ) : dir.length === 0 ? (
-          <Empty>등록된 사례 없음</Empty>
+        ) : dir.total === 0 ? (
+          <Empty>{q || program !== 'all' ? '검색 결과 없음' : '등록된 사례 없음'}</Empty>
         ) : (
-          dir.map((c) => (
-            <div className="wire-repeat-card" key={c.id}>
-              <Item
-                title={<Meta parts={[c.pseudonym, c.program_name]} />}
-                desc={`${c.status === 'open' ? '진행 중' : '종결'}, ${
-                  c.assignees.length > 0 ? `담당 ${c.assignees.map((a) => a.name).join(', ')}` : '담당 없음'
-                }`}
-                action={
-                  <Button disabled={saving} onClick={() => openEditor(c)}>
-                    {openCase === c.id ? '접기' : '담당 고르기'}
-                  </Button>
-                }
-              />
-              {openCase === c.id && (
-                <>
-                  <ChoiceGroup legend="담당할 사람">
-                    {live.map((w) => (
-                      <Choice
-                        key={w.id}
-                        type="checkbox"
-                        label={`${w.name}, ${w.email}`}
-                        hint={w.role === 'admin' ? '관리자' : undefined}
-                        checked={picked.includes(w.id)}
-                        onChange={() => toggle(w.id)}
-                      />
-                    ))}
-                  </ChoiceGroup>
-                  {confirmClear && (
-                    <ErrorText>아무도 고르지 않으면 담당 모두 해제</ErrorText>
-                  )}
-                  {saveError && <ErrorText>{saveError}</ErrorText>}
-                  <FormActions>
-                    <Button variant="primary" disabled={saving} onClick={() => trySave(c)}>
-                      {confirmClear ? '모두 제외하기' : '저장하기'}
-                    </Button>
-                    <Button disabled={saving} onClick={() => setOpenCase(null)}>
-                      닫기
-                    </Button>
-                  </FormActions>
-                </>
-              )}
-            </div>
-          ))
+          <div className="assign-case-list">
+            {dir.items.map((c) => (
+              <div className="assign-case-row" key={c.case_id}>
+                <span className="assign-case-name">{c.name}</span>
+                <Meta
+                  parts={[
+                    c.login !== c.name ? c.login : null,
+                    c.seq ? `${c.program} ${c.seq}회차` : c.program,
+                    c.phone,
+                    c.email,
+                  ]}
+                />
+                <span className="assign-case-workers">
+                  <Meta
+                    parts={[
+                      c.status === 'open' ? '진행 중' : '종결',
+                      c.assignees.length > 0 ? `담당 ${c.assignees.map((a) => a.name).join(', ')}` : '담당 없음',
+                    ]}
+                  />
+                </span>
+                <Button
+                  disabled={saving}
+                  aria-label={`${c.name} 실무자 배정`}
+                  onClick={() => {
+                    setSaveError('');
+                    setEditing(c);
+                  }}
+                >
+                  실무자 배정
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+        {pages > 1 && (
+          <nav className="assign-pager" aria-label="쪽 넘기기">
+            <Button aria-label="이전 쪽" disabled={page === 1} onClick={() => setPage(page - 1)}>
+              <Chevron dir="left" />
+            </Button>
+            <p className="assign-pager-label" aria-live="polite">
+              {page} / {pages} 쪽
+            </p>
+            <Button aria-label="다음 쪽" disabled={page === pages} onClick={() => setPage(page + 1)}>
+              <Chevron dir="right" />
+            </Button>
+          </nav>
         )}
       </Card>
+
+      {editing && (
+        <AssignDrawer
+          row={editing}
+          workers={live}
+          saving={saving}
+          error={saveError}
+          onSave={(ids) => void save(editing.case_id, ids)}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </>
+  );
+}
+
+/**
+ * 담당 실무자 드로어(J3). 지금 담당은 `담당 실무자` 배지를 달고 서 있고, 선택창에서 골라 `+` 로
+ * 더하고 행의 `−` 로 뺀다. `저장` 이 목록 전체를 그 사례의 담당으로 치환한다 — 빈 채로 저장하면
+ * 담당이 전부 거둬지므로 같은 자리에서 한 번 더 묻는다.
+ */
+function AssignDrawer({
+  row,
+  workers,
+  saving,
+  error,
+  onSave,
+  onClose,
+}: {
+  row: AssignCase;
+  workers: Worker[];
+  saving: boolean;
+  error: string;
+  onSave: (userIds: number[]) => void;
+  onClose: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [picked, setPicked] = useState<number[]>(row.assignees.map((a) => a.id));
+  const [choice, setChoice] = useState('');
+  const [confirmClear, setConfirmClear] = useState(false);
+  useEffect(() => {
+    dialog.current?.showModal();
+  }, []);
+
+  const current = new Set(row.assignees.map((a) => a.id));
+  const byId = new Map(workers.map((w) => [w.id, w]));
+  const rest = workers.filter((w) => !picked.includes(w.id));
+  const chosen = choice ? Number(choice) : rest[0]?.id;
+
+  const add = () => {
+    if (!chosen) return;
+    setPicked((p) => [...p, chosen]);
+    setChoice('');
+    setConfirmClear(false);
+  };
+  const trySave = () => {
+    if (picked.length === 0 && row.assignees.length > 0 && !confirmClear) {
+      setConfirmClear(true);
+      return;
+    }
+    onSave(picked);
+  };
+
+  return (
+    <dialog
+      ref={dialog}
+      className="side-drawer assign-drawer"
+      aria-labelledby="assign-drawer-title"
+      onClose={onClose}
+      onClick={(event) => {
+        if (event.target === dialog.current) dialog.current?.close();
+      }}
+    >
+      <div className="side-drawer-head">
+        <h2 id="assign-drawer-title">{row.name} 담당 실무자</h2>
+        <Button onClick={() => dialog.current?.close()}>닫기</Button>
+      </div>
+      <div className="side-drawer-body">
+        <p className="panel-meta">
+          <Meta parts={[row.login !== row.name ? row.login : null, row.program, row.status === 'open' ? '진행 중' : '종결']} />
+        </p>
+        {picked.length === 0 ? (
+          <Empty>담당 없음</Empty>
+        ) : (
+          <div className="assign-pick-list">
+            {picked.map((id) => {
+              const w = byId.get(id);
+              const name = w?.name ?? row.assignees.find((a) => a.id === id)?.name;
+              if (!name) return null;
+              return (
+                <div className="assign-pick-row" key={id}>
+                  <span className="assign-case-name">{name}</span>
+                  {w && <Meta parts={[w.role === 'admin' ? '관리자' : '실무자', w.email]} />}
+                  {current.has(id) && <Badge tone="mint">담당 실무자</Badge>}
+                  <Button
+                    aria-label={`${name} 제외`}
+                    disabled={saving}
+                    onClick={() => {
+                      setPicked((p) => p.filter((x) => x !== id));
+                      setConfirmClear(false);
+                    }}
+                  >
+                    −
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <div className="inline-action-row assign-add-row">
+          <Select id="assign-pick" aria-label="실무자 선택" value={chosen ? String(chosen) : ''} onChange={setChoice}>
+            {rest.length === 0 && <option value="">더할 실무자 없음</option>}
+            {rest.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}, {w.role === 'admin' ? '관리자' : '실무자'}
+              </option>
+            ))}
+          </Select>
+          <Button aria-label="실무자 추가" disabled={saving || !chosen} onClick={add}>
+            +
+          </Button>
+        </div>
+        {confirmClear && <ErrorText>아무도 고르지 않으면 담당 모두 해제</ErrorText>}
+        {error && <ErrorText>{error}</ErrorText>}
+        <FormActions>
+          <Button disabled={saving} onClick={() => dialog.current?.close()}>
+            닫기
+          </Button>
+          <Button variant="primary" disabled={saving} onClick={trySave}>
+            {confirmClear ? '모두 제외' : '저장'}
+          </Button>
+        </FormActions>
+      </div>
+    </dialog>
   );
 }
 
@@ -708,17 +912,16 @@ export function InvitePane() {
 }
 
 /**
- * 실무자 목록. **한 사람이 한 줄이다**(2026-09-16 Q) — 두 층으로 쌓으면 열 명만 넘어도
- * 누가 몇 명을 맡았는지 견줄 수 없다. 맨 오른쪽이 `당사자 보기`다.
+ * 실무자 목록(2026-09-18 L4 J1). **한 사람이 접힌 카드 하나**다 — 가로선 표를 걷었다. 접힌 머리에
+ * 이름·역할·아이디·맡은 수가 한 줄로 서고, 펼치면 역할 바꾸기와 `담당 중인 당사자`(팝업 표)가 있다.
  * `#/settings/staff?program=<id>` 로 오면 그 사업의 열린 사례를 맡은 사람만 보인다(2026-09-17 Q).
- * 역할 바꾸기도 이 줄에서 한다 — 마지막 관리자는 서버가 막는다.
+ * 마지막 관리자를 내리는 것은 서버가 막는다.
  */
 function WorkersPane({ me }: { me: { id: number } }) {
   const [rows, setRows] = useState<Worker[] | null>(null);
   const [programs, setPrograms] = useState<Program[]>([]);
   const [programId, setProgramId] = useState<number | null>(programFromHash);
-  const [open, setOpen] = useState<number | null>(null);
-  const [cases, setCases] = useState<WorkerCase[]>([]);
+  const [viewing, setViewing] = useState<Worker | null>(null);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
     void listPrograms(true).then(setPrograms);
@@ -727,9 +930,6 @@ function WorkersPane({ me }: { me: { id: number } }) {
     setRows(null);
     void listWorkers(programId ?? undefined).then(setRows);
   }, [programId]);
-  useEffect(() => {
-    if (open) void workerCases(open).then(setCases);
-  }, [open]);
 
   const changeRole = async (w: Worker, role: 'worker' | 'admin') => {
     setErr(null);
@@ -746,7 +946,7 @@ function WorkersPane({ me }: { me: { id: number } }) {
   const picked = programs.find((p) => p.id === programId);
   return (
     <Card title="실무자 목록">
-      <Field label="사업" htmlFor="wk-program" control="select" hint="선택한 사업의 진행 중 사례 담당자만 표시">
+      <Field label="사업" htmlFor="wk-program" control="select">
         <select
           id="wk-program"
           value={programId ?? ''}
@@ -756,7 +956,7 @@ function WorkersPane({ me }: { me: { id: number } }) {
           {programs.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
-              {p.retired_at ? ' (삭제됨)' : ''}
+              {p.retired_at ? ' (종료됨)' : ''}
             </option>
           ))}
         </select>
@@ -767,63 +967,97 @@ function WorkersPane({ me }: { me: { id: number } }) {
       ) : rows.length === 0 ? (
         <Empty>{picked ? `${picked.name} 진행 중 사례 담당 실무자 없음` : '실무자 없음'}</Empty>
       ) : (
+        <div className="worker-list">
+          {rows.map((w) => (
+            <Fold
+              key={w.id}
+              group="workers"
+              title={w.name}
+              desc={
+                <Meta
+                  parts={[
+                    w.deactivated_at ? '나감' : w.role === 'admin' ? '관리자' : '실무자',
+                    w.email,
+                    `맡은 당사자 ${w.open_cases}명`,
+                  ]}
+                />
+              }
+            >
+              <FormActions>
+                {!w.deactivated_at && (
+                  <Button
+                    aria-label={`${w.name} ${w.role === 'admin' ? '실무자로 내리기' : '관리자로 올리기'}`}
+                    onClick={() => void changeRole(w, w.role === 'admin' ? 'worker' : 'admin')}
+                  >
+                    {w.role === 'admin' ? '실무자로' : '관리자로'}
+                  </Button>
+                )}
+                <Button aria-haspopup="dialog" onClick={() => setViewing(w)}>
+                  담당 중인 당사자
+                </Button>
+              </FormActions>
+            </Fold>
+          ))}
+        </div>
+      )}
+      {viewing && <AssigneeDialog worker={viewing} onClose={() => setViewing(null)} />}
+    </Card>
+  );
+}
+
+/**
+ * 한 실무자가 맡은 당사자 표(J1). 팝업 모달이다 — 목록 안에서 줄을 펼치면 표가 표를 밀어 견줄 수
+ * 없었다. 열은 L5 계약(`GET /users/:id/cases`) 그대로 이름·사업·회차·다음 상담이다.
+ */
+function AssigneeDialog({ worker, onClose }: { worker: Worker; onClose: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [rows, setRows] = useState<WorkerCaseRow[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    dialog.current?.showModal();
+    void workerCaseRows(worker.id)
+      .then(setRows)
+      .catch((e) => setError(e instanceof Error ? e.message : '불러오기 실패'));
+  }, [worker.id]);
+  const when = (iso: string) =>
+    new Date(iso).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return (
+    <dialog ref={dialog} className="assignee-dialog" aria-labelledby="assignee-title" onClose={onClose}>
+      <h2 id="assignee-title">{worker.name} 담당 중인 당사자</h2>
+      {error ? (
+        <ErrorText>{error}</ErrorText>
+      ) : rows === null ? (
+        <Empty>불러오는 중</Empty>
+      ) : rows.length === 0 ? (
+        <Empty>맡고 있는 당사자 없음</Empty>
+      ) : (
         <div className="data-table-wrap">
           <table className="data-table">
             <thead>
               <tr>
                 <th>이름</th>
-                <th>역할</th>
-                <th>아이디</th>
-                <th>맡은 당사자</th>
-                <th />
+                <th>사업</th>
+                <th>회차</th>
+                <th>다음 상담</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((w) => (
-                <Fragment key={w.id}>
-                  <tr>
-                    <td>{w.name}</td>
-                    <td>{w.deactivated_at ? '나감' : w.role === 'admin' ? '관리자' : '실무자'}</td>
-                    <td>{w.email}</td>
-                    <td>{w.open_cases}명</td>
-                    <td>
-                      <div className="wire-form-actions">
-                        {!w.deactivated_at && (
-                          <Button
-                            aria-label={`${w.name} ${w.role === 'admin' ? '실무자로 내리기' : '관리자로 올리기'}`}
-                            onClick={() => void changeRole(w, w.role === 'admin' ? 'worker' : 'admin')}
-                          >
-                            {w.role === 'admin' ? '실무자로' : '관리자로'}
-                          </Button>
-                        )}
-                        <Button onClick={() => setOpen(open === w.id ? null : w.id)}>
-                          {open === w.id ? '접기' : '당사자 보기'}
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                  {open === w.id && (
-                    <tr>
-                      <td colSpan={5}>
-                        {cases.length === 0 ? (
-                          <Empty>맡고 있는 당사자 없음</Empty>
-                        ) : (
-                          cases.map((c) => (
-                            <div key={c.id}>
-                              <Meta parts={[c.pseudonym, c.program_name, c.status === 'open' ? '진행 중' : '종결']} />
-                            </div>
-                          ))
-                        )}
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
+              {rows.map((c) => (
+                <tr key={c.case_id}>
+                  <td>{c.name}</td>
+                  <td>{c.program}</td>
+                  <td>{c.seq === null ? '' : `${c.seq}회차`}</td>
+                  <td>{c.next_at ? when(c.next_at) : ''}</td>
+                </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
-    </Card>
+      <FormActions>
+        <Button onClick={() => dialog.current?.close()}>닫기</Button>
+      </FormActions>
+    </dialog>
   );
 }
 
@@ -886,11 +1120,14 @@ export function OrgPane() {
   return (
     <Card
       title="기관 정보"
+      className="org-card"
       badge={org.public_address ?? undefined}
       action={
-        <Button variant="primary" disabled={!org.name.trim()} onClick={() => void save()}>
-          저장하기
-        </Button>
+        <span className="wire-card-action">
+          <Button variant="primary" disabled={!org.name.trim()} onClick={() => void save()}>
+            저장
+          </Button>
+        </span>
       }
     >
       {err && <ErrorText>{err}</ErrorText>}
@@ -902,16 +1139,8 @@ export function OrgPane() {
 
 const period = (p: Program) => (p.starts_on || p.ends_on ? `${p.starts_on ?? '…'} ~ ${p.ends_on ?? '…'}` : '기간 없음');
 
-/** 펼친 사업 한 장 — 파생 정보(담당 실무자·당사자 수)와 고치기 칸, 목록 링크, 삭제(내리기)/복구. */
-function ProgramDetail({
-  program: p,
-  onChanged,
-  onRetire,
-}: {
-  program: Program;
-  onChanged: () => Promise<void>;
-  onRetire: (p: Program, confirm: boolean) => Promise<void>;
-}) {
+/** 펼친 사업 한 장 — 파생 정보(담당 실무자·당사자 수)와 고치기 칸. 종료·복구는 접힌 머리의 버튼이다(K1). */
+function ProgramDetail({ program: p, onChanged }: { program: Program; onChanged: () => Promise<void> }) {
   const [workers, setWorkers] = useState<Worker[] | null>(null);
   const [draft, setDraft] = useState<ProgramInput>({
     name: p.name,
@@ -988,34 +1217,25 @@ function ProgramDetail({
         </div>
       )}
       {err && <ErrorText>{err}</ErrorText>}
-      <FormActions>
-        {p.retired_at ? (
-          <Button aria-label={`${p.name} 복구`} onClick={() => void reopenProgram(p.id).then(onChanged)}>
-            복구
+      {!p.retired_at && (
+        <FormActions>
+          <Button variant="primary" disabled={!draft.name.trim()} onClick={() => void save()}>
+            저장
           </Button>
-        ) : (
-          <>
-            <Button variant="danger" aria-label={`${p.name} 삭제`} onClick={() => void onRetire(p, false)}>
-              삭제
-            </Button>
-            <Button variant="primary" disabled={!draft.name.trim()} onClick={() => void save()}>
-              저장하기
-            </Button>
-          </>
-        )}
-      </FormActions>
+        </FormActions>
+      )}
     </>
   );
 }
 
 /**
- * 사업 목록(2026-09-17 Q). 최신이 위, 한 사업이 아코디언 한 장. 추가는 목록 맨 위 한 줄에서 바로 한다.
+ * 사업 목록(2026-09-17 Q). 최신이 위, 한 사업이 아코디언 한 장. 추가는 목록 위 한 줄(입력칸 + `사업 추가`)에서
+ * 바로 한다(2026-09-18 K2). 접힌 머리가 **한 행**이다: 이름 · 기간 · 당사자 수 · 설명 · `사업 종료`(K1).
  * 사업은 id 를 가진 실체다: 이름을 바꿔도 사례가 따라오고, 종료는 잠금이지 삭제가 아니며, 다시 열 수 있다.
  * 마법사의 사업 단계도 이 화면이다(`onChanged`).
  */
 export function ProgramsPane({ onChanged }: { onChanged?: (programs: Program[]) => void } = {}) {
   const [programs, setPrograms] = useState<Program[] | null>(null);
-  const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   /** 방금 만든 사업. 그 아코디언을 펼쳐 놓아 바로 정보를 적게 한다. */
   const [justAdded, setJustAdded] = useState<number | null>(null);
@@ -1038,7 +1258,6 @@ export function ProgramsPane({ onChanged }: { onChanged?: (programs: Program[]) 
     try {
       const made = await addProgram({ name: name.trim(), starts_on: null, ends_on: null, description: null });
       setName('');
-      setAdding(false);
       setJustAdded(made.id);
       await reload();
     } catch (e) {
@@ -1046,7 +1265,7 @@ export function ProgramsPane({ onChanged }: { onChanged?: (programs: Program[]) 
     }
   };
 
-  // `삭제` 는 지우기가 아니라 내리기다(retired_at). 사례가 붙어 있어 지울 수 없고, 복구할 수 있다.
+  // `사업 종료` 는 지우기가 아니라 내리기다(retired_at). 사례가 붙어 있어 지울 수 없고, 복구할 수 있다.
   const retire = async (p: Program, confirm: boolean) => {
     setErr(null);
     try {
@@ -1058,41 +1277,30 @@ export function ProgramsPane({ onChanged }: { onChanged?: (programs: Program[]) 
       setWarning(null);
       await reload();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : '삭제 실패');
+      setErr(e instanceof Error ? e.message : '사업 종료 실패');
     }
   };
 
   return (
     <>
-      <Card
-        title="사업 목록"
-        action={
-          <Button variant="primary" aria-expanded={adding} onClick={() => setAdding(!adding)}>
+      <Card title="사업 목록">
+        <div className="inline-action-row program-add-row">
+          <div className="wire-input-box">
+            <input
+              id="pg-new-name"
+              aria-label="새 사업 이름"
+              placeholder="새 사업 이름"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void add();
+              }}
+            />
+          </div>
+          <Button variant="primary" disabled={!name.trim()} onClick={() => void add()}>
             사업 추가
           </Button>
-        }
-      >
-        {adding && (
-          <div className="inline-action-row">
-            <Field label="새 사업 이름" htmlFor="pg-new-name" required>
-              <input
-                id="pg-new-name"
-                autoFocus
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void add();
-                }}
-              />
-            </Field>
-            <div className="wire-form-actions">
-              <Button onClick={() => setAdding(false)}>취소</Button>
-              <Button variant="primary" disabled={!name.trim()} onClick={() => void add()}>
-                추가하기
-              </Button>
-            </div>
-          </div>
-        )}
+        </div>
         {err && <ErrorText>{err}</ErrorText>}
         {programs === null ? (
           <Empty>불러오는 중</Empty>
@@ -1103,12 +1311,37 @@ export function ProgramsPane({ onChanged }: { onChanged?: (programs: Program[]) 
             <Fold
               key={p.id}
               group="programs"
-             
               open={p.id === justAdded}
-              title={p.retired_at ? `${p.name} (삭제됨)` : p.name}
-              desc={<Meta parts={[period(p), `당사자 ${p.cases}명`, p.description]} />}
+              title={
+                <span className="program-row">
+                  <span className="program-row-name">{p.retired_at ? `${p.name} (종료됨)` : p.name}</span>
+                  <Meta parts={[period(p), `당사자 ${p.cases}명`, p.description]} />
+                  {p.retired_at ? (
+                    <Button
+                      aria-label={`${p.name} 복구`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void reopenProgram(p.id).then(reload);
+                      }}
+                    >
+                      복구
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="danger"
+                      aria-label={`${p.name} 사업 종료`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void retire(p, false);
+                      }}
+                    >
+                      사업 종료
+                    </Button>
+                  )}
+                </span>
+              }
             >
-              <ProgramDetail program={p} onChanged={reload} onRetire={retire} />
+              <ProgramDetail program={p} onChanged={reload} />
             </Fold>
           ))
         )}
@@ -1117,14 +1350,14 @@ export function ProgramsPane({ onChanged }: { onChanged?: (programs: Program[]) 
       {warning && (
         <Confirm
           open
-          title={`${warning.program.name} 삭제`}
+          title={`${warning.program.name} 사업 종료`}
           lines={[
             `진행 중 사례 ${warning.counts.open_cases}건, 예정 회차 ${warning.counts.planned_sessions}건`,
-            '삭제 후 이 사업의 사례는 종결·열람 링크 회수·담당 배정만 가능, 새 기록 잠김, 기록은 보존',
-            '삭제 전 scripts/backup.sh 백업 권장',
+            '종료 후 이 사업의 사례는 종결, 열람 링크 회수, 담당 배정만 가능, 새 기록 잠김, 기록은 보존',
+            '종료 전 scripts/backup.sh 백업 권장',
             '복구 가능',
           ]}
-          confirmLabel="삭제하기"
+          confirmLabel="사업 종료"
           onConfirm={() => void retire(warning.program, true)}
           onCancel={() => setWarning(null)}
         />
@@ -1134,14 +1367,16 @@ export function ProgramsPane({ onChanged }: { onChanged?: (programs: Program[]) 
 }
 
 /**
- * 동의서 관리 — **읽기만 한다.** 문안은 코드가 정본이다(`api/src/consent.ts`).
+ * 동의서 관리(2026-09-18 L4 L3, Q 결정 D6). 당사자 정보 탭의 동의 카드와 같은 구성 — 영역 하나가 접힌
+ * 카드 하나이고, 읽기는 공용 `ConsentDetail` 이다. 판·지문은 **여기에만** 보인다(D9, 내규 번호 역할).
  *
- * 화면에서 고치게 하지 않는 이유는 글자 하나가 바뀌면 이미 받은 동의가 전부
- * `확인 필요`로 떨어지기 때문이다. 그때는 **동의하신 분들께 다시 알리고 받아야 한다.**
- * 고치는 장치는 그 절차가 정해진 뒤에 붙인다(2026-09-16 Q).
+ * **관리자가 고칠 수 있다.** 저장하면 새 판이 되고(L5 `PUT /consent-copy/:domain`), 그 영역에 동의한
+ * 모든 당사자가 `확인 필요` 로 떨어진다 — 저장 앞에서 그 사실을 한 번 더 묻는다. 실사용 중이면
+ * 이메일 등 정해진 방식으로 고지하고 다시 받아야 한다.
  */
 function ConsentPane() {
   const [rows, setRows] = useState<ConsentCopy[] | null>(null);
+  const [editing, setEditing] = useState<ConsentCopy | null>(null);
   useEffect(() => {
     void getConsentCopy().then(setRows);
   }, []);
@@ -1153,25 +1388,155 @@ function ConsentPane() {
           <Empty>불러오는 중</Empty>
         ) : (
           rows.map((r) => (
-            <div className="wire-repeat-card" key={r.domain}>
-              <Item title={r.label} desc={r.body} />
+            <Fold
+              key={r.domain}
+              group="consent-copy"
+              title={r.label}
+              desc={<Meta parts={[r.body, `판 ${r.version}`, `지문 ${r.hash}`]} />}
+            >
               <ConsentDetail copy={r} />
-            </div>
+              <FormActions>
+                <Button aria-label={`${r.label} 문안 수정`} onClick={() => setEditing(r)}>
+                  수정
+                </Button>
+              </FormActions>
+            </Fold>
           ))
         )}
       </Card>
-
-      <Card title="문안을 고칠 때">
-        <DataRows
-          rows={[
-            ['지금', '화면에서 수정 불가, 문안은 코드에 있음'],
-            ['고치면', '그 영역에 동의한 모든 분이 `확인 필요`로 변경'],
-            ['해야 할 일', '변경 내용 알림 후 재동의 필요, 받기 전까지 기능 멈춤'],
-            ['고치는 버튼', '알리는 절차를 정한 뒤 추가'],
-          ]}
+      {editing && (
+        <ConsentEditor
+          copy={editing}
+          onSaved={(next) => {
+            setRows((rs) => (rs ?? []).map((r) => (r.domain === next.domain ? next : r)));
+            setEditing(null);
+          }}
+          onClose={() => setEditing(null)}
         />
-      </Card>
+      )}
     </>
+  );
+}
+
+/**
+ * 문안 수정 드로어(L3). 표준 양식 다섯 칸 — 동의 내용, 동의 항목(줄 하나가 항목 하나), 동의 목적,
+ * 보유·이용 기간, 동의 거부권과 불이익. `저장` 은 경고창(D6)을 거친다.
+ */
+function ConsentEditor({
+  copy,
+  onSaved,
+  onClose,
+}: {
+  copy: ConsentCopy;
+  onSaved: (next: ConsentCopy) => void;
+  onClose: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [draft, setDraft] = useState<ConsentCopyInput>({
+    copy: copy.body,
+    items: copy.items,
+    purpose_text: copy.purpose_text,
+    retention_text: copy.retention_text,
+    refusal_text: copy.refusal_text,
+  });
+  const [asking, setAsking] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    dialog.current?.showModal();
+  }, []);
+
+  const items = draft.items.map((s) => s.trim()).filter(Boolean);
+  const ready =
+    draft.copy.trim() && items.length > 0 && draft.purpose_text.trim() && draft.retention_text.trim() && draft.refusal_text.trim();
+
+  const save = async () => {
+    setAsking(false);
+    setSaving(true);
+    setErr(null);
+    try {
+      onSaved(
+        await putConsentCopy(copy.domain, {
+          copy: draft.copy.trim(),
+          items,
+          purpose_text: draft.purpose_text.trim(),
+          retention_text: draft.retention_text.trim(),
+          refusal_text: draft.refusal_text.trim(),
+        }),
+      );
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : '저장 실패');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const area = (label: string, key: 'purpose_text' | 'retention_text' | 'refusal_text', rows = 3) => (
+    <Field label={label} htmlFor={`cc-${key}`} control="textarea" required>
+      <textarea id={`cc-${key}`} rows={rows} value={draft[key]} onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} />
+    </Field>
+  );
+
+  return (
+    <dialog
+      ref={dialog}
+      className="side-drawer consent-editor"
+      aria-labelledby="consent-editor-title"
+      // React 는 `close` 를 부모로 올린다 — 안의 경고창이 닫힐 때 드로어까지 닫히지 않게 자기 것만 받는다.
+      onClose={(event) => {
+        if (event.target === dialog.current) onClose();
+      }}
+      onClick={(event) => {
+        if (event.target === dialog.current) dialog.current?.close();
+      }}
+    >
+      <div className="side-drawer-head">
+        <h2 id="consent-editor-title">{copy.label} 문안 수정</h2>
+        <Button onClick={() => dialog.current?.close()}>닫기</Button>
+      </div>
+      <div className="side-drawer-body">
+        <p className="panel-meta">
+          <Meta parts={[`판 ${copy.version}`, `지문 ${copy.hash}`, '저장하면 새 판']} />
+        </p>
+        <Field label="동의 내용" htmlFor="cc-copy" control="textarea" required>
+          <textarea id="cc-copy" rows={6} value={draft.copy} onChange={(e) => setDraft({ ...draft, copy: e.target.value })} />
+        </Field>
+        <Field label="동의 항목" htmlFor="cc-items" control="textarea" required>
+          <textarea
+            id="cc-items"
+            rows={4}
+            placeholder="한 줄에 항목 하나"
+            value={draft.items.join('\n')}
+            onChange={(e) => setDraft({ ...draft, items: e.target.value.split('\n') })}
+          />
+        </Field>
+        {area('동의 목적', 'purpose_text')}
+        {area('보유·이용 기간', 'retention_text', 2)}
+        {area('동의 거부권과 불이익', 'refusal_text')}
+        {copy.recipient && <DataRows rows={[['제공받는 자', copy.recipient]]} />}
+        {err && <ErrorText>{err}</ErrorText>}
+        <FormActions>
+          <Button disabled={saving} onClick={() => dialog.current?.close()}>
+            닫기
+          </Button>
+          <Button variant="primary" disabled={saving || !ready} onClick={() => setAsking(true)}>
+            저장
+          </Button>
+        </FormActions>
+      </div>
+      <Confirm
+        open={asking}
+        title={`${copy.label} 문안 저장`}
+        lines={[
+          '저장하면 새 판, 모든 당사자의 이 항목 동의가 `확인 필요` 로 변경',
+          '실사용 중이면 이메일 등 정해진 방식으로 고지 후 재동의 필요',
+          '다시 받기 전까지 이 항목이 필요한 기능 잠김',
+        ]}
+        confirmLabel="저장"
+        onConfirm={() => void save()}
+        onCancel={() => setAsking(false)}
+      />
+    </dialog>
   );
 }
 
@@ -1196,63 +1561,73 @@ function DownloadPane() {
   );
 
   return (
-    <Card title="열람 기록 내려받기">
-      <Field label="기간" htmlFor="dl-days">
-        <div className="info-tabs" id="dl-days">
-          {AUDIT_DAYS.map(([d, label]) => (
-            <button type="button" key={d} className="wire-step" data-active={days === d} onClick={() => setDays(d)}>
-              {label}
-            </button>
-          ))}
-        </div>
-      </Field>
-
-      <Field label="실무자" htmlFor="dl-actor" control="select">
-        <select id="dl-actor" value={actor} onChange={(e) => setActor(e.target.value)}>
-          <option value="">모두</option>
-          {workers
-            .filter((w) => !w.deactivated_at)
-            .map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.name}
-              </option>
+    <>
+      <Card
+        title="열람 기록 내려받기"
+        className="download-card"
+        action={
+          <span className="wire-card-action">
+            <a className="wire-button" data-variant="primary" href={href}>
+              <span className="wire-button-text">CSV 내려받기</span>
+            </a>
+          </span>
+        }
+      >
+        <Field label="기간" htmlFor="dl-days">
+          <div className="info-tabs" id="dl-days">
+            {AUDIT_DAYS.map(([d, label]) => (
+              <button type="button" key={d} className="wire-step" data-active={days === d} onClick={() => setDays(d)}>
+                {label}
+              </button>
             ))}
-        </select>
-      </Field>
+          </div>
+        </Field>
 
-      <Field label="기록 종류" htmlFor="dl-kind">
-        <div className="info-tabs" id="dl-kind">
-          {AUDIT_KIND_TABS.map((k) => (
-            <button
-              type="button"
-              key={k}
-              className="wire-step"
-              data-active={kind === k}
-              onClick={() => setKind(k as '전부' | AuditKind)}
-            >
-              {k}
-            </button>
-          ))}
-        </div>
-      </Field>
+        <Field label="실무자" htmlFor="dl-actor" control="select">
+          <select id="dl-actor" value={actor} onChange={(e) => setActor(e.target.value)}>
+            <option value="">모두</option>
+            {workers
+              .filter((w) => !w.deactivated_at)
+              .map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                </option>
+              ))}
+          </select>
+        </Field>
 
-      <Field label="당사자 표기" htmlFor="dl-names" control="select">
-        <select
-          id="dl-names"
-          value={withNames ? 'name' : 'pseudonym'}
-          onChange={(e) => setWithNames(e.target.value === 'name')}
-        >
-          <option value="pseudonym">가명만, 외부 제출용</option>
-          <option value="name">이름 포함, 기관 안에서만</option>
-        </select>
-      </Field>
+        <Field label="기록 종류" htmlFor="dl-kind">
+          <div className="info-tabs" id="dl-kind">
+            {AUDIT_KIND_TABS.map((k) => (
+              <button
+                type="button"
+                key={k}
+                className="wire-step"
+                data-active={kind === k}
+                onClick={() => setKind(k as '전부' | AuditKind)}
+              >
+                {k}
+              </button>
+            ))}
+          </div>
+        </Field>
 
-      <FormActions>
-        <a className="wire-button" data-variant="primary" href={href}>
-          <span className="wire-button-text">CSV 로 내려받기</span>
-        </a>
-      </FormActions>
-    </Card>
+        <Field label="당사자 표기" htmlFor="dl-names" control="select">
+          <select
+            id="dl-names"
+            value={withNames ? 'name' : 'pseudonym'}
+            onChange={(e) => setWithNames(e.target.value === 'name')}
+          >
+            <option value="pseudonym">가명만, 외부 제출용</option>
+            <option value="name">이름 포함, 기관 안에서만</option>
+          </select>
+        </Field>
+      </Card>
+      {/* 경고는 카드 **밖 아래** 코랄 한 줄이다(2026-09-18 L4). 카드 안에 넣으면 입력 칸 사이에 묻힌다. */}
+      <p className="wire-note" data-tone="warn">
+        내려받기도 열람 기록에 남음, 이름 포함 파일은 기관 밖 반출 금지
+      </p>
+    </>
   );
 }
 
@@ -1357,7 +1732,7 @@ export function ConnectionsPane() {
                   </Button>
                 )}
                 <Button variant="primary" disabled={busy || !key.trim()} onClick={() => void submit(key.trim())}>
-                  {busy ? '확인하는 중…' : '저장하기'}
+                  {busy ? '확인 중' : '저장'}
                 </Button>
               </FormActions>
             </>

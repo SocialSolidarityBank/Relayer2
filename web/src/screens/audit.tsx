@@ -18,7 +18,7 @@ import {
   type AuditRow,
   type AuditSummary,
 } from '../api.ts';
-import { Badge, Card, Empty, Field, PageHeader } from '../ui.tsx';
+import { Badge, Card, Empty, PageHeader, Select } from '../ui.tsx';
 
 const FIELD_LABEL: Record<string, string> = {
   name: '이름',
@@ -110,10 +110,10 @@ export function AuditScreen({ embedded }: { embedded?: boolean } = {}) {
   const [days, setDays] = useState(30);
   const [only, setOnly] = useState<'off_assignment' | 'download' | null>(null);
   const [q, setQ] = useState('');
+  const [sort, setSort] = useState<'new' | 'old'>('new');
   const [sum, setSum] = useState<AuditSummary | null>(null);
   const [rows, setRows] = useState<AuditRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-
   // 세는 것은 기간만 따른다. 버튼에 붙는 숫자라 눌러도 바뀌지 않아야 한다.
   useEffect(() => {
     void auditSummary(days)
@@ -137,7 +137,7 @@ export function AuditScreen({ embedded }: { embedded?: boolean } = {}) {
       .catch((e) => setError(e instanceof Error ? e.message : '불러오기 실패'));
   }, [query, asked]);
 
-  // 글자 검색은 화면이 한다. 이름이 금고 암호문이라 서버가 이름으로 못 찾는다.
+  // 글자 검색은 화면이 한다. 이름이 금고 암호문이라 서버가 이름으로 못 찾는다. 정렬도 화면 몫이다.
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!rows) return [];
@@ -148,8 +148,9 @@ export function AuditScreen({ embedded }: { embedded?: boolean } = {}) {
           ),
         )
       : rows;
-    return matched.slice(0, LIMIT);
-  }, [rows, q]);
+    const ordered = sort === 'old' ? [...matched].sort((a, b) => a.at.localeCompare(b.at)) : matched;
+    return ordered.slice(0, LIMIT);
+  }, [rows, q, sort]);
 
   const watch = (key: 'off_assignment' | 'download'): { label: string; count: number } => {
     const w = sum?.watch.find((x) => x.key === key);
@@ -160,51 +161,48 @@ export function AuditScreen({ embedded }: { embedded?: boolean } = {}) {
     <>
       {!embedded && <PageHeader title="열람 기록" meta="누가 누구 것을 언제 봤는지, 본 값은 남기지 않음" />}
 
-      {/* 필터는 카드 밖 한 줄이다(2026-09-16 Q). 아래 기록이 본체라 위가 무거우면 안 된다. */}
-      <div className="log-filters">
-        <Field label="열람 기록 기간" htmlFor="audit-days">
-          <div className="info-tabs" id="audit-days">
-            {AUDIT_DAYS.map(([d, label]) => (
-              <button type="button" key={d} className="wire-step" data-active={days === d} onClick={() => setDays(d)}>
-                {label}
-              </button>
-            ))}
-          </div>
-        </Field>
-
-        <Field label="열람 기록 확인 필요">
-          <div className="info-tabs">
-            {(['off_assignment', 'download'] as const).map((key) => {
-              const w = watch(key);
-              return (
-                <button
-                  type="button"
-                  key={key}
-                  className="wire-step"
-                  data-active={only === key}
-                  onClick={() => setOnly(only === key ? null : key)}
-                >
-                  {w.label} {w.count.toLocaleString()}건
-                </button>
-              );
-            })}
-            {sum && (
-              <button type="button" className="wire-step" data-active={only === null} onClick={() => setOnly(null)}>
-                모두 {sum.total.toLocaleString()}건
-              </button>
-            )}
-          </div>
-        </Field>
-
-        <Field label="열람 기록 검색" htmlFor="audit-q">
+      {/* 업무 바 한 줄(2026-09-18 L4 L2) — 당사자 목록과 같은 `.work-toolbar`: 왼쪽 검색칸, 오른쪽 걸개·정렬.
+          카드가 아니다 — 아래 기록이 본체라 위가 무거우면 안 된다. */}
+      <div className="work-toolbar log-toolbar">
+        <div className="wire-input-box log-toolbar-search">
           <input
             id="audit-q"
             type="search"
+            aria-label="열람 기록 검색"
             placeholder="김민희, otter-001, 내려받기, 함께온기금"
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
-        </Field>
+        </div>
+        <div className="log-toolbar-actions">
+          <Select id="audit-days" aria-label="열람 기록 기간" value={String(days)} onChange={(v) => setDays(Number(v))}>
+            {AUDIT_DAYS.map(([d, label]) => (
+              <option key={d} value={d}>
+                {label}
+              </option>
+            ))}
+          </Select>
+          <Select
+            id="audit-only"
+            aria-label="열람 기록 확인 필요"
+            value={only ?? 'all'}
+            onChange={(v) => setOnly(v === 'all' ? null : (v as 'off_assignment' | 'download'))}
+          >
+            <option value="all">{sum ? `모두 ${sum.total.toLocaleString()}건` : '모두'}</option>
+            {(['off_assignment', 'download'] as const).map((key) => {
+              const w = watch(key);
+              return (
+                <option key={key} value={key}>
+                  {w.label || key} {w.count.toLocaleString()}건
+                </option>
+              );
+            })}
+          </Select>
+          <Select id="audit-sort" aria-label="정렬" value={sort} onChange={(v) => setSort(v as 'new' | 'old')}>
+            <option value="new">최신순</option>
+            <option value="old">오래된순</option>
+          </Select>
+        </div>
       </div>
 
       {error && (

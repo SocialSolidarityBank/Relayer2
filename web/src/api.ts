@@ -677,3 +677,70 @@ export const signupOpen = () => json<{ open: boolean; workspace: Workspace | nul
 /** 계정만 만든다. 기관 워크스페이스는 로그인 뒤 마법사 0단계다. */
 export const signup = (body: { email: string; password: string; name: string }) =>
   json<{ ok: true }>('/auth/signup', { method: 'POST', body: JSON.stringify(body) });
+
+// ── L4 설정 (UI 개편 2026-09-18, ui-plan §4 L5 계약) ─────────────────────────
+// 화면은 L5 계약 모양으로 만들고, 서버가 착지하기 전에는 **기존 API 로 채울 수 있는 만큼** 채운다.
+// L5 가 착지하면 함수 몸통만 그 경로로 바꾼다 — 화면은 손대지 않는다.
+
+/** J1. `GET /users/:id/cases → [{case_id, name, program, seq, next_at}]`. 지금은 `/settings/workers/:id/cases` 를 옮겨 담는다. */
+export type WorkerCaseRow = { case_id: number; name: string; program: string; seq: number | null; next_at: string | null };
+export const workerCaseRows = (id: number): Promise<WorkerCaseRow[]> =>
+  workerCases(id).then((rows) =>
+    rows.map((c) => ({ case_id: c.id, name: c.pseudonym, program: c.program_name, seq: null, next_at: null })),
+  );
+
+/** J3. `GET /assign/cases?q&program&page → { items, total }`. 지금은 배정 목록 + 당사자 목록을 합쳐 화면에서 거르고 쪽을 나눈다. */
+export type AssignCase = {
+  case_id: number;
+  name: string;
+  login: string;
+  program: string;
+  program_id: number | null;
+  seq: number | null;
+  phone: string | null;
+  email: string | null;
+  status: string;
+  assignees: Assignee[];
+};
+export const ASSIGN_PAGE_SIZE = 10;
+export const listAssignCases = async (params: { q?: string; program?: number | null; page?: number } = {}) => {
+  const [cases, people] = await Promise.all([listAssignmentCases(), listParticipants()]);
+  const byCase = new Map(people.map((p) => [p.case_id, p]));
+  const needle = (params.q ?? '').trim().toLowerCase();
+  const all: AssignCase[] = cases.map((c) => {
+    const p = byCase.get(c.id);
+    return {
+      case_id: c.id,
+      name: p?.name ?? c.pseudonym,
+      login: c.pseudonym,
+      program: c.program_name,
+      program_id: p?.program_id ?? null,
+      seq: p?.last_session_seq ?? null,
+      phone: null,
+      email: null,
+      status: c.status,
+      assignees: c.assignees,
+    };
+  });
+  const items = all.filter((c) => {
+    if (params.program && c.program_id !== params.program) return false;
+    if (!needle) return true;
+    return [c.name, c.login, c.program, ...c.assignees.map((a) => a.name)].some((v) => v.toLowerCase().includes(needle));
+  });
+  const page = Math.max(1, params.page ?? 1);
+  return { items: items.slice((page - 1) * ASSIGN_PAGE_SIZE, page * ASSIGN_PAGE_SIZE), total: items.length };
+};
+
+/** J3·D7. `PUT /cases/:id/assignments { user_ids }` — 전체 치환. 지금은 `/settings/assign`. */
+export const setAssignments = (caseId: number, user_ids: number[]) => assignCase(caseId, user_ids);
+
+/** L3·D6. `PUT /consent-copy/:domain` — 저장하면 새 판이 되고 모든 동의가 `확인 필요` 로 떨어진다. */
+export type ConsentCopyInput = {
+  copy: string;
+  items: string[];
+  purpose_text: string;
+  retention_text: string;
+  refusal_text: string;
+};
+export const putConsentCopy = (domain: ConsentDomain, body: ConsentCopyInput) =>
+  json<ConsentCopy>(`/consent-copy/${domain}`, { method: 'PUT', body: JSON.stringify(body) });
