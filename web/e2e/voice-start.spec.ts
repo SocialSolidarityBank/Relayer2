@@ -25,7 +25,7 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
   await page.locator('#email').fill('test2');
   await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인' }).click();
-  await expect(page.getByRole('heading', { name: '일정', exact: true })).toBeVisible();
+  await expect(page.locator('.app-nav-me')).toBeVisible();
 
   // ── 당사자 등록(녹음·STT 동의 포함) ─────────────────────────
   await page.goto('/#/participants/new');

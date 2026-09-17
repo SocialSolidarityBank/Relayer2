@@ -9,7 +9,7 @@ test('이름 중심 목록에서 정보를 바로 보고 상세와 기록·일�
   await page.locator('#email').fill('test2');
   await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '일정', level: 1, exact: true })).toBeVisible();
+  await expect(page.locator('.app-nav-me')).toBeVisible();
 
   const name = `가나다 목록 검증 ${Date.now()}`;
   const program = `목록 검증 사업 ${Date.now()}`;

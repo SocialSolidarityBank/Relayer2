@@ -22,7 +22,7 @@ test('날짜 선택은 저장하지 않고, 취소를 보존하며 한국 시간
   await open.click();
   await expect(dialog.getByText('2027년 1월', { exact: true })).toBeVisible();
   await dialog.getByRole('button', { name: '2027년 1월 31일 일요일', exact: true }).click();
-  await dialog.getByRole('button', { name: '날짜 선택 완료', exact: true }).click();
+  await dialog.getByRole('button', { name: '선택 완료', exact: true }).click();
   await open.click();
   await dialog.getByRole('button', { name: '다음 달', exact: true }).click();
   await dialog.getByRole('button', { name: '2027년 2월 2일 화요일', exact: true }).click();

@@ -184,7 +184,8 @@ export const closeCase = (caseId: number, body: { close_reason: string; unfinish
   });
 
 export const listParticipants = () => json<ParticipantRow[]>('/participants');
-export const listSchedules = () => json<ScheduleRow[]>('/schedules');
+export const listSchedules = (from: string, to: string) =>
+  json<ScheduleRow[]>(`/schedules?${new URLSearchParams({ from, to })}`);
 
 export const getBriefing = (caseId: number, seq?: number) =>
   json<Briefing>(`/cases/${caseId}/briefing${seq ? `?seq=${seq}` : ''}`);

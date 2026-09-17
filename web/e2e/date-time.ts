@@ -8,7 +8,7 @@ const dayLabel = (date: string) =>
     timeZone: 'Asia/Seoul', year: 'numeric', month: 'long', day: 'numeric', weekday: 'long',
   }).format(new Date(`${date}T12:00:00+09:00`));
 
-/** 달력 대화상자를 열어 `YYYY-MM-DD` 를 고르고 '날짜 선택 완료'로 닫는다. */
+/** 달력 대화상자를 열어 `YYYY-MM-DD` 를 고르고 '선택 완료'로 닫는다. */
 export const pickDate = async (page: Page, idPrefix: string, date: string) => {
   const [year, month] = date.split('-').map(Number);
   await page.locator(`#${idPrefix}-date`).click();
@@ -19,7 +19,7 @@ export const pickDate = async (page: Page, idPrefix: string, date: string) => {
     await dialog.getByRole('button', { name: offset > 0 ? '다음 달' : '이전 달', exact: true }).click();
   }
   await dialog.getByRole('button', { name: dayLabel(date), exact: true }).click();
-  await dialog.getByRole('button', { name: '날짜 선택 완료', exact: true }).click();
+  await dialog.getByRole('button', { name: '선택 완료', exact: true }).click();
 };
 
 /** `YYYY-MM-DDTHH:mm`(24시간제, 한국 시간)을 날짜 + 오전·오후/시/분으로 채운다. */

@@ -10,7 +10,7 @@ async function register(page: Page) {
   await page.locator('#email').fill('test2');
   await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '일정', exact: true })).toBeVisible();
+  await expect(page.locator('.app-nav-me')).toBeVisible();
   await page.goto('/#/participants/new');
   await page.locator('#name').fill(`E2E 피드백${Date.now()}`);
   await page.locator('#program').selectOption({ index: 1 });
