@@ -1,32 +1,50 @@
-// 상담 일정 등록 — 예정 회차 한 건을 만든다. 3구획(당사자 / 일시와 상담 방식 / 메모).
-// 결정 42의 `상담 등록`은 2026-09-14 Q가 철회했다(상담 기록하기와 혼동).
-// 1구획 `당사자`는 당사자 목록·동의 모델이 있어야 완성되므로 베타에는 없다.
-import { useEffect, useState } from 'react';
-import { getCase, planSession, type CaseView, type NewSessionInput } from '../api.ts';
-import { Button, Card, Choice, ChoiceGroup, ErrorText, Field, FormActions, PageHeader } from '../ui.tsx';
+// A안: 날짜 선택 완료와 일정 저장을 구분한다. 예정 회차를 만드는 API는 그대로 쓴다.
+import { useEffect, useRef, useState } from 'react';
+import { getCase, planSession } from '../api.ts';
+import type { CaseView, NewSessionInput } from '../api.ts';
+import { Button, Card, Choice, ChoiceGroup, ErrorText, Field, PageHeader } from '../ui.tsx';
 import { METHODS } from '../vocab.ts';
+import { ScheduleDatePicker } from './schedule-date-picker.tsx';
+import './schedule-new.css';
+
+const scheduleFormatter = new Intl.DateTimeFormat('ko-KR', {
+  timeZone: 'Asia/Seoul', year: 'numeric', month: 'long', day: 'numeric', weekday: 'long',
+  hour: 'numeric', minute: '2-digit', hour12: true,
+});
 
 export function ScheduleNewScreen({ caseId }: { caseId: number }) {
   const [view, setView] = useState<CaseView | null>(null);
-  const [at, setAt] = useState('');
+  const [date, setDate] = useState('');
+  const [period, setPeriod] = useState('오후');
+  const [hour, setHour] = useState('');
+  const [minute, setMinute] = useState('00');
   const [method, setMethod] = useState<NewSessionInput['method']>('in_person');
   const [place, setPlace] = useState('');
   const [memo, setMemo] = useState('');
-  // 종결 상담(요구 5). 이 회차를 기록해 저장하면 상담 종결 화면으로 이어진다.
   const [isClosing, setIsClosing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    void getCase(caseId).then(setView);
+    let live = true;
+    void getCase(caseId).then(data => { if (live) setView(data); }).catch(failure => {
+      if (live) setError(failure instanceof Error ? failure.message : '당사자 정보를 불러오지 못했어요.');
+    });
+    return () => { live = false; };
   }, [caseId]);
 
+  const scheduledAt = date && hour
+    ? new Date(`${date}T${String(Number(hour) % 12 + (period === '오후' ? 12 : 0)).padStart(2, '0')}:${minute}:00+09:00`).toISOString()
+    : null;
   const save = async () => {
+    if (!scheduledAt || savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     setError(null);
     try {
       await planSession(caseId, {
-        scheduled_at: new Date(at).toISOString(),
+        scheduled_at: scheduledAt,
         method,
         place: method === 'in_person' && place.trim() ? place.trim() : undefined,
         plan_memo: memo.trim() || undefined,
@@ -36,70 +54,62 @@ export function ScheduleNewScreen({ caseId }: { caseId: number }) {
     } catch (e) {
       setError(e instanceof Error ? e.message : '저장하지 못했어요.');
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
+  const nextSeq = view ? Math.max(0, ...view.sessions.map(s => s.seq)) + 1 : null;
 
-  const nextSeq = view ? Math.max(0, ...view.sessions.map((s) => s.seq)) + 1 : null;
-
-  return (
-    <>
-      <PageHeader
-        title="상담 일정 등록"
-        meta={
-          view
-            ? `${view.pseudonym} · ${view.case.program_name}${nextSeq ? ` · ${nextSeq}회차` : ''}`
-            : '불러오는 중이에요'
-        }
-      />
-
-      <div className="wire-container">
-        <Card title="일시와 상담 방식">
-          <Field label="일시" htmlFor="at" required>
-            <input id="at" type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} />
-          </Field>
-
-          <Choice
-            type="checkbox"
-            label="종결 상담"
-            hint="이 회차를 기록해 저장하면 상담 종결 화면으로 이어져요. 지금 사례를 닫지는 않아요."
-            checked={isClosing}
-            onChange={() => setIsClosing((v) => !v)}
-          />
-
+  return <>
+    <PageHeader title="상담 일정 등록" meta={view
+      ? `${view.pseudonym} · ${view.case.program_name}${nextSeq ? ` · ${nextSeq}회차` : ''}`
+      : '불러오는 중이에요'} />
+    <form className="wire-container schedule-form" onSubmit={e => { e.preventDefault(); void save(); }}>
+      <fieldset className="schedule-inputs" disabled={saving} aria-label="상담 일정 입력">
+        <Card title="언제 상담하나요?">
+          <div className="schedule-datetime-row">
+            <ScheduleDatePicker value={date} onChange={setDate} />
+            <div className="schedule-time-fields">
+              <Field label="오전·오후" htmlFor="schedule-period" control="select">
+                <select id="schedule-period" value={period} onChange={e => setPeriod(e.target.value)}><option>오전</option><option>오후</option></select>
+              </Field>
+              <Field label="시" htmlFor="schedule-hour" control="select" required>
+                <select id="schedule-hour" required value={hour} onChange={e => setHour(e.target.value)}>
+                  <option value="">선택</option>
+                  {Array.from({ length: 12 }, (_, i) => <option key={i} value={String(i + 1)}>{i + 1}시</option>)}
+                </select>
+              </Field>
+              <Field label="분" htmlFor="schedule-minute" control="select">
+                <select id="schedule-minute" value={minute} onChange={e => setMinute(e.target.value)}>
+                  {Array.from({ length: 60 }, (_, i) => <option key={i} value={String(i).padStart(2, '0')}>{String(i).padStart(2, '0')}분</option>)}
+                </select>
+              </Field>
+            </div>
+          </div>
+        </Card>
+        <Card title="상담 내용">
           <ChoiceGroup legend="상담 방식">
-            {METHODS.map((m) => (
-              <Choice
-                key={m.key}
-                type="radio"
-                name="method"
-                label={m.label}
-                checked={method === m.key}
-                onChange={() => setMethod(m.key)}
-              />
-            ))}
+            {METHODS.map(m => <Choice key={m.key} type="radio" name="method" label={m.label}
+              checked={method === m.key} onChange={() => setMethod(m.key)} />)}
           </ChoiceGroup>
-
-          {method === 'in_person' && (
-            <Field label="상담 장소" htmlFor="place">
-              <input id="place" type="text" value={place} onChange={(e) => setPlace(e.target.value)} />
-            </Field>
-          )}
-        </Card>
-
-        <Card title="메모" hint="미리 적어 둘 것을 자유롭게 적어요. 과제나 질문으로 등록되지는 않아요.">
+          {method === 'in_person' && <Field label="상담 장소" htmlFor="place">
+            <input id="place" type="text" value={place} onChange={e => setPlace(e.target.value)} placeholder="예: 상담실 1" />
+          </Field>}
           <Field label="메모" htmlFor="memo" control="textarea">
-            <textarea id="memo" rows={3} value={memo} onChange={(e) => setMemo(e.target.value)} />
+            <textarea id="memo" rows={3} value={memo} onChange={e => setMemo(e.target.value)} />
           </Field>
+          <Choice type="checkbox" label="종결 상담" checked={isClosing} onChange={() => setIsClosing(v => !v)}
+            hint="일정 저장만으로 사례를 종결하지 않아요." />
         </Card>
-
-        <FormActions>
+      </fieldset>
+      <footer className="schedule-savebar" aria-busy={saving}>
+        <div className="schedule-save-summary" aria-live="polite">
+          <strong>{scheduledAt ? scheduleFormatter.format(new Date(scheduledAt)) : '날짜와 시간을 선택해 주세요.'}</strong>
+          <p className="panel-meta">{saving ? '일정을 저장하고 있어요.' : '아직 저장하지 않았어요.'} · 한국 시간</p>
           {error && <ErrorText>{error}</ErrorText>}
-          <Button variant="primary" disabled={!at || saving} onClick={() => void save()}>
-            {saving ? '저장 중…' : '등록'}
-          </Button>
-        </FormActions>
-      </div>
-    </>
-  );
+        </div>
+        <Button type="submit" variant="primary" disabled={!scheduledAt || saving}>{saving ? '저장 중…' : '일정 저장'}</Button>
+      </footer>
+    </form>
+  </>;
 }
