@@ -219,8 +219,9 @@ body { margin: 0; }
 .doc-upload-box { flex: 1 1 320px; min-width: 0; display: flex; align-items: center; gap: var(--space-2); padding-inline-start: var(--space-1-5); }
 .doc-upload-box > input { flex: 1 1 auto; min-width: 0; }
 .doc-upload-pick { flex: none; min-height: 30px; border-radius: var(--radius-control); }
-/* 안내 한 줄은 선택 줄 아래, 가로선 하나 뒤다. 위아래 여백은 카드 본문 여백과 같은 24 다. */
-.doc-upload-note { margin-top: var(--space-6); padding-top: var(--space-6); border-top: 1px solid var(--line); }
+/* 안내 한 줄은 선택 칸 **바로 아래**에 붙는다(2026-09-17 Q — 가로선 삭제). 칸과 8,
+   카드 아래 여백과는 본문 패딩 24 로 맞춘다. */
+.doc-upload-note { margin-top: var(--space-2); }
 .doc-upload-note > p { margin: 0; }
 .doc-upload-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 

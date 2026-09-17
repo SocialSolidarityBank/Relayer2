@@ -391,8 +391,8 @@ function Access({ caseId }: { caseId: number }) {
        */
       title="개인정보 및 민감정보 처리 동의 링크"
       hint="개인 정보 및 민감 정보 처리 동의 받기 링크를 생성하세요"
-      // 만들기 버튼은 제목과 같은 행 오른쪽 끝이다(2026-09-17 Q). 잠그기는 살아 있을 때만
-      // 본문 아래에 남는다 — 위험 행동을 제목 줄에 함께 세우지 않는다.
+      // 만들기 버튼은 제목과 같은 행 오른쪽 끝이다(2026-09-17 Q). `링크 끊기` 는 링크가
+      // 살아 있을 때만 본문 아래에 남는다 — 위험 행동을 제목 줄에 함께 세우지 않는다.
       action={
         state && (
           <Button variant="primary" disabled={busy} onClick={() => void issue()}>
@@ -418,8 +418,11 @@ function Access({ caseId }: { caseId: number }) {
           )}
           {state.active && (
             <FormActions>
+              {/* `잠그기` 는 무엇이 잠기는지 읽히지 않았다(2026-09-17 Q). 서버는 링크를
+                  폐기 표시(`revoked_at`)만 하고 기록은 남기므로 `삭제` 도 사실이 아니다 —
+                  링크가 더는 안 열린다는 뜻의 `링크 끊기` 로 적는다. */}
               <Button disabled={busy} onClick={() => void revoke()}>
-                잠그기
+                링크 끊기
               </Button>
             </FormActions>
           )}
