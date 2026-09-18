@@ -168,7 +168,7 @@ describe.skipIf(!enabled)('ui-plan L5 contract', () => {
   it('consent-copy: 관리자가 고치면 새 판이 되고 모든 동의가 확인 필요로 떨어진다', async () => {
     const before = await json<CopyView[]>(await call('/consent-copy', worker));
     const personal = before.find((c) => c.domain === 'personal_data_collection_use');
-    expect(personal).toMatchObject({ editable: false, version: 'consent-standard-form-v3' });
+    expect(personal).toMatchObject({ editable: false, version: 'consent-standard-form-v4' });
     expect((await json<CopyView[]>(await call('/consent-copy', admin)))[0].editable).toBe(true);
 
     const body = { copy: '새 전문', items: ['이름', '연락처'], purpose_text: '목적', retention_text: '기간', refusal_text: '거부권' };
@@ -177,13 +177,19 @@ describe.skipIf(!enabled)('ui-plan L5 contract', () => {
     const put = await call('/consent-copy/personal_data_collection_use', admin, 'PUT', body);
     expect(put.status).toBe(200);
     const updated = await json<CopyView>(put);
-    expect(updated).toMatchObject({ body: '새 전문', items: ['이름', '연락처'], version: 'consent-standard-form-v4', editable: true });
+    expect(updated).toMatchObject({
+      body: expect.stringContaining('새 전문'),
+      items: ['이름', '연락처'],
+      version: 'consent-standard-form-v5',
+      editable: true,
+    });
     expect(updated.hash).not.toBe(personal?.hash);
 
     // 다른 영역은 문안이 그대로지만 판이 올라 함께 확인 필요다. 화면(GET)도 새 판을 본다.
     const after = await json<CopyView[]>(await call('/consent-copy', worker));
     expect(after.find((c) => c.domain === 'sensitive_information_processing')).toMatchObject({
-      version: 'consent-standard-form-v4', body: before.find((c) => c.domain === 'sensitive_information_processing')?.body,
+      version: 'consent-standard-form-v5',
+      body: before.find((c) => c.domain === 'sensitive_information_processing')?.body,
     });
     const consents = await json<ConsentView>(await call(`/cases/${caseId}/consents`, worker));
     expect(consents.find((c) => c.domain === 'personal_data_collection_use')?.status).toBe('unconfirmed');
@@ -194,15 +200,15 @@ describe.skipIf(!enabled)('ui-plan L5 contract', () => {
     await call(`/cases/${caseId}/consents`, worker, 'POST', { domain: 'personal_data_collection_use', decision: 'grant' });
     const [event] = await scratch.db<Array<{ copy_version: string; copy_hash: string }>>`
       select copy_version, copy_hash from consent_events order by id desc limit 1`;
-    expect(event.copy_version).toBe('consent-standard-form-v4');
+    expect(event.copy_version).toBe('consent-standard-form-v5');
     expect(event.copy_hash.slice(0, 12)).toBe(updated.hash);
-    expect((await json<CopyView>(await call('/consent-copy/document_attachment', admin, 'PUT', body))).version).toBe('consent-standard-form-v5');
+    expect((await json<CopyView>(await call('/consent-copy/document_attachment', admin, 'PUT', body))).version).toBe('consent-standard-form-v6');
     await expect(scratch.db`delete from consent_copy`).rejects.toThrow(/append-only/);
     const audits = await scratch.db<Array<{ fields: string[] }>>`
       select fields from audit_log where action = 'consent.copy.update' order by id`;
     expect(audits.map((a) => a.fields)).toEqual([
-      ['domain=personal_data_collection_use', 'version=consent-standard-form-v4'],
-      ['domain=document_attachment', 'version=consent-standard-form-v5'],
+      ['domain=personal_data_collection_use', 'version=consent-standard-form-v5'],
+      ['domain=document_attachment', 'version=consent-standard-form-v6'],
     ]);
   }, 30_000);
 });

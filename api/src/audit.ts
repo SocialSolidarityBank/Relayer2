@@ -59,6 +59,8 @@ export const AUDIT_KINDS = {
   'user.role.update': { kind: '운영', label: '역할 바꿈', fold: false },
   'user.deactivate': { kind: '운영', label: '계정 삭제', fold: false },
   'ai.key.set': { kind: '운영', label: 'AI 키 설정', fold: false },
+  'stt.key.set': { kind: '운영', label: 'STT 키 설정', fold: false },
+  'voice.toggle': { kind: '운영', label: '녹음 설정 변경', fold: false },
   'consent.copy.update': { kind: '운영', label: '동의 문안 고침(새 판)', fold: false },
 } as const;
 
