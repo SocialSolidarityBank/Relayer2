@@ -1,5 +1,6 @@
 // 라우터 하나, 검증 한 곳. 베타 API 6개(PLAN §5).
-import { Hono, type Context } from 'hono';
+import { readFileSync } from 'node:fs';
+import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { z } from 'zod';
 import { actorFromCookie, clearCookie, issueCookie, login, type Actor } from './auth.ts';
@@ -28,11 +29,14 @@ import { audit, auditCsv, auditSummary, listAudit, AUDIT_KIND_LIST } from './aud
 import { accessState, issueAccess, openAccess, revokeAccess } from './participant-access.ts';
 import {
   activeDomains,
+  consentInstitutionName,
   CONSENT_DECISIONS,
   CONSENT_DOMAINS,
   copyHash,
   copyText,
   copyVersion,
+  speechKey,
+  voiceConnection,
 } from './consent.ts';
 import { putConsentCopy } from './consent-copy.ts';
 import { listRevisions, NothingToRevise, REVISION_KINDS, reviseSession } from './revisions.ts';
@@ -129,11 +133,41 @@ app.get('/health', (c) => c.json({ ok: true }));
  * 새로 배포한 CSS 가 네 시간 동안 옛것으로 나간다(2026-09-18 실측: `cf-cache-status: HIT`,
  * `age: 1370`). 공개 페이지라 캐시는 필요하지만 배포가 반영되는 시간이 분 단위여야 한다.
  */
-const siteCache = (_path: string, c: Context): void => {
-  c.header('cache-control', 'public, max-age=60');
-};
-app.get('/', serveStatic({ root: './site', path: './index.html', onFound: siteCache }));
-app.get('/*', serveStatic({ root: './site', onFound: siteCache }));
+const siteRoot = './site';
+const siteCacheHeader = 'public, max-age=60';
+app.get(
+  '/',
+  serveStatic({
+    root: siteRoot,
+    path: './index.html',
+    onFound: (_path, c) => c.header('cache-control', siteCacheHeader),
+  }),
+);
+app.get(
+  '/*',
+  serveStatic({ root: siteRoot, onFound: (_path, c) => c.header('cache-control', siteCacheHeader) }),
+);
+
+/**
+ * 없는 쪽은 공개 404 쪽을 돌려준다. 이것이 없으면 주소를 잘못 친 방문자가
+ * `{"error":"로그인 필요"}` 를 본다(2026-09-18 실측).
+ *
+ * 걸러 내는 조건 둘이다. `isWebAsset` 인 주소는 앱이 갖고(루트·`/test`·`/app`·`/assets/*`),
+ * 브라우저가 쪽을 달라고 온 요청(`Accept: text/html`)만 이 쪽을 본다. 화면이 `fetch` 로
+ * 부르는 자료 경로는 `*\/*` 로 오므로 그대로 로그인 게이트로 간다.
+ * 404 는 401 보다 알려 주는 것이 적다. 있는지 없는지를 말하지 않는다.
+ */
+app.get('/*', (c, next) => {
+  const path = new URL(c.req.url).pathname;
+  if (isWebAsset(path)) return next();
+  if (!(c.req.header('accept') ?? '').includes('text/html')) return next();
+  try {
+    return c.html(readFileSync(`${siteRoot}/404.html`, 'utf8'), 404);
+  } catch {
+    // 그 파일이 없는 배포(site/ 없이 앱만 띄운 경우)는 종전대로 로그인 게이트가 답한다.
+    return next();
+  }
+});
 
 /**
  * API 응답은 저장하지 않는다. 이름·연락처·상담 내용이 실려 나가므로
@@ -563,7 +597,7 @@ app.post('/sessions/:id/draft/approve', async (c) => {
   return c.json(await approveDraft(sessionId, c.get('actor').id, body));
 });
 
-app.get('/speech/status', (c) => c.json(speechStatus()));
+app.get('/speech/status', async (c) => c.json(await speechStatus()));
 
 /**
  * 음성 경로(P4). 녹음은 본문 그대로 받는다 — multipart 로 감싸 봐야 바이트는 같고,
@@ -934,6 +968,22 @@ app.put('/settings/ai-key', async (c) => {
   return c.json(out);
 });
 
+/** Azure Speech 키 넣기·지우기. koreacentral 검증에 실패하면 저장하지 않는다. */
+app.put('/settings/stt-key', async (c) => {
+  if (adminOnly(c)) return c.json(DENY, 403);
+  const { key } = z.object({ key: z.string().trim().min(1).nullable() }).parse(await c.req.json());
+  const out = await settings.setSpeechKey(c.get('actor').id, key);
+  if ('error' in out) return c.json(out, 400);
+  return c.json(out);
+});
+
+/** 녹음 스위치는 Speech 키와 독립된 관리자 설정이다. */
+app.put('/settings/voice', async (c) => {
+  if (adminOnly(c)) return c.json(DENY, 403);
+  const { enabled } = z.object({ enabled: z.boolean() }).parse(await c.req.json());
+  return c.json(await settings.setVoiceEnabled(c.get('actor').id, enabled));
+});
+
 app.get('/settings/workers/:id/cases', async (c) => {
   const userId = positiveId(c.req.param('id'));
   const me = c.get('actor');
@@ -1061,27 +1111,31 @@ app.post('/settings/requests/:id', async (c) => {
  * 꺼진 영역은 내지 않는다 — 음성이 꺼져 있으면 녹음 동의를 받을 이유가 없다.
  * `editable` 은 관리자에게만 true 다(2026-09-18 Q D6). 판·지문은 설정 › 동의서 관리에만 보인다(D9).
  */
-const consentCopyView = (domain: (typeof CONSENT_DOMAINS)[number]) => {
-  const c = copyText(domain);
+const consentCopyView = (
+  domain: (typeof CONSENT_DOMAINS)[number],
+  institutionName: string,
+) => {
+  const copy = copyText(domain, institutionName);
   return {
     domain,
-    label: c.label,
-    body: c.copy,
-    items: c.items,
-    purpose_text: c.purposeText,
-    retention_text: c.retentionText,
-    refusal_text: c.refusalText,
-    recipient: c.provider ? `${c.provider.legalRecipient} (${c.provider.country})` : null,
+    label: copy.label,
+    body: copy.copy,
+    items: copy.items,
+    purpose_text: copy.purposeText,
+    retention_text: copy.retentionText,
+    refusal_text: copy.refusalText,
+    recipient: copy.provider ? `${copy.provider.legalRecipient} (${copy.provider.country})` : null,
     // 개인정보 수집·이용이 없으면 사례를 열 수 없다. 나머지는 골라 받는다.
     required: domain === 'personal_data_collection_use',
     version: copyVersion(),
-    hash: copyHash(domain).slice(0, 12),
+    hash: copyHash(domain, institutionName).slice(0, 12),
   };
 };
 
 app.get('/consent-copy', async (c) => {
   const editable = c.get('actor').role === 'admin';
-  return c.json(activeDomains().map((domain) => ({ ...consentCopyView(domain), editable })));
+  const [domains, institutionName] = await Promise.all([activeDomains(), consentInstitutionName()]);
+  return c.json(domains.map((domain) => ({ ...consentCopyView(domain, institutionName), editable })));
 });
 
 /**
@@ -1108,7 +1162,8 @@ app.put('/consent-copy/:domain', async (c) => {
     retentionText: body.retention_text,
     refusalText: body.refusal_text,
   });
-  return c.json({ ...consentCopyView(domain), editable: true });
+  const institutionName = await consentInstitutionName();
+  return c.json({ ...consentCopyView(domain, institutionName), editable: true });
 });
 
 /**
@@ -1119,10 +1174,25 @@ app.put('/consent-copy/:domain', async (c) => {
  */
 app.get('/settings/connections', async (c) => {
   if (adminOnly(c)) return c.json(DENY, 403);
-  const [{ now }] = await sql<Array<{ now: string }>>`select now()`;
   const provider = process.env.AI_PROVIDER ?? 'openai';
-  // 출처만 말한다(db|env|null). 키 값은 어떤 응답에도 싣지 않는다.
-  const ai = provider === 'openai' ? await openAiKey() : null;
+  const envAiKey = process.env.OPENAI_API_KEY?.trim();
+  const envSpeechKey = process.env.AZURE_SPEECH_KEY?.trim();
+  const envVoice = process.env.VOICE_ENABLED;
+  // DB가 끊겨도 상태 화면 자체는 응답해야 `db.connected:false`를 보여 줄 수 있다.
+  // 각 설정 조회도 따로 낮춰 Promise.all의 형제 실패가 DB probe 결과를 삼키지 않게 한다.
+  const [ai, stt, voice, database] = await Promise.all([
+    provider === 'openai'
+      ? openAiKey().catch(() => (envAiKey ? { key: envAiKey, source: 'env' as const } : null))
+      : Promise.resolve(null),
+    speechKey().catch(() => (envSpeechKey ? { key: envSpeechKey, source: 'env' as const } : null)),
+    voiceConnection().catch(() => ({
+      enabled: envVoice === '1',
+      source: envVoice === undefined ? null : ('env' as const),
+    })),
+    sql<Array<{ connected: number }>>`select 1 as connected`
+      .then(() => true)
+      .catch(() => false),
+  ]);
   return c.json({
     ai: {
       connected: provider === 'openai' ? ai !== null : Boolean(process.env.GEMINI_API_KEY),
@@ -1132,11 +1202,12 @@ app.get('/settings/connections', async (c) => {
       source: ai?.source ?? null,
     },
     stt: {
-      connected: Boolean(process.env.AZURE_SPEECH_KEY),
+      connected: stt !== null,
       provider: 'azure',
-      region: process.env.AZURE_SPEECH_REGION ?? null,
-      env: 'AZURE_SPEECH_KEY',
+      region: 'koreacentral',
+      source: stt?.source ?? null,
     },
-    db: { connected: true, checked_at: now, env: 'DATABASE_URL' },
+    voice,
+    db: { connected: database, checked_at: new Date().toISOString(), env: 'DATABASE_URL' },
   });
 });

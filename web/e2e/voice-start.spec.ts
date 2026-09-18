@@ -1,14 +1,12 @@
-// 녹음 시작 = 회차 생성(2026-09-16 인계 §4). 가짜 마이크로 녹음을 시작하면 그 순간
-// 회차가 생기고, 멈추면 녹음이 그 회차에 붙는다. 회차별 요약에 수기 미작성·녹음·전사
-// 상태가 보이고, 전문 보기에서 수기·음성 전문을 읽고 돌아온다.
-// 루트 서버(VOICE_ENABLED=1, STT 키 없음 → 전사 skipped)에 붙여 돌린다.
+// 녹음 시작 = 회차 생성. 공유 DB를 쓰지 않고 이 spec 전용 DB와 파일 루트를 만든다.
+import { execFileSync } from 'node:child_process';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
+import { scratchDb, startServer, type Scratch } from '../../api/test/scratch-db.ts';
 
-// 다른 spec 과 같은 규약이다 — 같은 원점에서 화면과 API 를 함께 내는 서버(dist 를 얹은
-// api :8798)에서는 접두 `/api` 가 없다. 하드코딩하면 그 서버에서 404 를 JSON 으로 읽는다.
-const api = process.env.PLAYWRIGHT_API_PREFIX ?? '/api';
-
-// 이 spec 에서만 가짜 마이크를 켠다 — 다른 spec 의 브라우저에는 영향이 없다.
 test.use({
   permissions: ['microphone'],
   launchOptions: {
@@ -16,19 +14,56 @@ test.use({
   },
 });
 
+const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const stamp = Date.now();
 const NAME = `E2E 녹음${stamp}`;
+let scratch: Scratch;
+let base: string;
+let stop: () => void;
+let storage: string;
+
+test.beforeAll(async () => {
+  execFileSync('pnpm', ['--dir', 'web', 'build'], { cwd: root, stdio: 'ignore' });
+  scratch = await scratchDb();
+  await scratch.migrate();
+  storage = await mkdtemp(join(tmpdir(), 'relayer-voice-e2e-'));
+  execFileSync(process.execPath, ['api/src/seed.ts'], {
+    cwd: root,
+    env: {
+      ...process.env,
+      DATABASE_URL: scratch.url,
+      PGSCHEMA: '',
+      PII_ENC_KEY: Buffer.alloc(32).toString('base64'),
+    },
+    stdio: 'ignore',
+  });
+  ({ base, stop } = await startServer(scratch.url, {
+    VOICE_ENABLED: '1',
+    VOICE_ROOT: join(storage, 'voice'),
+    DOC_ROOT: join(storage, 'documents'),
+    AZURE_SPEECH_KEY: '',
+    AZURE_SPEECH_REGION: '',
+    AZURE_SPEECH_ENDPOINT: '',
+    PII_ENC_KEY: Buffer.alloc(32).toString('base64'),
+  }));
+});
+
+test.afterAll(async () => {
+  stop?.();
+  await scratch?.drop();
+  await rm(storage, { recursive: true, force: true });
+});
 
 test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진다', async ({ page }) => {
   // ── 로그인 ──────────────────────────────────────────────────
-  await page.goto('/#/login');
+  await page.goto(`${base}/app#/login`);
   await page.locator('#email').fill('test2');
   await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인' }).click();
   await expect(page.locator('.app-nav-me')).toBeVisible();
 
   // ── 당사자 등록(녹음·STT 동의 포함) ─────────────────────────
-  await page.goto('/#/participants/new');
+  await page.goto(`${base}/app#/participants/new`);
   await page.locator('#name').fill(NAME);
   await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
   await page.getByRole('checkbox', { name: /민감정보 처리/ }).check();
@@ -43,7 +78,7 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
 
   // ── 상담 기록하기 — 녹음 시작이 곧 회차 ─────────────────────
   // 인테이크는 건너뛴다 — 시작 경로가 만드는 회차가 1회차다.
-  await page.goto(`/#/cases/${caseId}/record`);
+  await page.goto(`${base}/app#/cases/${caseId}/record`);
   await expect(page).toHaveURL(/\/record$/);
   await expect(page.locator('.page-header')).toContainText('1회차');
 
@@ -52,7 +87,7 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
   // 회차는 시작과 함께 생긴다 — 멈추기 전에 이미 서버에 있다.
   await expect
     .poll(async () => {
-      const res = await page.request.get(`${api}/cases/${caseId}/detail`);
+      const res = await page.request.get(`${base}/cases/${caseId}/detail`);
       const detail = (await res.json()) as {
         sessions: Array<{ status: string; written: boolean }>;
       };
@@ -67,7 +102,7 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
 
   // ── 회차별 요약 — 수기 미작성·녹음 1건·전사 상태 ────────────
   // 당사자 정보는 당사자 카드(HERO) + 탭 4개다(2026-09-17 Q). 기본 탭은 `당사자 정보`.
-  await page.goto(`/#/cases/${caseId}/info`);
+  await page.goto(`${base}/app#/cases/${caseId}/info`);
   await expect(page.getByRole('heading', { name: NAME })).toBeVisible();
   await page.getByRole('tab', { name: '회차별 요약' }).click();
   // 한 회차가 한 접힘 카드다(2026-09-17 Q). 기록 상태는 펼친 본문의 `기록 상태` 구역에 있다.
@@ -100,7 +135,7 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
 
   // ── 미작성 회차 이어 쓰기(2026-09-18 Q D12) ─────────────────
   // 녹음만 하고 나갔다가 다시 들어오면 `이어 쓰기 / 새 회차`를 묻는다. 이어 쓰면 같은 1회차다.
-  await page.goto(`/#/cases/${caseId}/record`);
+  await page.goto(`${base}/app#/cases/${caseId}/record`);
   const resume = page.getByRole('dialog', { name: '미작성 회차 있음' });
   await expect(resume).toContainText('1회차, 녹음 1건, 수기 없음');
   await resume.getByRole('button', { name: '이어 쓰기' }).click();
@@ -110,12 +145,34 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
   await page.locator('#memo').fill('녹음 뒤 적은 수기.');
   await page.getByRole('button', { name: '저장', exact: true }).click();
   await expect(page).toHaveURL(/\/info$/);
-  const res = await page.request.get(`${api}/cases/${caseId}/detail`);
+  const res = await page.request.get(`${base}/cases/${caseId}/detail`);
   const detail = (await res.json()) as { sessions: Array<{ seq: number; written: boolean }> };
   expect(detail.sessions.map((s) => [s.seq, s.written])).toEqual([[1, true]]);
   // 수기가 채워졌으니 다시 들어와도 묻지 않는다.
-  await page.goto(`/#/cases/${caseId}/record`);
+  await page.goto(`${base}/app#/cases/${caseId}/record`);
   await expect(page.locator('.record-main')).toBeVisible();
   await expect(resume).toBeHidden();
   await expect(page.locator('.page-header')).toContainText('2회차');
+
+  // 새 회차를 고르면 미작성 2회차를 덮지 않고 3회차를 만든다.
+  await page.getByRole('button', { name: '녹음 시작' }).click();
+  await expect(page.getByText('녹음 중')).toBeVisible();
+  await page.getByRole('button', { name: '녹음 멈춤' }).click();
+  await expect(page.locator('audio')).toHaveCount(1);
+  await page.goto(`${base}/app#/cases/${caseId}/info`);
+  await page.goto(`${base}/app#/cases/${caseId}/record`);
+  await expect(resume).toContainText('2회차, 녹음 1건, 수기 없음');
+  await resume.getByRole('button', { name: '새 회차' }).click();
+  await expect(resume).toBeHidden();
+  await expect(page.locator('.page-header')).toContainText('3회차');
+  await page.locator('#memo').fill('미작성 회차와 분리한 새 기록.');
+  await page.getByRole('button', { name: '저장', exact: true }).click();
+  await expect(page).toHaveURL(/\/info$/);
+  const afterNew = await page.request.get(`${base}/cases/${caseId}/detail`);
+  const afterNewDetail = (await afterNew.json()) as { sessions: Array<{ seq: number; written: boolean }> };
+  expect(afterNewDetail.sessions.map((s) => [s.seq, s.written])).toEqual([
+    [1, true],
+    [2, false],
+    [3, true],
+  ]);
 });

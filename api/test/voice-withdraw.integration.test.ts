@@ -1,7 +1,6 @@
 // 동의 철회(2026-09-16 Q). 녹음·보유기간 동의를 거두면 **그 사례**의 음성 원본이 바로 사라진다.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { access } from 'node:fs/promises';
-import { join } from 'node:path';
+import { getStorage } from '../src/storage.ts';
 import { sql } from '../src/db.ts';
 import { encryptText } from '../src/pii.ts';
 import { enabled, fixture, req, silentWav, upload } from './voice-fixture.ts';
@@ -9,8 +8,7 @@ import { enabled, fixture, req, silentWav, upload } from './voice-fixture.ts';
 beforeEach(() => vi.stubEnv('VOICE_ENABLED', '1'));
 afterEach(() => vi.unstubAllEnvs());
 
-const VOICE_ROOT = process.env.VOICE_ROOT ?? './voice';
-const exists = (rel: string) => access(join(VOICE_ROOT, rel)).then(() => true, () => false);
+const exists = (rel: string) => getStorage().exists('voice', rel);
 
 describe.skipIf(!enabled)('recording consent withdrawal', () => {
   it('deletes only that case\'s audio, keeps the transcript and other cases, and audits voice.withdraw', async () => {

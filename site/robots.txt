@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /app
+Disallow: /test
+
+Sitemap: https://relayer.kr/sitemap.xml

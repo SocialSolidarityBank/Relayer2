@@ -3,6 +3,8 @@
 // P4 가 나머지 셋(상담 녹음·외부 STT·음성 원본 보유기간)이다.
 // 식별자·문안·copyHash 계산 규칙은 정본 그대로다.
 import { createHash } from 'node:crypto';
+import { sql } from './db.ts';
+import { decryptPii } from './pii.ts';
 
 export const CONSENT_DOMAINS = [
   'personal_data_collection_use',
@@ -20,19 +22,13 @@ export const CONSENT_DECISIONS = ['grant', 'withdraw', 'decline'] as const;
 export type ConsentDecision = (typeof CONSENT_DECISIONS)[number];
 
 /**
- * 문안 판. **v3 는 전문(全文) 판이다**(2026-09-18 Q) — 영역마다 한 문장이던 `copy` 를
- * 표준 고지문(근거 조문·목적·항목·보유기간·수신자·거부권과 불이익·철회 방법)으로 채웠다.
- * 거부권 문장은 개인정보보호위원회 「알기쉬운 개인정보 처리 동의 안내서」(2022.3) 서식의 정형문을 따른다.
- * 보유기간은 기록 1년, 파일(음성 원본·서면 문서) 30일로 갈렸다.
+ * 문안 판. v4 는 처리자를 현재 `organization.name` 으로 치환하고, 수탁자
+ * 사회연대은행과 고정 처리 리전 koreacentral 을 문안·해시에 함께 묶는다.
  *
- * 판이 바뀌면 이미 받은 동의는 전부 `확인 필요`로 떨어진다. 설계대로다 —
- * **문안이 바뀌면 그 문안에 동의한 적 없는 사람이 된다.**
- *
- * 코드 판은 **바닥값**이다(2026-09-18 Q D6). 관리자가 설정에서 고치면 `consent_copy` 표에 새 판
- * (`consent-standard-form-v<N+1>`)이 쌓이고, 서버는 그것을 우선한다(`consent-copy.ts`).
- * `copyVersion()`·`copyText()` 가 지금 판을 낸다 — 상수를 직접 읽지 않는다.
+ * 코드 판은 DB 편집본의 바닥값이다. v3 편집본이 있어도 문안 자체는 보존하되
+ * 기관명 치환을 마지막에 적용하고 전역 판은 v4 로 올린다.
  */
-export const CODE_COPY_VERSION = 'consent-standard-form-v3';
+export const CODE_COPY_VERSION = 'consent-standard-form-v4';
 
 /** 관리자가 고칠 수 있는 칸. 나머지(label·purpose·provider·retentionDuration)는 코드 정본이다. */
 export type EditableCopy = {
@@ -48,9 +44,14 @@ let live: { version: string; text: Partial<Record<ConsentDomain, EditableCopy>> 
   text: {},
 };
 
-/** DB 에서 읽은 판을 앉힌다. 서버 시작과 관리자 저장 뒤에 `consent-copy.ts` 가 부른다. */
+const versionNumber = (version: string): number => Number(/-v(\d+)$/.exec(version)?.[1] ?? 0);
+
+/** DB 편집본을 앉히되 코드가 올린 전역 판을 과거 DB 판이 되돌리지 못하게 한다. */
 export function setLiveCopy(version: string, text: Partial<Record<ConsentDomain, EditableCopy>>): void {
-  live = { version, text };
+  live = {
+    version: versionNumber(version) > versionNumber(CODE_COPY_VERSION) ? version : CODE_COPY_VERSION,
+    text,
+  };
 }
 
 export const copyVersion = (): string => live.version;
@@ -193,23 +194,63 @@ export const CONSENT_COPY: Record<ConsentDomain, DomainCopy> = {
   },
 };
 
-/** 지금 쓰는 문안 — DB 판이 있으면 그것, 없으면 코드 정본. 해시와 화면이 같은 것을 본다. */
-export const copyText = (domain: ConsentDomain): DomainCopy => ({ ...CONSENT_COPY[domain], ...live.text[domain] });
+const TRUSTEE = '사회연대은행';
+const SPEECH_REGION = 'koreacentral';
+
+/** 온보딩 전후 모든 동의 쓰기·읽기가 공유하는 처리자 이름 규칙. */
+export const effectiveInstitutionName = (name: string | null | undefined): string =>
+  name?.trim() || TRUSTEE;
+
+const renderInstitutionText = (text: string, institutionName: string): string =>
+  text
+    .replaceAll(TRUSTEE, institutionName)
+    .replaceAll('한국 중부(Korea Central)', `한국 중부(${SPEECH_REGION})`)
+    .replaceAll('한국 중부 리전', `한국 중부(${SPEECH_REGION}) 리전`);
 
 /**
- * 문안 해시의 원문(정본 §2.1). 외부 수신자가 없는 영역은 provider 세 칸이 `<null>` 이고,
- * 외부 LLM 처럼 수신자가 있으면 그 스냅샷이 해시에 함께 묶인다 — 수신자가 바뀌면 동의도 다시 받는다.
- * NFC 정규화 → 줄바꿈 LF → 줄 끝 공백 제거 → 마지막 LF 하나.
+ * 지금 쓰는 문안. DB 편집본을 먼저 고른 뒤 기관명 치환을 마지막에 적용한다.
+ * 수탁자 문장은 코드가 붙여 DB v3 편집본도 v4 필수 고지를 빠뜨릴 수 없다.
  */
-export function canonicalPreimage(domain: ConsentDomain): string {
+export function copyText(domain: ConsentDomain, institutionName: string): DomainCopy {
+  const source = { ...CONSENT_COPY[domain], ...live.text[domain] };
+  const provider =
+    source.provider?.id.startsWith('institution_')
+      ? { ...source.provider, legalRecipient: institutionName }
+      : source.provider;
+  return {
+    ...source,
+    copy: `${institutionName}의 개인정보 처리 수탁자 ${TRUSTEE}은 시스템 운영을 담당합니다. ${renderInstitutionText(source.copy, institutionName)}`,
+    items: source.items.map((item) => renderInstitutionText(item, institutionName)),
+    purposeText: renderInstitutionText(source.purposeText, institutionName),
+    retentionText: renderInstitutionText(source.retentionText, institutionName),
+    refusalText: renderInstitutionText(source.refusalText, institutionName),
+    provider,
+  };
+}
+
+/**
+ * 현재 기관명. 호출마다 DB 를 읽어 이름 변경이 즉시 새 동의 해시가 되게 한다.
+ * 온보딩 전 빈 이름은 종전 처리자 이름을 써 문안·수신자를 빈 문자열로 내보내지 않는다.
+ */
+export async function consentInstitutionName(): Promise<string> {
+  const [row] = await sql<Array<{ name: string }>>`select name from organization where id = 1`;
+  return effectiveInstitutionName(row?.name);
+}
+
+/**
+ * 문안 해시의 원문. 처리자·수탁자·고정 STT 리전을 명시적으로 묶고,
+ * NFC 정규화 → 줄바꿈 LF → 줄 끝 공백 제거 → 마지막 LF 하나를 지킨다.
+ */
+export function canonicalPreimage(domain: ConsentDomain, institutionName: string): string {
   const { label, copy, purpose, provider, retentionDuration, items, purposeText, retentionText, refusalText } =
-    copyText(domain);
+    copyText(domain, institutionName);
   const lines = [
     `domain=${domain}`,
+    `processor=${institutionName}`,
+    `trustee=${TRUSTEE}`,
+    `region=${domain === 'external_stt_processing' ? SPEECH_REGION : '<null>'}`,
     `label=${label}`,
     `copy=${copy}`,
-    // 표준 양식 항목도 문안이다(2026-09-16 Q). 무엇을 받고 얼마나 두고 거부하면 어떻게 되는지가
-    // 바뀌면 그것은 다른 동의다 — 해시에 넣어야 바뀐 사실이 드러난다.
     `items=${items.join('|')}`,
     `purposeText=${purposeText}`,
     `retentionText=${retentionText}`,
@@ -237,26 +278,46 @@ const VOICE_DOMAINS: ReadonlySet<string> = new Set([
   'voice_original_retention_period',
 ]);
 
-/**
- * 음성 경로를 여는 스위치. **녹음과 전사는 다른 일이다.**
- * 녹음은 디스크만 있으면 되고, 전사는 외부 제공자 키가 따로 필요하다.
- * 그래서 키가 아니라 기관이 켜는 플래그로 연다 — 키가 생겼다고 녹음이 시작되면 안 된다.
- */
-export const voiceEnabled = (): boolean => process.env.VOICE_ENABLED === '1';
+export type ConnectionSource = 'db' | 'env' | null;
 
-/** 전사까지 되는가. 키와 엔드포인트(직접 또는 지역)를 모두 설정해야 한다. */
-export const sttEnabled = (): boolean =>
-  voiceEnabled() &&
-  Boolean(process.env.AZURE_SPEECH_KEY?.trim()) &&
-  Boolean(
-    process.env.AZURE_SPEECH_ENDPOINT?.trim() || process.env.AZURE_SPEECH_REGION?.trim(),
-  );
+export async function voiceConnection(): Promise<{ enabled: boolean; source: ConnectionSource }> {
+  const [row] = await sql<Array<{ voice_enabled: boolean | null }>>`
+    select voice_enabled from organization where id = 1`;
+  if (row?.voice_enabled !== null && row?.voice_enabled !== undefined) {
+    return { enabled: row.voice_enabled, source: 'db' };
+  }
+  if (process.env.VOICE_ENABLED !== undefined) {
+    return { enabled: process.env.VOICE_ENABLED === '1', source: 'env' };
+  }
+  return { enabled: false, source: null };
+}
 
-export const activeDomains = (): readonly ConsentDomain[] =>
-  voiceEnabled() ? CONSENT_DOMAINS : CONSENT_DOMAINS.filter((d) => !VOICE_DOMAINS.has(d));
+/** 녹음 스위치. DB 값이 우선이고 null 일 때만 env 로 떨어진다. */
+export async function voiceEnabled(): Promise<boolean> {
+  return (await voiceConnection()).enabled;
+}
 
-export const copyHash = (domain: ConsentDomain): string =>
-  createHash('sha256').update(canonicalPreimage(domain), 'utf8').digest('hex');
+/** 복호한 Speech 키. 값은 호출자 내부에서만 쓰고 응답·감사·로그에는 싣지 않는다. */
+export async function speechKey(): Promise<{ key: string; source: Exclude<ConnectionSource, null> } | null> {
+  const [row] = await sql<Array<{ enc_speech_key: string | null }>>`
+    select enc_speech_key from organization where id = 1`;
+  const stored = decryptPii(row?.enc_speech_key ?? null);
+  if (stored) return { key: stored, source: 'db' };
+  const env = process.env.AZURE_SPEECH_KEY?.trim();
+  return env ? { key: env, source: 'env' } : null;
+}
+
+/** 녹음이 켜져 있고 DB 또는 env Speech 키가 있을 때만 전사한다. 리전은 koreacentral 고정이다. */
+export async function sttEnabled(): Promise<boolean> {
+  return (await voiceEnabled()) && (await speechKey()) !== null;
+}
+
+export async function activeDomains(): Promise<readonly ConsentDomain[]> {
+  return (await voiceEnabled()) ? CONSENT_DOMAINS : CONSENT_DOMAINS.filter((domain) => !VOICE_DOMAINS.has(domain));
+}
+
+export const copyHash = (domain: ConsentDomain, institutionName: string): string =>
+  createHash('sha256').update(canonicalPreimage(domain, institutionName), 'utf8').digest('hex');
 
 export type ConsentEventRow = {
   domain: ConsentDomain;
@@ -274,11 +335,15 @@ export type ConsentStatus = 'granted' | 'not_granted' | 'unconfirmed';
  * 마지막 사건이 `grant` 이고 **지금 문안 해시와 같을 때만** `granted` 다.
  * 문안이 바뀌면 지난 동의는 자동으로 승격되지 않고 `unconfirmed` 로 떨어진다.
  */
-export function foldConsent(domain: ConsentDomain, events: ConsentEventRow[]): ConsentStatus {
-  const mine = events.filter((e) => e.domain === domain).sort((a, b) => a.id - b.id);
+export function foldConsent(
+  domain: ConsentDomain,
+  events: ConsentEventRow[],
+  institutionName: string,
+): ConsentStatus {
+  const mine = events.filter((event) => event.domain === domain).sort((a, b) => a.id - b.id);
   const last = mine.at(-1);
   if (!last) return 'unconfirmed';
   if (last.decision !== 'grant') return 'not_granted';
-  if (last.copy_version !== copyVersion() || last.copy_hash !== copyHash(domain)) return 'unconfirmed';
+  if (last.copy_version !== copyVersion() || last.copy_hash !== copyHash(domain, institutionName)) return 'unconfirmed';
   return 'granted';
 }

@@ -36,6 +36,8 @@ import {
   saveOrg,
   saveProfile,
   setAiKey,
+  setSttKey,
+  setVoiceEnabled,
   setAssignments,
   setWorkerRole,
   updateProgram,
@@ -61,6 +63,7 @@ import {
   Badge,
   Button,
   Card,
+  Choice,
   Chevron,
   Confirm,
   ConsentDetail,
@@ -79,6 +82,7 @@ import { setTheme, themeChoice, type ThemeChoice } from '../theme.ts';
 import { DatePicker } from '../date-picker.tsx';
 import { Dialog } from '../dialog.tsx';
 import { AUDIT_DAYS, AUDIT_KIND_TABS, AuditScreen } from './audit.tsx';
+import { CONNECTION_GUIDES } from '../../../site/connection-guide.js';
 
 const date = (s: string) => new Date(s).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
 
@@ -357,7 +361,7 @@ function ProfilePane() {
   return (
     <Card
       title="내 정보"
-      className="me-profile"
+      className="me-profile-card"
       action={
         <span className="wire-card-action">
           <Button variant="primary" disabled={!p.name.trim()} onClick={() => void save()}>
@@ -1715,125 +1719,208 @@ function DownloadPane() {
 }
 
 /**
- * 외부 서비스 연결(2026-09-17 Q, 이름은 2026-09-18 QA). 아코디언 셋 — AI 정리·녹음 글로 옮기기·데이터베이스. 접힌 줄에 상태·제공자·출처가 한 줄로 서고,
- * 펼치면 설정 자리다: 셋 다 `설정 가이드` 알약(누르면 팝업), AI 는 그 아래 키 넣기.
- * OpenAI 키는 서버가 검증한 뒤 암호문으로 저장하고 값은 다시 보여 주지 않는다 — 저장돼 있으면 `••••••••` 로만 말한다.
- * 마법사의 5단계와 설정이 같은 화면이다.
+ * 외부 서비스 연결. 온보딩 마지막 단계와 설정이 이 한 부품을 쓴다. Speech 키와 녹음 허용은
+ * 서로 다른 저장 경계이고, 데이터베이스는 운영자가 배포 전에 붙이므로 읽기 상태만 보여 준다.
  */
 export function ConnectionsPane() {
   const { data: c, setData: setC, error, reload } = useLoad(getConnections);
-  const [key, setKey] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
+  const [aiKey, setAiKeyValue] = useState('');
+  const [sttKey, setSttKeyValue] = useState('');
+  const [busy, setBusy] = useState<'ai' | 'stt' | 'voice' | null>(null);
+  const [errors, setErrors] = useState<Partial<Record<'ai' | 'stt' | 'voice', string>>>({});
+  const [notes, setNotes] = useState<Partial<Record<'ai' | 'stt' | 'voice', string>>>({});
+
   if (error) {
     return (
-      <Card title="API 연결 관리">
+      <Card title="외부 서비스 연결">
         <LoadError error={error} onRetry={reload} />
       </Card>
     );
   }
   if (!c) return <Empty>불러오는 중</Empty>;
 
-  const submit = async (value: string | null) => {
-    setBusy(true);
-    setErr(null);
-    setNote(null);
+  const saveAi = async (value: string | null) => {
+    setBusy('ai');
+    setErrors((current) => ({ ...current, ai: undefined }));
+    setNotes((current) => ({ ...current, ai: undefined }));
     try {
       await setAiKey(value);
-      setKey('');
-      setNote(value === null ? '키 삭제됨' : '키 확인 후 저장됨');
+      setAiKeyValue('');
+      setNotes((current) => ({ ...current, ai: value === null ? '키 삭제됨' : '키 확인 후 저장됨' }));
       setC(await getConnections());
     } catch (e) {
-      setErr(e instanceof Error ? e.message : '저장 실패');
+      setErrors((current) => ({ ...current, ai: e instanceof Error ? e.message : '저장 실패' }));
     } finally {
-      setBusy(false);
+      setBusy(null);
+    }
+  };
+
+  const saveStt = async (value: string | null) => {
+    setBusy('stt');
+    setErrors((current) => ({ ...current, stt: undefined }));
+    setNotes((current) => ({ ...current, stt: undefined }));
+    try {
+      await setSttKey(value);
+      setSttKeyValue('');
+      setNotes((current) => ({ ...current, stt: value === null ? '키 삭제됨' : '키 확인 후 저장됨' }));
+      setC(await getConnections());
+    } catch (e) {
+      setErrors((current) => ({ ...current, stt: e instanceof Error ? e.message : '저장 실패' }));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const toggleVoice = async (enabled: boolean) => {
+    const previous = c;
+    setBusy('voice');
+    setErrors((current) => ({ ...current, voice: undefined }));
+    setNotes((current) => ({ ...current, voice: undefined }));
+    setC({ ...c, voice: { enabled, source: 'db' } });
+    try {
+      await setVoiceEnabled(enabled);
+      setNotes((current) => ({ ...current, voice: enabled ? '녹음 켬' : '녹음 끔' }));
+      setC(await getConnections());
+    } catch (e) {
+      setC(previous);
+      setErrors((current) => ({ ...current, voice: e instanceof Error ? e.message : '저장 실패' }));
+    } finally {
+      setBusy(null);
     }
   };
 
   const status = (ok: boolean) => (ok ? <Badge tone="mint">연결됨</Badge> : <Badge tone="coral">연결 안 됨</Badge>);
-  const aiSource = c.ai.source === 'db' ? '저장된 키 ••••••••' : c.ai.source === 'env' ? `서버 ${c.ai.env}` : '키 없음';
-  const row = (ok: boolean, text: string) => (
+  const row = (state: ReactNode, text: string) => (
     <span className="connection-summary">
-      {status(ok)}
+      {state}
       <span>{text}</span>
     </span>
   );
-  /**
-   * 설정 가이드 — 설치 순서와 안내(무엇을 어디서, AI(이 도구)가 어디까지 돕는지). 아코디언 안에서는 `설정 가이드`
-   * 알약 하나이고 누르면 팝업이다(2026-09-18 온보딩 후속 2) — 본문에 펼쳐 두면 키 칸이 안내문 아래로 밀렸다.
-   */
-  const guide = (id: string, title: string, steps: Array<[string, ReactNode]>) => (
-    // 카드 본문이 grid 라 알약이 폭을 다 차지한다 — flex 한 겹으로 제 크기를 지킨다.
-    <div className="connection-guide-row">
-      <Dialog id={`guide-${id}`} title={`${title} 설정 가이드`} trigger="설정 가이드" className="connection-guide-dialog">
-        <ol className="connection-guide">
-          {steps.map(([label, body]) => (
-            <li key={label}>
-              <strong>{label}</strong>
-              <span>{body}</span>
-            </li>
-          ))}
-        </ol>
-      </Dialog>
-    </div>
-  );
-  const ext = (href: string, label: string) => (
-    <a href={href} target="_blank" rel="noreferrer">
-      {label}
-    </a>
-  );
+  const aiSource = c.ai.source === 'db' ? '저장된 키 ••••••••' : c.ai.source === 'env' ? `서버 ${c.ai.env}` : '키 없음';
+  const sttSource = c.stt.source === 'db' ? '저장된 키 ••••••••' : c.stt.source === 'env' ? '서버 환경 변수' : '키 없음';
+  const voiceSource = c.voice.source === 'db' ? '저장된 설정' : c.voice.source === 'env' ? '서버 환경 변수' : '설정 없음';
+  const guide = (id: (typeof CONNECTION_GUIDES)[number]['id']) => {
+    const content = CONNECTION_GUIDES.find((item) => item.id === id);
+    if (!content) return null;
+    return (
+      <div className="connection-guide-row">
+        <Dialog
+          id={`guide-${id}`}
+          title={`${content.title} 설정 가이드`}
+          trigger="설정 가이드"
+          className="connection-guide-dialog"
+        >
+          <ol className="connection-guide" data-guide-id={content.id}>
+            {content.steps.map((step) => (
+              <li key={step.label}>
+                <strong>{step.label}</strong>
+                <span>
+                  {step.parts.map((part, index) =>
+                    part.kind === 'link' ? (
+                      <a href={part.href} target="_blank" rel="noreferrer" key={index}>{part.text}</a>
+                    ) : part.kind === 'code' ? (
+                      <code key={index}>{part.text}</code>
+                    ) : (
+                      <span key={index}>{part.text}</span>
+                    ),
+                  )}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </Dialog>
+      </div>
+    );
+  };
 
   return (
     <>
-      <p className="panel-meta">AI 정리 · 녹음 글로 옮기기 · 데이터베이스 — 순서대로 연결, AI 정리 먼저</p>
+      <p className="panel-meta">AI 정리 · 녹음 글로 옮기기 · 상담 녹음 · 데이터베이스 연결 상태</p>
       <div className="connection-list">
-        <Fold title="1. AI 정리" group="connections" desc={row(c.ai.connected, `${c.ai.provider} · ${c.ai.model} · ${aiSource}`)}>
-          {guide('ai', 'AI 정리', [
-            ['키 발급', <>{ext('https://platform.openai.com/api-keys', 'OpenAI API keys')} → Create new secret key → 복사(한 번만 표시)</>],
-            ['결제', <>{ext('https://platform.openai.com/settings/organization/billing', 'Billing')} 카드 등록 — 미등록이면 호출 거절</>],
-            ['여기 입력', 'AI 정리 칸의 OpenAI API 키에 붙여 넣고 저장 — 서버가 OpenAI 확인 후 암호문 저장'],
-            ['AI가 돕는 범위', '키 검증·저장·연결 상태 확인·요약 생성 — 계정 가입·결제·키 발급은 사람'],
-          ])}
+        <Fold
+          title="1. AI 정리"
+          group="connections"
+          className="connection-ai-card"
+          desc={row(status(c.ai.connected), `${c.ai.provider} · ${c.ai.model} · ${aiSource}`)}
+        >
+          {guide('ai')}
           {c.ai.provider === 'openai' && (
             <>
               <Field label="OpenAI API 키" htmlFor="ai-key">
-                <input id="ai-key" type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} />
+                <input id="ai-key" type="password" autoComplete="off" value={aiKey} onChange={(e) => setAiKeyValue(e.target.value)} />
               </Field>
               <FormActions>
-                {err && <ErrorText>{err}</ErrorText>}
-                {note && !err && <span className="panel-meta">{note}</span>}
+                {errors.ai && <ErrorText>{errors.ai}</ErrorText>}
+                {notes.ai && !errors.ai && <span className="panel-meta">{notes.ai}</span>}
                 {c.ai.source === 'db' && (
-                  <Button disabled={busy} onClick={() => void submit(null)}>
-                    키 지우기
-                  </Button>
+                  <Button disabled={busy !== null} onClick={() => void saveAi(null)}>키 지우기</Button>
                 )}
-                <Button variant="primary" disabled={busy || !key.trim()} onClick={() => void submit(key.trim())}>
-                  {busy ? '확인 중' : '저장'}
+                <Button variant="primary" disabled={busy !== null || !aiKey.trim()} onClick={() => void saveAi(aiKey.trim())}>
+                  {busy === 'ai' ? '확인 중' : '저장'}
                 </Button>
               </FormActions>
             </>
           )}
         </Fold>
+
         <Fold
           title="2. 녹음 글로 옮기기"
           group="connections"
-          desc={row(c.stt.connected, `${c.stt.provider}${c.stt.region ? ` · ${c.stt.region}` : ''} · 서버 ${c.stt.env}`)}
+          className="connection-stt-card"
+          desc={row(status(c.stt.connected), `Azure Speech · 한국 중부(koreacentral) · ${sttSource}`)}
         >
-          {guide('stt', '녹음 글로 옮기기', [
-            ['리소스 만들기', <>{ext('https://portal.azure.com/#create/Microsoft.CognitiveServicesSpeechServices', 'Azure Speech 리소스 만들기')} — 리전 Korea Central, 요금제 S0</>],
-            ['키·리전 확인', 'Azure 포털 › 리소스 › Keys and Endpoint 에서 KEY 1 과 Location/Region'],
-            ['서버에 넣기', <>기관 서버 <code>.env</code> 의 <code>AZURE_SPEECH_KEY</code>·<code>AZURE_SPEECH_REGION</code> 입력 후 앱 재시작(<code>docs/deploy.md</code>)</>],
-            ['AI가 돕는 범위', '연결 상태 확인·전사 실패 이유 안내 — Azure 가입·결제·리소스 생성·서버 파일 수정은 사람'],
-          ])}
+          {guide('stt')}
+          <DataRows rows={[['지역', '한국 중부(koreacentral)']]} />
+          <Field label="Azure Speech 키" htmlFor="stt-key">
+            <input id="stt-key" type="password" autoComplete="off" value={sttKey} onChange={(e) => setSttKeyValue(e.target.value)} />
+          </Field>
+          <FormActions>
+            {errors.stt && <ErrorText>{errors.stt}</ErrorText>}
+            {notes.stt && !errors.stt && <span className="panel-meta">{notes.stt}</span>}
+            {c.stt.source === 'db' && (
+              <Button disabled={busy !== null} onClick={() => void saveStt(null)}>키 지우기</Button>
+            )}
+            <Button variant="primary" disabled={busy !== null || !sttKey.trim()} onClick={() => void saveStt(sttKey.trim())}>
+              {busy === 'stt' ? '확인 중' : '저장'}
+            </Button>
+          </FormActions>
         </Fold>
-        <Fold title="3. 데이터베이스" group="connections" desc={row(c.db.connected, `Postgres · 서버 ${c.db.env}`)}>
-          {guide('db', '데이터베이스', [
-            ['DB 준비', <>{ext('https://supabase.com/dashboard', 'Supabase')} 프로젝트(서울 리전) 또는 기관 서버의 Postgres 17</>],
-            ['연결 문자열', <>Supabase › Project Settings › Database 의 URI(<code>postgres://…</code>) → 기관 서버 <code>.env</code> 의 <code>DATABASE_URL</code></>],
-            ['표 만들기', <><code>node api/src/migrate.ts</code> 로 스키마 적용 후 앱 재시작 — 백업은 <code>scripts/backup.sh</code></>],
-            ['AI가 돕는 범위', '마이그레이션·백업·복구 실행과 상태 확인 — 계정 가입·결제·비밀번호 보관은 사람'],
-          ])}
+
+        <Fold
+          title="3. 상담 녹음"
+          group="connections"
+          className="connection-voice-card"
+          desc={row(
+            c.voice.enabled ? <Badge tone="mint">녹음 켬</Badge> : <Badge tone="coral">녹음 끔</Badge>,
+            voiceSource,
+          )}
+        >
+          {guide('voice')}
+          <Choice
+            type="checkbox"
+            label="상담 녹음"
+            hint="Speech 키와 별도 설정"
+            checked={c.voice.enabled}
+            disabled={busy !== null}
+            onChange={() => void toggleVoice(!c.voice.enabled)}
+          />
+          {errors.voice && <ErrorText>{errors.voice}</ErrorText>}
+          {notes.voice && !errors.voice && <span className="panel-meta">{notes.voice}</span>}
+        </Fold>
+
+        <Fold
+          title="4. 데이터베이스"
+          group="connections"
+          className="connection-db-card"
+          desc={row(status(c.db.connected), `Postgres · 서버 ${c.db.env}`)}
+        >
+          {guide('db')}
+          <DataRows
+            rows={[
+              ['연결 상태', c.db.connected ? '연결됨' : '연결 안 됨'],
+              ['마지막 확인', new Date(c.db.checked_at).toLocaleString('ko-KR')],
+            ]}
+          />
         </Fold>
       </div>
     </>

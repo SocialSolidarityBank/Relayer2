@@ -1,9 +1,8 @@
-"""Infisical 에서 값을 받아 `.env` 로 쓴다. 값은 출력하지 않는다.
+"""Infisical의 기관 경로에서 값을 받아 현재 디렉터리의 `.env`(0600)로 쓴다.
 
-읽기는 **Machine Identity `ggbss-agent`** 로 한다(universal-auth).
-`ggbss_project_access_token` 은 서비스 토큰이라 스코프가 루트 `/` 뿐이고
-`/RELAYER2` 같은 하위 경로를 읽지 못한다(2026-09-15 실측: 주입 0건). 쓰지 않는다.
+읽기는 Machine Identity `ggbss-agent` universal-auth로 한다. 값은 출력하지 않는다.
 """
+import argparse
 import json
 import os
 import pathlib
@@ -16,18 +15,12 @@ API = "https://app.infisical.com/api"
 # 없으면 배포를 멈춘다.
 WANT = ("DATABASE_URL", "PII_ENC_KEY", "SESSION_SECRET")
 
-# 없으면 그냥 건너뛴다 — **AI 가 없어도 제품은 돈다.**
-# 왼쪽이 Infisical 의 이름, 오른쪽이 앱이 읽는 이름이다.
+# AI가 없어도 제품은 돈다. 왼쪽은 Infisical 이름, 오른쪽은 앱 환경 변수 이름이다.
 OPTIONAL = {
     "RELAYER_OPENAI_API_KEY": "OPENAI_API_KEY",
     "GEMINI_API_KEY": "GEMINI_API_KEY",
     "AI_PROVIDER": "AI_PROVIDER",
     "AI_MODEL": "AI_MODEL",
-    "AZURE_SPEECH_KEY": "AZURE_SPEECH_KEY",
-    "AZURE_SPEECH_ENDPOINT": "AZURE_SPEECH_ENDPOINT",
-    "AZURE_SPEECH_REGION": "AZURE_SPEECH_REGION",
-    "VOICE_ENABLED": "VOICE_ENABLED",
-    "VOICE_ROOT": "VOICE_ROOT",
 }
 
 
@@ -46,12 +39,18 @@ def login() -> str:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("secret_path", help="Infisical 경로. 예: /RELAYER2/test2")
+    args = parser.parse_args()
+    if not args.secret_path.startswith("/"):
+        raise SystemExit("경로는 /로 시작해야 합니다.")
+
     token = login()
     query = urllib.parse.urlencode(
         {
             "workspaceId": os.environ["PROJECT_ID"],
             "environment": "prod",
-            "secretPath": os.environ["SECRET_PATH"],
+            "secretPath": args.secret_path,
         }
     )
     req = urllib.request.Request(
@@ -60,32 +59,48 @@ def main() -> None:
     try:
         with urllib.request.urlopen(req, timeout=30) as res:
             payload = json.loads(res.read())
-    except urllib.error.HTTPError as e:
-        raise SystemExit(f"읽기 실패 HTTP {e.code}")
+    except urllib.error.HTTPError as error:
+        raise SystemExit(f"읽기 실패 HTTP {error.code}")
 
-    got = {s["secretKey"]: s["secretValue"] for s in payload.get("secrets", [])}
-    missing = [k for k in WANT if k not in got]
+    got = {item["secretKey"]: item["secretValue"] for item in payload.get("secrets", [])}
+    missing = [name for name in WANT if name not in got]
     if missing:
         raise SystemExit(f"없는 값: {', '.join(missing)}")
 
-    # 직전 .env 에 있던 선택 키가 이번 응답에 없으면 조용히 빠지는 게 아니라
-    # Infisical 쪽에서 개명·이동된 것이다. 이름만 비교한다 — 값은 보지 않는다.
     env = pathlib.Path(".env")
-    prev = set()
+    previous = set()
     if env.exists():
-        prev = {line.split("=", 1)[0] for line in env.read_text().splitlines() if "=" in line}
-    vanished = [dst for src, dst in OPTIONAL.items() if dst in prev and src not in got]
+        previous = {
+            line.split("=", 1)[0]
+            for line in env.read_text().splitlines()
+            if "=" in line
+        }
+    vanished = [
+        destination
+        for source, destination in OPTIONAL.items()
+        if destination in previous and source not in got
+    ]
 
-    lines = [f"{k}={got[k]}" for k in WANT]
-    extra = [dst for src, dst in OPTIONAL.items() if src in got]
-    lines += [f"{dst}={got[src]}" for src, dst in OPTIONAL.items() if src in got]
+    lines = [f"{name}={got[name]}" for name in WANT]
+    extra = [destination for source, destination in OPTIONAL.items() if source in got]
+    lines += [
+        f"{destination}={got[source]}"
+        for source, destination in OPTIONAL.items()
+        if source in got
+    ]
     lines.append(f"PORT={os.environ.get('PORT', '8790')}")
     env.write_text("\n".join(lines) + "\n")
     env.chmod(0o600)
-    print(f".env 작성: {' '.join(WANT)} PORT" + (f" + {' '.join(extra)}" if extra else " (AI 키 없음 — AI 정리는 503)"))
+    print(
+        f".env 작성: {' '.join(WANT)} PORT"
+        + (f" + {' '.join(extra)}" if extra else " (AI 키 없음 — AI 정리는 503)")
+    )
     for name in vanished:
-        print(f"경고: 직전 .env 에 있던 {name} 가 Infisical 응답에 없습니다.\n"
-              f"      이름이 바뀌었거나 다른 폴더로 옮겨졌을 수 있습니다. AI 정리는 503 이 됩니다.")
+        print(
+            f"경고: 직전 .env 에 있던 {name}가 Infisical 응답에 없습니다.\n"
+            "      이름이 바뀌었거나 다른 폴더로 옮겨졌을 수 있습니다. AI 정리는 503이 됩니다."
+        )
 
 
-main()
+if __name__ == "__main__":
+    main()

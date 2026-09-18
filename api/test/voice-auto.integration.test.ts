@@ -1,6 +1,7 @@
 // 자동 전사(2026-09-16 Q). 업로드는 즉시 끝나고 전사는 뒤에서 돈다. 결과는 녹음 행의 상태다.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sql } from '../src/db.ts';
+import { encryptPii } from '../src/pii.ts';
 import { autoTranscribeLoad, failStaleTranscriptions, SPEECH_MAX_BYTES } from '../src/stt.ts';
 import { azureFetch, enabled, fixture, req, silentWav, upload, waitTranscribeState } from './voice-fixture.ts';
 
@@ -9,7 +10,8 @@ beforeEach(() => {
   vi.stubEnv('AZURE_SPEECH_KEY', 'test-key');
   vi.stubEnv('AZURE_SPEECH_REGION', 'koreacentral');
 });
-afterEach(() => {
+afterEach(async () => {
+  await sql`update organization set enc_speech_key = null, voice_enabled = null where id = 1`;
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
@@ -35,6 +37,69 @@ describe.skipIf(!enabled)('auto transcription', () => {
       recordings: 1,
       transcript: 'draft',
     });
+  });
+
+  it('uses the decrypted DB Speech key ahead of the env fallback', async () => {
+    vi.stubEnv('AZURE_SPEECH_KEY', 'env-speech-key');
+    await sql`update organization set enc_speech_key = ${encryptPii('db-speech-key')} where id = 1`;
+    let sentKey: string | null = null;
+    vi.stubGlobal('fetch', (async (_input: string | URL | Request, init?: RequestInit) => {
+      sentKey = new Headers(init?.headers).get('Ocp-Apim-Subscription-Key');
+      return new Response(
+        JSON.stringify({ combinedPhrases: [{ text: 'DB 키로 전사함.' }], phrases: [] }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as typeof fetch);
+    const { worker, case_id } = await fixture();
+    const { session_id } = await (await req(`/cases/${case_id}/sessions/start`, worker, 'POST', {})).json();
+
+    const recording = await (await upload(session_id, worker, silentWav(3600))).json();
+
+    expect(await waitTranscribeState(recording.id)).toBe('done');
+    expect(sentKey).toBe('db-speech-key');
+  });
+
+  it('stores the recording as skipped when no Speech key exists', async () => {
+    vi.stubEnv('AZURE_SPEECH_KEY', undefined);
+    await sql`update organization set enc_speech_key = null where id = 1`;
+    let called = 0;
+    vi.stubGlobal('fetch', (async () => {
+      called += 1;
+      return new Response('{}');
+    }) as typeof fetch);
+    const { worker, case_id } = await fixture();
+    const { session_id } = await (await req(`/cases/${case_id}/sessions/start`, worker, 'POST', {})).json();
+
+    const recording = await (await upload(session_id, worker, silentWav(3800))).json();
+
+    expect(recording.transcribe_state).toBe('skipped');
+    expect(recording.transcribe_note).toContain('전사 제공자 설정 없음');
+    expect(called).toBe(0);
+  });
+
+  it('marks a pending recording failed when its Speech key is removed before execution', async () => {
+    vi.stubEnv('AZURE_SPEECH_KEY', undefined);
+    await sql`update organization set enc_speech_key = null where id = 1`;
+    let called = 0;
+    vi.stubGlobal('fetch', (async () => {
+      called += 1;
+      return new Response('{}');
+    }) as typeof fetch);
+    const { worker, case_id } = await fixture();
+    const { session_id } = await (await req(`/cases/${case_id}/sessions/start`, worker, 'POST', {})).json();
+    const recording = await (await upload(session_id, worker, silentWav(4400))).json();
+    expect(recording.transcribe_state).toBe('skipped');
+
+    await sql`update organization set enc_speech_key = ${encryptPii('soon-removed-key')} where id = 1`;
+    await sql`update recordings set transcribe_state = 'pending', transcribe_note = null where id = ${recording.id}`;
+    await sql`update organization set enc_speech_key = null where id = 1`;
+
+    expect((await req(`/recordings/${recording.id}/transcript`, worker, 'POST', {})).status).toBe(503);
+    const [row] = await sql<Array<{ transcribe_state: string; transcribe_note: string | null }>>`
+      select transcribe_state, transcribe_note from recordings where id = ${recording.id}`;
+    expect(row.transcribe_state).toBe('failed');
+    expect(row.transcribe_note).toContain('전사 제공자 설정 없음');
+    expect(called).toBe(0);
   });
 
   it('never sends more than the concurrency cap to the provider at once, and still finishes every upload', async () => {

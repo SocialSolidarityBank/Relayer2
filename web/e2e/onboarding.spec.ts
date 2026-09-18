@@ -1,4 +1,4 @@
-// 첫 가입 → 마법사 네 단계 → 당사자 등록 → 담당 배정 → 사업별 필터 링크(2026-09-17 Q).
+// 첫 가입 → 마법사 다섯 단계 → 당사자 등록 → 담당 배정 → 사업별 필터 링크.
 // **seed 없는 새 DB** 에서만 뜻이 있는 흐름이라 DB 와 API 서버를 따로 띄우고, 화면은 빌드된 dist 를
 // 그 서버가 같은 출처로 낸다(배포와 같은 모양). 다른 e2e 처럼 :5173 시드 서버를 쓰지 않는다.
 import { execFileSync } from 'node:child_process';
@@ -34,7 +34,7 @@ test.setTimeout(180_000);
 
 test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까지 한 바퀴', async ({ page, browser }) => {
   // ── 랜딩 = 로그인 화면 → 가입하기 ─────────────────────────────
-  await page.goto(`${base}/`);
+  await page.goto(`${base}/app#/login`);
   await expect(page.locator('#email')).toBeVisible();
   await page.getByRole('link', { name: '가입하기' }).click();
   await expect(page).toHaveURL(/#\/signup$/);
@@ -53,7 +53,7 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
   await expect(page.getByText('e2e-slug', { exact: true })).toBeVisible();
   await expect(page.locator('#ws-slug')).toHaveCount(0);
   // 마치기 전에 다른 화면으로 가면 마법사로 돌아온다.
-  await page.goto(`${base}/#/participants`);
+  await page.goto(`${base}/app#/participants`);
   await expect(page).toHaveURL(/#\/onboarding$/);
   await page.locator('#ws-name').fill(ORG);
   await page.getByRole('button', { name: '기관 워크스페이스 만들기' }).click();
@@ -103,15 +103,15 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
   await expect(worker.getByRole('heading', { name: '기관 준비 중', level: 1 })).toBeVisible();
   await page.getByRole('button', { name: '다음' }).click();
 
-  // 5단계: AI/STT/DB 연결 — 키만 넣으면 되는 것과 설치가 필요한 것이 갈려 보인다. 확인만 하고 마친다.
+  // 5단계: AI, Speech 키, 녹음 토글, DB 상태를 같은 ConnectionsPane에서 확인한다.
   await expect(page.getByRole('tab', { name: '5. 외부 서비스 연결', selected: true })).toBeVisible();
-  for (const name of ['1. AI 정리', '2. 녹음 글로 옮기기', '3. 데이터베이스']) {
+  for (const name of ['1. AI 정리', '2. 녹음 글로 옮기기', '3. 상담 녹음', '4. 데이터베이스']) {
     await expect(page.locator('details.wire-card-details summary', { hasText: name })).toBeVisible();
   }
   // 상태 배지는 민트/코랄뿐이다(QA P2 #8 — blue 톤 없음).
   await expect(page.locator('.connection-list .wire-badge[data-tone="blue"]')).toHaveCount(0);
   // 설정 가이드는 아코디언 안 알약이고 누르면 팝업이다(온보딩 후속 2).
-  const dbFold = page.locator('details.wire-card-details', { hasText: '3. 데이터베이스' });
+  const dbFold = page.locator('details.wire-card-details', { hasText: '4. 데이터베이스' });
   await dbFold.locator('summary').click();
   await dbFold.getByRole('button', { name: '설정 가이드' }).click();
   const guide = page.locator('#guide-db-dialog');
@@ -137,12 +137,12 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
   const gate = await page.request.get(`${base}/auth/signup`);
   expect(await gate.json()).toEqual({ open: false, workspace: { name: ORG, slug: 'e2e-slug', public_address: 'e2e-slug' } });
   const stranger = await browser.newPage();
-  await stranger.goto(`${base}/#/signup`);
+  await stranger.goto(`${base}/app#/signup`);
   await expect(stranger.getByRole('heading', { name: '초대 링크로만 가입 가능', level: 1 })).toBeVisible();
   await expect(stranger.locator('#su-email')).toHaveCount(0);
   await expect(stranger.getByText(ORG, { exact: true })).toBeVisible();
   // 세션 없는 깊은 주소는 랜딩을 거치지 않고 로그인으로 가고, 로그인 뒤 그 주소로 돌아간다.
-  await stranger.goto(`${base}/#/settings/org`);
+  await stranger.goto(`${base}/app#/settings/org`);
   await expect(stranger.locator('#email')).toBeVisible();
   await stranger.locator('#email').fill('e2e-admin');
   await stranger.locator('#password').fill('e2e-admin');
@@ -151,7 +151,7 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
   await stranger.close();
 
   // ── 당사자 등록 ─────────────────────────────────────────────
-  await page.goto(`${base}/#/participants/new`);
+  await page.goto(`${base}/app#/participants/new`);
   await page.locator('#name').fill(PARTICIPANT);
   await page.getByRole('checkbox', { name: /개인정보 수집·이용/ }).check();
   // 사업이 하나뿐이라 이미 골라져 있다.
@@ -160,11 +160,11 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
   await expect(page).toHaveURL(/#\/cases\/\d+\/intake$/);
 
   // 마법사를 마쳤으니 이제 다른 화면으로 가도 되돌아오지 않는다.
-  await page.goto(`${base}/#/participants`);
+  await page.goto(`${base}/app#/participants`);
   await expect(page).toHaveURL(/#\/participants$/);
 
   // ── 관리자 배정 — 행의 `실무자 배정` 이 드로어를 열고, 지금 담당은 배지를 단 채 서 있다 ──
-  await page.goto(`${base}/#/settings/staff`);
+  await page.goto(`${base}/app#/settings/staff`);
   const assignCard = page.locator('section.wire-card', { hasText: '담당 실무자 배정' });
   await assignCard.getByRole('button', { name: /실무자 배정$/ }).first().click();
   const drawer = page.locator('dialog.assign-drawer');
@@ -174,7 +174,7 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
   await expect(assignCard.getByText(/담당 E2E 관리자/)).toBeVisible();
 
   // ── 사업별 보기 — 아코디언을 펼치면 파생 정보가 있고, 목록은 걸개 주소로 바로 간다 ──
-  await page.goto(`${base}/#/settings/org`);
+  await page.goto(`${base}/app#/settings/org`);
   const programFold = page.locator('details.wire-card-details', { hasText: PROGRAM });
   await expect(programFold.locator('summary')).toContainText('마법사에서 만든 사업');
   await programFold.locator('summary').click();
@@ -182,11 +182,11 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
   await expect(programFold.getByText('E2E 관리자', { exact: true })).toBeVisible();
   const programs = (await (await page.request.get(`${base}/settings/programs`)).json()) as Array<{ id: number; name: string }>;
   const programId = String(programs.find((p) => p.name === PROGRAM)!.id);
-  await page.goto(`${base}/#/participants?program=${programId}`);
+  await page.goto(`${base}/app#/participants?program=${programId}`);
   // 걸개가 그 사업으로 걸린 채 열린다.
   await expect(page.locator('#filter-program')).toHaveValue(programId);
   await expect(page.getByRole('link', { name: new RegExp(`^${PARTICIPANT},.*당사자 정보$`) })).toBeVisible();
-  await page.goto(`${base}/#/settings/staff?program=${programId}`);
+  await page.goto(`${base}/app#/settings/staff?program=${programId}`);
   await expect(page).toHaveURL(new RegExp(`#/settings/staff\\?program=${programId}$`));
   await expect(page.locator('#wk-program')).toHaveValue(programId);
   const workers = page.locator('section.wire-card', { hasText: '실무자 목록' });

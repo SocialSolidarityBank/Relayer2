@@ -462,6 +462,15 @@ summary:focus-visible,
 
 /* 첫 화면 위 여백은 앱의 페이지 세로 패딩과 같은 값이다. */
 .hero { padding-top: var(--page-pad-y); }
+/* 커버. 배경이 없는 워드마크 그림이라 캔버스 위에 그대로 앉는다. 액자도 그림자도 두지 않는다.
+ * 폭은 글자 크기와 같은 계단을 쓴다: 첫 화면 제목(--display)의 11배 어름이고 상한이 520 이다.
+ * 높이를 비율로 예약해(aspect-ratio) 그림이 늦게 와도 아래 글이 밀리지 않는다. */
+.hero-cover {
+  display: block;
+  width: min(520px, 100%);
+  height: auto;
+  margin: 0 0 var(--space-6);
+}
 .hero-title {
   margin: 0;
   font-size: var(--display);
@@ -718,6 +727,25 @@ summary:focus-visible,
   color: var(--sub);
   font-size: var(--text-sm);
 }
+.setup-guide-card { display: grid; align-content: start; }
+.setup-guide-open { justify-self: start; margin-top: var(--space-5); }
+.setup-guide-dialog {
+  width: min(var(--page-max), calc(100vw - (var(--page-pad-x) * 2)));
+  max-height: calc(100vh - var(--space-10));
+  padding: var(--space-6);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--panel);
+  color: var(--ink);
+}
+.setup-guide-dialog::backdrop { background: rgb(61 52 69 / 35%); }
+.setup-guide-dialog h2, .setup-guide-dialog h3 { margin-top: 0; }
+.setup-guide-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--grid-min)), 1fr)); gap: var(--space-5); }
+.setup-guide-list > section { min-width: 0; padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-card); }
+.setup-guide-steps { display: grid; gap: var(--space-3); margin: 0; padding-left: var(--list-indent); }
+.setup-guide-steps > li { padding-left: var(--space-1); }
+.setup-guide-steps > li > strong, .setup-guide-steps > li > span { display: block; }
+.setup-guide-dialog form { display: flex; justify-content: flex-end; margin-top: var(--space-6); }
 /* 클릭해서 들어가는 카드의 호버. 앱과 같은 어휘다: 채움은 tint 쌍, 테두리는 브랜드
  * 그라데이션이 되어 같은 흐름을 탄다. */
 @media (hover: hover) {

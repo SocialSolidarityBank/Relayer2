@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
-# Infisical `prod:/RELAYER2` 의 값을 이 기기의 `.env`(600) 로 내려받는다.
-# 값은 화면에 찍지 않는다. 새 기기를 붙일 때 쓴다 — 키를 사람 손으로 옮기지 않기 위한 절차다.
-#
-# 읽기도 Machine Identity 로 한다. project access token 의 스코프는 루트뿐이라
-# `/RELAYER2` 를 읽지 못한다(2026-09-15 실측).
+# Infisical `prod:/RELAYER2/<slug>` 값을 이 기기의 `.env`(0600)로 내려받는다.
+# 경로를 생략하면 옛 단일 배포 경로 `/RELAYER2`를 읽는다. 값은 화면에 출력하지 않는다.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 umask 077
 
 opsvc="$HOME/.dotfiles/scripts/opsvc"
-[ -x "$opsvc" ] || { echo "opsvc 가 없다: $opsvc"; exit 1; }
+[ -x "$opsvc" ] || { echo "opsvc가 없다: $opsvc"; exit 1; }
 
-CLIENT_ID="$(OP_BIOMETRIC_UNLOCK_ENABLED=false "$opsvc" item get 'Infisical · account@ggbss.or.kr' \
-  --vault BSS --fields label=ggbss_client_ID --reveal)"
-CLIENT_SECRET="$(OP_BIOMETRIC_UNLOCK_ENABLED=false "$opsvc" item get 'Infisical · account@ggbss.or.kr' \
-  --vault BSS --fields label=ggbss_client_secret --reveal)"
-[ -n "$CLIENT_ID" ] && [ -n "$CLIENT_SECRET" ] || { echo "자격증명을 읽지 못했다"; exit 1; }
+secret_path="${1:-/RELAYER2}"
+refs="$(mktemp -t relayer-infisical-refs)"
+trap 'rm -f "$refs"' EXIT
+cat >"$refs" <<'EOF'
+CLIENT_ID=op://BSS/Infisical · account@ggbss.or.kr/ggbss_client_ID
+CLIENT_SECRET=op://BSS/Infisical · account@ggbss.or.kr/ggbss_client_secret
+EOF
+chmod 600 "$refs"
 
-CLIENT_ID="$CLIENT_ID" CLIENT_SECRET="$CLIENT_SECRET" \
-PROJECT_ID="a7c44b37-a885-4c62-98cd-cbc8a9810de9" SECRET_PATH="/RELAYER2" \
-PORT="${PORT:-8790}" python3 scripts/infisical_get.py
+OP_BIOMETRIC_UNLOCK_ENABLED=false "$opsvc" run --env-file="$refs" -- \
+  env PROJECT_ID="a7c44b37-a885-4c62-98cd-cbc8a9810de9" PORT="${PORT:-8790}" \
+  python3 scripts/infisical_get.py "$secret_path"

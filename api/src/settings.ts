@@ -229,6 +229,44 @@ export async function setAiKey(actorId: number, key: string | null): Promise<{ o
   return { ok: true };
 }
 
+// ── Speech 키·녹음 스위치 ─────────────────────────────────────────────────
+
+const SPEECH_TOKEN_URL =
+  'https://koreacentral.api.cognitive.microsoft.com/sts/v1.0/issueToken';
+
+/**
+ * Azure Speech 키를 고정 koreacentral 토큰 발급점에서 검증하고 암호문으로 저장한다.
+ * 실패한 키는 DB에 닿지 않으며 값은 응답·감사·로그에 싣지 않는다.
+ */
+export async function setSpeechKey(
+  actorId: number,
+  key: string | null,
+): Promise<{ ok: true } | { error: string }> {
+  if (key !== null) {
+    const response = await fetch(SPEECH_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Ocp-Apim-Subscription-Key': key },
+    }).catch(() => null);
+    if (!response?.ok) {
+      return { error: 'Azure Speech가 이 키를 받지 않았어요. 한국 중부 리전 키인지 확인해 주세요.' };
+    }
+  }
+  await sql`
+    update organization set enc_speech_key = ${encryptPii(key)}, updated_at = now(), updated_by = ${actorId}
+    where id = 1`;
+  await audit({ actorId, action: 'stt.key.set', fields: [key === null ? 'removed=1' : 'provider=azure'] });
+  return { ok: true };
+}
+
+/** 녹음 허용 여부를 키와 독립된 명시 설정으로 저장한다. */
+export async function setVoiceEnabled(actorId: number, enabled: boolean): Promise<{ ok: true }> {
+  await sql`
+    update organization set voice_enabled = ${enabled}, updated_at = now(), updated_by = ${actorId}
+    where id = 1`;
+  await audit({ actorId, action: 'voice.toggle', fields: [`enabled=${enabled ? 1 : 0}`] });
+  return { ok: true };
+}
+
 // ── 사업 목록 ──────────────────────────────────────────────────────────────
 
 export type Program = {
