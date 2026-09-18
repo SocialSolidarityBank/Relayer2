@@ -106,9 +106,13 @@ export function splitSentences(text: string): Array<{ start: number; end: number
   return out;
 }
 
-/** 문서 하나의 span 목록. id 는 `${prefix}:${doc}:${n}`. */
-export function spansOf(prefix: 'w' | 't', doc: string, text: string): SourceSpan[] {
-  return splitSentences(text).map((r, n) => ({ id: `${prefix}:${doc}:${n}`, doc, start: r.start, end: r.end, order: n }));
+/**
+ * 문서 하나의 span 목록. id 는 `${prefix}:${key}:${n}`, `doc` 은 문서 id 다.
+ * 수기는 key 가 곧 문서 id(`memo`·`card:12`)지만 전사는 key 가 전사 행 id(`44`)이고 문서 id 는 `transcript:44` 라
+ * 따로 받는다 — 화면과 백링크는 `span.doc` 으로 원문을 찾는다(전사 행이 비어 보인 원인, 2026-09-18 e2e).
+ */
+export function spansOf(prefix: 'w' | 't', key: string, text: string, doc: string = key): SourceSpan[] {
+  return splitSentences(text).map((r, n) => ({ id: `${prefix}:${key}:${n}`, doc, start: r.start, end: r.end, order: n }));
 }
 
 /**

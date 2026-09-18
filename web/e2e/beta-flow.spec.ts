@@ -53,8 +53,8 @@ const recordFromList = async (page: Page, name: string, planned: boolean) => {
       .getByRole('button', { name: '닫기', exact: true })
       .click();
   }
+  // 저장 버튼은 카드 제목 줄에 선다(85e76c1 — 구 하단 `.schedule-savebar` 폐지).
   await page
-    .locator('.schedule-savebar')
     .getByRole('button', { name: planned ? '상담 기록하기' : '일정 저장', exact: true })
     .click();
   await expect(page).toHaveURL(/\/record$/);

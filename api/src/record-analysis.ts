@@ -147,7 +147,7 @@ function transcriptDocument(info: TranscriptInfo): { doc: SourceDocument; spans:
     hash: sha256(info.text),
     order: 0,
   };
-  const spans = spansOf('t', String(info.id), info.text);
+  const spans = spansOf('t', String(info.id), info.text, doc.id);
   const segments = info.segments;
   if (segments && segments.length === spans.length) {
     const joined = segments.map((s) => s.text).join('');

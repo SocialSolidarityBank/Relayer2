@@ -1,0 +1,19 @@
+# v6 상담기록 분석 — 브라우저 증거 (2026-09-18)
+
+`web/e2e/record-analysis-v6.spec.ts` 가 만든다. 합성 사례(회차 1: 메모+녹음+승인 전사+승인 분석, 회차 2: 메모만, 회차 3: 메모+녹음·전사 없음)와 stub 응답(`/tmp/relayer-ai-module/stub.json`)으로 찍는다.
+
+재현: `PLAYWRIGHT_BASE_URL=http://localhost:5177 pnpm --dir web exec playwright test e2e/record-analysis-v6.spec.ts --reporter=line`
+
+| 파일 | 증거 |
+| --- | --- |
+| `00-review-draft.png` | 검토 화면 — stub 초안이 요약·구조화 기록·녹음 전사·과제 카드로 서고 `승인` 버튼이 선다 |
+| `01-session-card.png` | 회차 카드 — 내용 있는 구역만 렌더, 하위 번호는 ① 약속 이행 여부 · ② 상담 중 새로 드러난 것(③ 없음, `없음` 자리 채움 없음), `내역서` 키워드 칩 (T06·T12) |
+| `02-structured.png` | 원본 팝업 `구조화` — 주제·단락 제목, 같은 문장 세 번이 서로 다른 `data-span-id`(T24), `</script>` 가 텍스트로만 렌더(T31), 상태 띠가 `--mint`/`--badge-coral`/`--blue` 토큰 색(T25) |
+| `03-panel-discrepancy.png` | 대조 패널 불일치 모드 — `차이점 / 녹음 내용 / 수기 내용 / 연결된 수기 단락` 4항목과 차이 문장 (T26·T32) |
+| `04-panel-link.png` | 대조 패널 연결 모드 — `차이점` 없이 3항목, 패널 내용이 실제로 바뀐다 (T32) |
+| `05-discrepancy-filter.png` | `기록 불일치 모아보기` 켬 — 불일치 행 1개만 + `불일치 1건만 표시` (T33) |
+| `06-backlinks.png` | 키워드 칩 → 백링크 패널 — `1회차 · 1-1` 항목, 클릭 시 구조화에서 span 선택(`aria-current`) (T34) |
+| `07-print.png` | 인쇄 미디어 — 상태 띠 span 이 DOM 에 남고 `print-color-adjust: exact` 가 걸린다 |
+| `08-override.png` | 요약 수정 — `사람이 고침` 배지와 override 문장이 카드에 선다 |
+| `09-stale.png` | 메모 리비전 뒤 — `원본 수정됨, 재정리 필요` 배지 + `AI 정리 다시 하기` 버튼 |
+| `10-mobile.png` | 390×844 — 대조 패널이 두 열 아래로 내린다(단일 열), Escape 닫기 뒤 초점이 연 버튼으로 돌아간다 |
