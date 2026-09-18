@@ -1,4 +1,4 @@
-# 릴레이어 0.2.0
+# 릴레이어 0.2.1
 
 릴레이어는 기관이 자체 운영하는 상담 지원 워크스페이스다. 당사자 정보를 암호화하고,
 동의·열람 기록을 보존하며, 다음 상담 전에 실무자가 짧은 다시보기를 확인하도록 돕는다.
@@ -111,8 +111,8 @@ PostgreSQL 서비스, 자격 증명, 네트워크, 백업 정책, 저장소를 �
 설정을 채운 뒤 다음 명령을 실행한다.
 
 ```bash
-docker build -t relayer:0.2.0 .
-docker run --env-file /secure/path/relayer.env -p 8787:8787 relayer:0.2.0
+docker build -t relayer:0.2.1 .
+docker run --env-file /secure/path/relayer.env -p 8787:8787 relayer:0.2.1
 ```
 
 `/secure/path/relayer.env`는 컨테이너에서 접근 가능한 `DATABASE_URL`을 담은 기관 관리
