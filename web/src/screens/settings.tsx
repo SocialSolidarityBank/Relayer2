@@ -14,6 +14,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { encode as encodeQr } from 'uqr';
 import {
+  appUrl,
   ASSIGN_PAGE_SIZE,
   addProgram,
   createInvite,
@@ -894,7 +895,7 @@ export function InvitePane() {
     setErr(null);
     try {
       const { token } = await createInvite(role, note.trim() || null);
-      setLink(`${window.location.origin}${window.location.pathname}#/invite/${token}`);
+      setLink(appUrl(`/invite/${token}`));
       setNote('');
       sent.setData(await listInvites());
     } catch (e) {

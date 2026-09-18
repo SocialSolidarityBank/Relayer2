@@ -254,3 +254,22 @@ test('실제 v4 동의 문안 저장 전에 재동의 경고를 유지한다', a
   await expect(warning).toContainText('모든 당사자의 이 항목 동의가 `확인 필요` 로 변경');
   await expect(warning).toContainText('이메일 등 정해진 방식으로 고지 후 재동의 필요');
 });
+
+// 배포에서 앱은 /app 아래고 / 는 공개 랜딩이다. 당사자 열람 링크가 origin 만 달고 나가면
+// 랜딩으로 떨어진다(2026-09-18 실측). Vite 하네스는 /가 앱이라 이 버그를 못 잡는다 — 여기 실제 서버로 본다.
+test('당사자 열람 링크는 /app 경로를 달고 나가고 로그인 없이 열린다', async ({ page, browser }) => {
+  await login(page, 'test2');
+  await page.goto(`${base}/app#/participants/new`);
+  await page.locator('#name').fill('링크 경로 검증');
+  await page.getByLabel('개인정보 수집·이용').check();
+  await page.getByRole('button', { name: '동의 요청 링크 만들기' }).click();
+
+  const card = page.locator('section.wire-card').filter({ has: page.getByRole('heading', { name: '개인정보 및 민감정보 처리 동의 링크' }) });
+  const link = (await card.locator('.wire-data-row', { hasText: '링크' }).locator('dd').innerText()).trim();
+  expect(link.startsWith(`${base}/app#/access/`)).toBe(true);
+
+  const guest = await (await browser.newContext()).newPage();
+  await guest.goto(link);
+  await expect(guest.getByRole('heading', { name: '내 상담 일정' })).toBeVisible();
+  await guest.context().close();
+});
