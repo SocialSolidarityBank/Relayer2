@@ -5,10 +5,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { getCaseDetail, listParticipants, type ParticipantRow } from '../api.ts';
 import { Button, Card, Chevron, Empty, Meta, PageHeader, Select } from '../ui.tsx';
 import './participants.css';
+import { dateTimeLabel } from '../date-time.ts';
 
-const scheduleDate = new Intl.DateTimeFormat('ko-KR', {
-  month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
-});
+// 날짜·일시 표기는 `date-time.ts` 한 곳이다(2026-09-18 Q — `2026.09.21.(월) AM 10:26`).
 const displayName = (row: ParticipantRow) => (row.can_access && row.name) || row.pseudonym;
 const workersOf = (row: ParticipantRow) => row.assignees.map((a) => a.name);
 
@@ -208,7 +207,7 @@ export function ParticipantsScreen({
                 ? `${row.program_name} ${row.last_session_seq}회차`
                 : row.program_name,
               row.can_access && row.next_scheduled_at
-                ? `다음 상담 ${scheduleDate.format(new Date(row.next_scheduled_at))}`
+                ? `다음 상담 ${dateTimeLabel(row.next_scheduled_at)}`
                 : null,
             ];
             const reach = contact === 'loading'

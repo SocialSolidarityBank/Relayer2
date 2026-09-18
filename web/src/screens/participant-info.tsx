@@ -2,7 +2,7 @@
 // (2026-09-18 Q): 당사자 정보 · 회차별 요약 · 회차별 원본 보기 · 목표.
 // 원본은 큰 팝업 두 열(수기 · 녹음 전사)로 열린다(2026-09-18 Q E2 — 드로어 폐지).
 // 15초 다시보기는 폐지했다(2026-09-17 Q) — 화면·탭·버튼 어디에도 두지 않는다.
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   documentHref,
   getAccess,
@@ -26,7 +26,6 @@ import {
   type DocumentRow,
 } from '../api.ts';
 import {
-  Badge,
   Button,
   Card,
   Choice,
@@ -40,21 +39,19 @@ import {
   FormActions,
   Item,
   Meta,
+  PageHeader,
   ParticipantHero,
   Chevron,
 } from '../ui.tsx';
 import { ConsentLinkCard } from '../consent-link.tsx';
 import { SessionOriginalDialog, type OriginalPart } from '../session-original.tsx';
 import { Dialog } from '../dialog.tsx';
+import { dateLabel, timeLabel } from '../date-time.ts';
 
 const TABS = ['당사자 정보', '회차별 요약', '회차별 원본 보기', '목표'] as const;
 type Tab = (typeof TABS)[number];
 
-const dateLabel = (iso: string | null): string => {
-  if (!iso) return '날짜 없음';
-  const d = new Date(iso);
-  return `${d.getFullYear()}. ${d.getMonth() + 1}. ${d.getDate()}.`;
-};
+// 날짜 표기는 `date-time.ts` 의 `dateLabel` 하나다(2026-09-18 Q — `2026.09.18.(금)`).
 
 /** 회차별 요약 — 회차 목록과 원문. 상담 종결은 회차가 아니므로 번호 없이 따로 붙는다(SPEC §4-3). */
 const TRANSCRIPT_LABEL: Record<string, string> = {
@@ -86,6 +83,37 @@ const Lines = ({ text }: { text: string }) => {
     <p className="seq-text">{text}</p>
   );
 };
+
+/** 요약 안 구역의 계열색. §6 라벨 색 그대로다 — 채운 배지 면은 2026-09-18 에 걷었다. */
+type SeqTone = 'ai' | 'change' | 'warn' | 'state' | 'risk' | 'done';
+
+/**
+ * 요약 안 구역 하나 — **작은 아코디언**이다(2026-09-18 Q). 제목은 14px 컬러 텍스트이고
+ * 기본은 펼친 상태다: 접어 두면 무엇이 있는지 모른 채 넘어간다. `wide` 는 한 줄을 다 쓴다.
+ */
+function SeqSection({
+  title,
+  tone,
+  wide = false,
+  children,
+}: {
+  title: string;
+  tone: SeqTone;
+  wide?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <details className={wide ? 'seq-section is-wide' : 'seq-section'} open>
+      <summary className="seq-section-title" data-tone={tone}>
+        <span>{title}</span>
+        <span className="seq-section-chevron" aria-hidden="true">
+          <Chevron dir="down" />
+        </span>
+      </summary>
+      <div className="seq-section-body">{children}</div>
+    </details>
+  );
+}
 
 /**
  * 회차별 요약 — **한 회차가 한 접힘 카드**다(2026-09-17 Q). 상단 `위험 신호` 배너는 걷었다:
@@ -201,50 +229,48 @@ function Sessions({
                   <span className="seq-head-no">{s.seq}회차</span>
                   <span className="seq-head-meta">{dateLabel(s.held_at)}</span>
                   {s.kind === 'intake' && <span className="seq-head-meta">인테이크</span>}
-                  {s.ai_summary && <Badge tone="blue">AI</Badge>}
-                  {risks.length > 0 && <Badge>위험 신호 {risks.length}</Badge>}
-                  {isStale && <Badge tone="coral">원본 수정됨, 재정리 필요</Badge>}
+                  {/* 배지 면을 걷고 14px 컬러 텍스트로 붙인다(2026-09-18 Q) — 채운 면이 줄을 밀었다. */}
+                  {s.ai_summary && <span className="seq-flag" data-tone="ai">AI</span>}
+                  {risks.length > 0 && <span className="seq-flag" data-tone="risk">위험 신호 {risks.length}</span>}
+                  {isStale && <span className="seq-flag" data-tone="warn">원본 수정됨, 재정리 필요</span>}
                 </>
               }
               // 접힌 머리에도 내용 한 줄을 둔다(2026-09-18) — 펼치기 전에 무슨 회차인지 안다.
               // AI 요약이 있으면 그것, 없으면 회차 한 줄(`s.line`)이다.
               desc={summary ?? s.line}
-              action={
-                <>
-                  {/* 이름이 상태를 말한다(2026-09-17 Q): 승인 전에는 검토, 승인 뒤에는 보기,
-                      원본이 바뀐 뒤에는 다시 하기(D3 — 자동 재처리는 없다). */}
-                  <Button
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      window.location.hash = `#/cases/${caseId}/sessions/${s.id}/review`;
-                    }}
-                  >
-                    {isStale ? 'AI 정리 다시 하기' : s.ai_summary ? 'AI 정리 보기' : 'AI 정리 검토'}
-                  </Button>
-                  <Button onClick={openOriginal('written')}>수기 원본 보기</Button>
-                  <Button onClick={openOriginal('voice')}>녹음 전사 기록 보기</Button>
-                  <Button
-                    disabled={summary === null}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setDraft(summary ?? '');
-                      setSaveError(null);
-                      setEditing(s.id);
-                    }}
-                  >
-                    수정
-                  </Button>
-                </>
-              }
             >
+              {/* 행동 넷은 머리에서 **본문 첫 줄**로 내렸다(2026-09-18 Q) — 접힌 줄에 버튼 넷이
+                  서면 390 에서 세 줄로 쏟아졌다. 꺽쇠로 펼친 사람만 본다. */}
+              <div className="seq-actions">
+                {/* 이름이 상태를 말한다(2026-09-17 Q): 승인 전에는 검토, 승인 뒤에는 보기,
+                    원본이 바뀐 뒤에는 다시 하기(D3 — 자동 재처리는 없다). */}
+                <Button
+                  onClick={() => {
+                    window.location.hash = `#/cases/${caseId}/sessions/${s.id}/review`;
+                  }}
+                >
+                  {isStale ? 'AI 정리 다시 하기' : s.ai_summary ? 'AI 정리 보기' : 'AI 정리 검토'}
+                </Button>
+                <Button onClick={openOriginal('written')}>수기 원본 보기</Button>
+                <Button onClick={openOriginal('voice')}>녹음 전사 기록 보기</Button>
+                <Button
+                  disabled={summary === null}
+                  onClick={() => {
+                    setDraft(summary ?? '');
+                    setSaveError(null);
+                    setEditing(s.id);
+                  }}
+                >
+                  수정
+                </Button>
+              </div>
               {/* 팀 목업 넷(2026-09-18 검토)이 공통으로 쓰는 **네 구역**이다: 핵심 · 변화 ·
-                  확인필요 · 완료·해결. 1440에서는 2×2, 767 이하는 한 열로 내려온다.
-                  구역 제목은 배지다(F2 — 정해진 배경 + 어두운 글씨: AI 산출=라벤더, 변화=민트,
-                  확인필요=코랄, 시간·상태=블루). */}
+                  확인필요 · 완료·해결. 폭이 되면 2열, 좁아지면 한 열이다.
+                  구역 제목은 **배지 면이 아니라 14px 컬러 텍스트**이고 구역마다 작은
+                  아코디언이다(2026-09-18 Q — 채운 배지가 줄을 밀고 구분이 약했다). */}
               <div className="seq-sections" data-cols="2">
                 {risks.length > 0 && (
-                  <section className="seq-section is-wide">
-                    <h3 className="seq-section-title is-risk">위험 신호</h3>
+                  <SeqSection title="위험 신호" tone="risk" wide>
                     <ul className="seq-list">
                       {risks.map((r) => (
                         <li key={r.card_id}>
@@ -256,10 +282,9 @@ function Sessions({
                     <p className="seq-section-note">
                       {risk ? (AI_OFF_LABEL[risk.status.reason ?? 'ai_disabled'] ?? risk.status.state) : '확인 중'}
                     </p>
-                  </section>
+                  </SeqSection>
                 )}
-                <section className="seq-section">
-                  <h3 className="seq-section-title is-ai">이번 상담의 핵심</h3>
+                <SeqSection title="이번 상담의 핵심" tone="ai">
                   {editing === s.id ? (
                     <>
                       <div className="wire-input-box" data-control="textarea">
@@ -293,9 +318,8 @@ function Sessions({
                   ) : (
                     <p className="seq-section-note">AI 정리 없음</p>
                   )}
-                </section>
-                <section className="seq-section">
-                  <h3 className="seq-section-title is-change">확인된 변화</h3>
+                </SeqSection>
+                <SeqSection title="확인된 변화" tone="change">
                   {isStale && <p className="seq-section-note">원본 수정됨, 재정리 필요</p>}
                   {s.ai_summary && s.ai_summary.changes.length > 0 && (
                     <ul className="seq-list">
@@ -311,9 +335,8 @@ function Sessions({
                     s.ai_summary.changes.length === 0 && <p className="seq-section-note">달라진 사실 없음</p>
                   )}
                   {!s.ai_summary && <p className="seq-section-note">AI 정리 없음</p>}
-                </section>
-                <section className="seq-section">
-                  <h3 className="seq-section-title is-warn">확인필요</h3>
+                </SeqSection>
+                <SeqSection title="확인필요" tone="warn">
                   {pending.length === 0 ? (
                     <p className="seq-section-note">확인할 것 없음</p>
                   ) : (
@@ -328,9 +351,8 @@ function Sessions({
                       ))}
                     </ul>
                   )}
-                </section>
-                <section className="seq-section">
-                  <h3 className="seq-section-title">완료·해결</h3>
+                </SeqSection>
+                <SeqSection title="완료·해결" tone="done">
                   {settled.length === 0 ? (
                     <p className="seq-section-note">완료된 것 없음</p>
                   ) : (
@@ -340,12 +362,11 @@ function Sessions({
                       ))}
                     </ul>
                   )}
-                </section>
+                </SeqSection>
                 {state.some(Boolean) && (
-                  <section className="seq-section is-wide">
-                    <h3 className="seq-section-title is-state">기록 상태</h3>
+                  <SeqSection title="기록 상태" tone="state" wide>
                     <p className="seq-text"><Meta parts={state} /></p>
-                  </section>
+                  </SeqSection>
                 )}
               </div>
             </Fold>
@@ -768,11 +789,7 @@ const SEQ_TRANSCRIPT: Record<string, string> = {
   skipped: '건너뜀',
 };
 
-/** 일시는 날짜와 시:분이다(E4). */
-const timeLabel = (iso: string): string => {
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-};
+// 일시는 날짜와 시각 두 칸이다(E4). 두 표기 모두 `date-time.ts` 것이다.
 
 
 function SessionStatus({ detail }: { detail: CaseDetail }) {
@@ -1011,24 +1028,27 @@ export function ParticipantInfoScreen({ caseId, initialTab = '당사자 정보' 
 
   return (
     <>
-      {/* 여기가 이 사람의 카드다(CCC D38). 화면 용도는 아래 탭이 말하고, 머리는 사람을 말한다. */}
+      {/* 페이지 제목은 HERO 바로 위 `h1` 이다(2026-09-18 Q). 머리 카드는 사람을 말하고
+          화면 이름은 이 줄이 말한다. */}
+      <PageHeader title="당사자 카드" />
+      {/* 여기가 이 사람의 카드다(CCC D38). 화면 용도는 아래 탭이 말한다. */}
       <ParticipantHero
         name={detail.participant.name}
         pseudonym={detail.pseudonym}
         details={heroDetails}
         actions={
           <>
-            {/* 행동 셋: 기록(일정 예약을 거쳐 기록으로 — D1, 당사자 목록 카드와 같은 `then=record`),
-                이 사람의 일정 등록, 일정 보기. 종결은 아래 `상담 종결` 카드 것이다. */}
+            {/* 행동은 둘이다(2026-09-18 Q — `상담 일정 보기` 는 걷었다. 일정 묶음 메뉴가 그 자리다).
+                왼쪽이 일정 등록, 오른쪽 끝이 기록하기(주 행동)다. 종결은 아래 `상담 종결` 카드 것이다. */}
+            <Button onClick={() => (window.location.hash = `#/cases/${caseId}/schedule`)}>상담 일정 등록</Button>
             <Button variant="primary" onClick={() => (window.location.hash = `#/cases/${caseId}/schedule?then=record`)}>
               상담 기록하기
             </Button>
-            <Button onClick={() => (window.location.hash = `#/cases/${caseId}/schedule`)}>상담 일정 등록</Button>
-            <Button onClick={() => (window.location.hash = `#/schedule?case=${caseId}`)}>상담 일정 보기</Button>
           </>
         }
       />
-      <div className="wire-container">
+      {/* 탭·본문의 열 수는 창 폭이 아니라 **이 열의 폭**이 정한다(2026-09-18 Q 7). */}
+      <div className="wire-container info-screen">
         {/* 탭은 카드 아래에서 이 사람의 화면을 가른다(2026-09-17 Q 최종 4탭). */}
         <div className="info-tabs" role="tablist">
           {TABS.map((t) => (

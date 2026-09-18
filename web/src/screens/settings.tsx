@@ -59,6 +59,7 @@ import {
   type Worker,
   type WorkerCaseRow,
 } from '../api.ts';
+import { dateLabel, dateTimeLabel } from '../date-time.ts';
 import {
   Badge,
   Button,
@@ -84,7 +85,7 @@ import { Dialog } from '../dialog.tsx';
 import { AUDIT_DAYS, AUDIT_KIND_TABS, AuditScreen } from './audit.tsx';
 import { CONNECTION_GUIDES } from '../../../site/connection-guide.js';
 
-const date = (s: string) => new Date(s).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
+// 날짜·일시 표기는 `date-time.ts` 한 곳이다(2026-09-18 Q).
 
 /** 주소 뒤 `?program=<id>` — 사업 목록에서 걸개가 걸린 채 건너온 것이다. 없으면 null. */
 const programFromHash = (): number | null => {
@@ -591,7 +592,7 @@ function AssignPane({ me }: { me: { id: number } }) {
     <div className="wire-repeat-card" key={r.id}>
       <Item
         title={<Meta parts={[r.pseudonym, r.program_name]} />}
-        desc={`${r.requester}, ${date(r.created_at)}${r.reason ? `, ${r.reason}` : ''}`}
+        desc={`${r.requester}, ${dateLabel(r.created_at)}${r.reason ? `, ${r.reason}` : ''}`}
         action={action}
       />
     </div>
@@ -970,7 +971,7 @@ export function InvitePane() {
               <div className="wire-repeat-card" key={v.id}>
                 <Item
                   title={`${v.role === 'admin' ? '관리자' : '실무자'}${v.note ? `, ${v.note}` : ''}`}
-                  desc={`${date(v.created_at)} 만듦, ${date(v.expires_at)}까지, ${state}`}
+                  desc={`${dateLabel(v.created_at)} 만듦, ${dateLabel(v.expires_at)}까지, ${state}`}
                   action={
                     state === '기다리는 중' ? (
                       <Button onClick={() => void revoke(v.id)}>취소하기</Button>
@@ -1091,8 +1092,7 @@ function AssigneeDialog({ worker, onClose }: { worker: Worker; onClose: () => vo
       .then(setRows)
       .catch((e) => setError(e instanceof Error ? e.message : '불러오기 실패'));
   }, [worker.id]);
-  const when = (iso: string) =>
-    new Date(iso).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  // 일시 표기는 `date-time.ts` 의 `dateTimeLabel` 하나다.
   return (
     <dialog ref={dialog} className="assignee-dialog" aria-labelledby="assignee-title" onClose={onClose}>
       <h2 id="assignee-title">{worker.name} 담당 중인 당사자</h2>
@@ -1119,7 +1119,7 @@ function AssigneeDialog({ worker, onClose }: { worker: Worker; onClose: () => vo
                   <td>{c.name ?? ''}</td>
                   <td>{c.program}</td>
                   <td>{c.seq ? `${c.seq}회차` : '기록 없음'}</td>
-                  <td>{c.next_at ? when(c.next_at) : ''}</td>
+                  <td>{c.next_at ? dateTimeLabel(c.next_at) : ''}</td>
                 </tr>
               ))}
             </tbody>
@@ -1918,7 +1918,7 @@ export function ConnectionsPane() {
           <DataRows
             rows={[
               ['연결 상태', c.db.connected ? '연결됨' : '연결 안 됨'],
-              ['마지막 확인', new Date(c.db.checked_at).toLocaleString('ko-KR')],
+              ['마지막 확인', dateTimeLabel(c.db.checked_at)],
             ]}
           />
         </Fold>
@@ -1946,7 +1946,7 @@ function RequestPane({ me }: { me: { id: number } }) {
           <div className="wire-repeat-card" key={r.id}>
             <Item
               title={<Meta parts={[r.pseudonym, r.program_name]} />}
-              desc={`${date(r.created_at)} 올림${r.reason ? `, ${r.reason}` : ''}`}
+              desc={`${dateLabel(r.created_at)} 올림${r.reason ? `, ${r.reason}` : ''}`}
               action={
                 r.decided_at ? (
                   <Badge tone={r.decision === 'approved' ? 'mint' : undefined}>

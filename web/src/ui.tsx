@@ -33,24 +33,18 @@ export function Chevron({ dir = 'down' }: { dir?: 'up' | 'down' | 'left' | 'righ
  * **돌아갈 곳이 없으면 아예 그리지 않는다.** 없는 출구를 그려 두면 눌러도 아무 일이
  * 일어나지 않아 화면이 고장난 것처럼 보인다.
  */
-export function BackLink({ title }: { title?: string }) {
+export function BackLink() {
   const [canGoBack, setCanGoBack] = useState(false);
   useEffect(() => {
     setCanGoBack(window.history.length > 1);
   }, []);
-  // HERO 위에 큰 제목이 없는 화면은 이 줄 오른쪽에 페이지 이름(page-eyebrow)을 세운다(2026-09-18 Q).
-  if (!canGoBack && !title) return null;
+  if (!canGoBack) return null;
   return (
     <div className="page-backbar">
-      {canGoBack ? (
-        <button type="button" className="page-back" onClick={() => window.history.back()}>
-          <Chevron dir="left" />
-          <span>뒤로</span>
-        </button>
-      ) : (
-        <span className="page-back-spacer" aria-hidden="true" />
-      )}
-      {title && <span className="page-eyebrow">{title}</span>}
+      <button type="button" className="page-back" onClick={() => window.history.back()}>
+        <Chevron dir="left" />
+        <span>뒤로</span>
+      </button>
     </div>
   );
 }
@@ -213,39 +207,58 @@ export function ParticipantHero({
   actions?: ReactNode;
 }) {
   const shown = details.filter(([, value]) => value !== null && value !== undefined && value !== '');
+  /**
+   * 모바일 판정은 JS 가 한다 — `<details open>` 은 CSS 로 바꿀 수 없는 속성이다.
+   * 크기·간격·열 수는 그대로 CSS(미디어·컨테이너 쿼리)가 맡는다.
+   */
+  const [wide, setWide] = useState(() => window.matchMedia('(min-width: 768px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)');
+    const sync = () => setWide(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
   return (
     <header className="page-header surface-card participant-hero-card">
       <div className="participant-hero-top">
-        <h1 className="participant-hero-title">
+        {/* 사람 이름은 `h2` 다 — 화면의 `h1` 은 HERO 위 페이지 제목이 갖는다(2026-09-18 Q,
+            구 눈썹 텍스트 대체). 크기·굵기는 `.participant-name-group[data-size=hero]` 가 정한다. */}
+        <h2 className="participant-hero-title">
           <span className="participant-name-group" data-size="hero">
             <span className={name ? 'participant-name' : 'participant-name participant-card-name is-empty'}>
               {name ?? pseudonym}
             </span>
           </span>
-        </h1>
+        </h2>
         {actions && <div className="page-actions">{actions}</div>}
       </div>
       {shown.length > 0 && (
         <>
           <hr className="participant-hero-divider" />
-          <div className="participant-hero-info">
-            <div className="participant-hero-details">
-              {shown.map(([label, value]) => (
-                <div
-                  className="wire-field-row"
-                  data-layout="stack"
-                  data-size="sm"
-                  data-truncate="true"
-                  key={label}
-                >
-                  <span className="wire-field-label">{label}</span>
-                  <span className="wire-field-value" title={typeof value === 'string' ? value : undefined}>
-                    {value}
-                  </span>
-                </div>
-              ))}
+          {/* 모바일에서는 정보 격자가 **기본 접힘**이다(2026-09-18 Q 9) — 390 에서 이름·행동·
+              네 줄이 화면 절반을 먹어 본문이 한참 아래로 밀렸다. 768 이상에서는 늘 펼쳐 있고
+              여는 줄은 숨는다(CSS). `open` 을 CSS 로 못 바꾸므로 폭 판정은 JS 가 한다. */}
+          <details className="participant-hero-fold" open={wide}>
+            <summary className="participant-hero-more">
+              <span>당사자 정보</span>
+              <span className="participant-hero-chevron" aria-hidden="true">
+                <Chevron dir="down" />
+              </span>
+            </summary>
+            <div className="participant-hero-info">
+              <div className="participant-hero-details">
+                {shown.map(([label, value]) => (
+                  /* 말줄임을 걷었다(2026-09-18 Q 11) — `참여 사업` 이 `2회차까지 …` 로 잘렸다.
+                     값은 줄바꿈해서 다 보인다. */
+                  <div className="wire-field-row" data-layout="stack" data-size="sm" key={label}>
+                    <span className="wire-field-label">{label}</span>
+                    <span className="wire-field-value">{value}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          </details>
         </>
       )}
     </header>
