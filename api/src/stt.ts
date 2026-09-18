@@ -21,6 +21,7 @@ import { audit } from './audit.ts';
 import {
   CONSENT_COPY,
   RETENTION_DAYS,
+  speechKey,
   sttEnabled,
   STT_PROVIDERS,
   voiceEnabled,
@@ -126,15 +127,16 @@ export type Transcript = {
 };
 
 /** 음성 기능이 지금 어디까지 되는가. 키 같은 비밀은 담지 않는다 — 로그인만 하면 볼 수 있다. */
-export function speechStatus(): {
+export async function speechStatus(): Promise<{
   enabled: boolean;
   transcription_ready: boolean;
   max_bytes: number;
   formats: string[];
-} {
+}> {
+  const [enabled, transcriptionReady] = await Promise.all([voiceEnabled(), sttEnabled()]);
   return {
-    enabled: voiceEnabled(),
-    transcription_ready: sttEnabled(),
+    enabled,
+    transcription_ready: transcriptionReady,
     max_bytes: SPEECH_MAX_BYTES,
     formats: [...SPEECH_FORMATS],
   };
@@ -328,32 +330,10 @@ const AzureResultSchema = z.object({
 async function transcribeAudio(
   audio: Uint8Array,
   format: SpeechFormat,
+  key: string,
 ): Promise<{ text: string; segments: TranscriptSegment[] }> {
-  const key = process.env.AZURE_SPEECH_KEY?.trim();
-  const configuredEndpoint = process.env.AZURE_SPEECH_ENDPOINT?.trim();
-  const region = process.env.AZURE_SPEECH_REGION?.trim();
-  if (!key || (!configuredEndpoint && !region)) {
-    throw new SttUnavailable('전사 불가, 전사 제공자 설정 없음');
-  }
-
-  // 정본 제공자는 azure 다. 엔드포인트는 환경이 주면 그것을, 아니면 문서의 지역 엔드포인트를 쓴다.
-  // 구독 키가 평문으로 나가지 않도록 HTTPS 아닌 주소는 요청 전에 막는다.
-  if (!configuredEndpoint && !/^[a-z0-9-]+$/.test(region ?? '')) {
-    throw new SttUnavailable('전사 제공자 지역 설정 오류');
-  }
-  let url: string;
-  try {
-    const endpoint = new URL(
-      configuredEndpoint || `https://${region}.api.cognitive.microsoft.com`,
-    );
-    if (endpoint.protocol !== 'https:' || endpoint.username || endpoint.password) throw new Error();
-    endpoint.pathname = `${endpoint.pathname.replace(/\/+$/, '')}/speechtotext/transcriptions:transcribe`;
-    endpoint.search = 'api-version=2025-10-15';
-    endpoint.hash = '';
-    url = endpoint.toString();
-  } catch {
-    throw new SttUnavailable('전사 제공자 주소 설정 오류');
-  }
+  const url =
+    'https://koreacentral.api.cognitive.microsoft.com/speechtotext/transcriptions:transcribe?api-version=2025-10-15';
   const blobBytes =
     audio.buffer instanceof ArrayBuffer
       ? new Uint8Array(audio.buffer, audio.byteOffset, audio.byteLength)
@@ -483,9 +463,9 @@ export async function failStaleTranscriptions(): Promise<number> {
  * 동의가 없으면 skipped, 권한·존재 문제는 상태를 건드리지 않는다(그 녹음의 일이 아니다).
  */
 export async function draftTranscript(recordingId: number, actorId: number): Promise<Transcript> {
-  if (!(await voiceEnabled())) throw new SttUnavailable('전사 기능 꺼짐');
-  if (!(await sttEnabled())) throw new SttUnavailable('전사 불가, 전사 제공자 설정 없음');
   try {
+    if (!(await voiceEnabled())) throw new SttUnavailable('전사 기능 꺼짐');
+    if (!(await sttEnabled())) throw new SttUnavailable('전사 불가, 전사 제공자 설정 없음');
     const out = await transcribeRecording(recordingId, actorId);
     await setTranscribeState(recordingId, 'done', null);
     return out;
@@ -523,7 +503,10 @@ async function transcribeRecording(recordingId: number, actorId: number): Promis
   await assertCaseAccess(session.case_id, actorId);
   await assertConsent(session.case_id, 'external_stt_processing');
 
-  const { text: raw, segments } = await transcribeAudio(audio, format);
+  const credential = await speechKey();
+  if (!credential) throw new SttUnavailable('전사 불가, 전사 제공자 설정 없음');
+
+  const { text: raw, segments } = await transcribeAudio(audio, format, credential.key);
   // 긴 외부 호출 사이 배정이 빠졌다면 결과를 저장하지 않는다.
   await assertCaseAccess(session.case_id, actorId);
 
