@@ -47,9 +47,10 @@ const recordFromList = async (page: Page, name: string, planned: boolean) => {
     .click();
   await expect(page).toHaveURL(/\/schedule\?then=record$/);
   if (!planned) {
+    // 작은 안내 팝업(C5) — 닫기가 확인이다. 값은 이미 지금 일시로 채워져 있다.
     await page
       .getByRole('dialog', { name: '일시 확인 필요' })
-      .getByRole('button', { name: '확인', exact: true })
+      .getByRole('button', { name: '닫기', exact: true })
       .click();
   }
   await page

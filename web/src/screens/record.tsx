@@ -37,6 +37,7 @@ import { dateTimeFromIso, dateTimeToIso } from '../date-time.ts';
 import { DateTimeInput } from '../date-time-input.tsx';
 import { RecordingPanel, SessionAudio } from './session-audio.tsx';
 import { TaskOwnerToggle } from '../task-owner.tsx';
+import { Dialog } from '../dialog.tsx';
 import { OWNER_LABEL } from '../api.ts';
 
 /** 지금 시각을 한국 시간의 날짜·시·분으로 표시하는 상담 일시 초깃값. */
@@ -97,6 +98,12 @@ export function RecordScreen({
   const [editing, setEditing] = useState<SessionRecord | null>(null);
   const [saving, setSaving] = useState(false);
   /**
+   * 녹음만 있고 수기가 없는 **미작성 회차**(2026-09-18 Q D12). 들어올 때 `이어 쓰기 / 새 회차`를
+   * 묻고, 이어 쓰기면 그 회차를 열고 새 회차면 지금처럼 간다. 답하기 전에는 `choice` 가 null 이다.
+   */
+  const [resume, setResume] = useState<CaseDetail['sessions'][number] | null>(null);
+  const [choice, setChoice] = useState<'continue' | 'new' | null>(null);
+  /**
    * 시작이 곧 회차(2026-09-16 인계). 수기 첫 입력이든 녹음 시작이든 그 순간 회차가 생긴다.
    * `startedId` 는 sessions/start 로 열린(기록됨) 회차다. 예정 회차를 열어 시작했으면 그 id.
    * ref 에도 둔다 — setState 가 반영되기 전 같은 틱의 두 번째 부르기가 회차를 또 만들면 안 된다.
@@ -127,6 +134,7 @@ export function RecordScreen({
 
       if (rec) {
         setEditing(rec);
+        setResume(null);
         setMemo(rec.memo ?? '');
         setPlace(rec.place ?? '');
         setDuration(rec.duration_min == null ? '' : String(rec.duration_min));
@@ -175,6 +183,13 @@ export function RecordScreen({
       setIsClosing(startClosing || (planned?.is_closing ?? false));
       setMethod((planned?.method as NewSessionInput['method']) ?? 'in_person');
       setHeldAt(planned?.scheduled_at ? dateTimeFromIso(planned.scheduled_at) : nowDateTime());
+      // 녹음만 하고 나간 회차가 있으면 묻는다. 여러 개면 가장 최근 것.
+      setResume(
+        (d?.sessions ?? [])
+          .filter((s) => s.status === 'done' && !s.written && s.voice.recordings > 0)
+          .sort((a, b2) => b2.seq - a.seq)[0] ?? null,
+      );
+      setChoice(null);
     })().catch((failure: unknown) => {
       if (!live) return;
       setBriefing(null);
@@ -223,9 +238,11 @@ export function RecordScreen({
 
   // 예정 회차가 있으면 그것을 기록한다. 없으면 여기서 일시·상담 방식을 적고 회차를 만든다.
   // 일정을 미리 잡지 않고 만난 상담(갑작스러운 방문·전화)이 기록되지 못하면 안 된다.
+  // 미작성 회차를 이어 쓰기로 골랐으면 그 회차가 예정 회차보다 앞선다(D12).
+  const resumed = choice === 'continue' && resume ? view.sessions.find((s) => s.id === resume.id) : undefined;
   const session = editing
     ? { id: editing.session_id, seq: editing.seq, method: editing.method, place: editing.place }
-    : view.sessions.filter((s) => s.status === 'planned').sort((a, b2) => a.seq - b2.seq)[0];
+    : resumed ?? view.sessions.filter((s) => s.status === 'planned').sort((a, b2) => a.seq - b2.seq)[0];
   const seq = session?.seq ?? Math.max(0, ...view.sessions.map((s) => s.seq)) + 1;
   const inPerson = method === 'in_person';
   const heldAtIso = dateTimeToIso(heldAt);
@@ -240,14 +257,14 @@ export function RecordScreen({
   /**
    * 회차 id 를 돌려준다. 없으면 sessions/start 로 만든다 — 수기 첫 입력·녹음 시작·
    * 파일 업로드가 모두 이 한 길을 지난다. 두 번 부르지 않는다(계약).
+   * `session` 이 예정 회차든 이어 쓰는 미작성 회차든 그 id 를 넘긴다 — 서버가 그 회차를 연다.
    */
   const ensureSession = (): Promise<number> => {
     if (editing) return Promise.resolve(editing.session_id);
     if (startedRef.current !== null) return Promise.resolve(startedRef.current);
     if (startingRef.current) return startingRef.current;
-    const planned = view?.sessions.filter((s) => s.status === 'planned').sort((a, b2) => a.seq - b2.seq)[0];
     const p = startSession(caseId, {
-      session_id: planned?.id,
+      session_id: session?.id,
       method,
       is_closing: isClosing,
     }).then((opened) => {
@@ -267,6 +284,18 @@ export function RecordScreen({
     setBriefing(null);
     setView(null);
     setError('담당 배정 해제, 상담 기록 열기 불가');
+  };
+
+  /** 이어 쓰기 — 그 회차의 일시·방식·장소를 칸에 세우고 그 회차로 간다(D12). */
+  const continueSession = () => {
+    if (!resume) return;
+    const v = view.sessions.find((s) => s.id === resume.id);
+    setHeldAt(resume.held_at ? dateTimeFromIso(resume.held_at) : nowDateTime());
+    setMethod((v?.method as NewSessionInput['method']) ?? 'in_person');
+    setPlace(v?.place ?? '');
+    setIsClosing(startClosing || (v?.is_closing ?? false));
+    setDuration(resume.duration_min == null ? '' : String(resume.duration_min));
+    setChoice('continue');
   };
 
   const save = async () => {
@@ -340,6 +369,27 @@ export function RecordScreen({
         onAccessLost={accessLost}
         onTranscriptChange={() => setVoiceStamp((v) => v + 1)}
       />
+      {/* 미작성 회차 선택(D12). 닫기(Escape 포함)는 새 회차다 — 지금까지의 동작 그대로. */}
+      {resume && choice === null && (
+        <Dialog
+          id="resume-session"
+          title="미작성 회차 있음"
+          open
+          onClose={() => setChoice('new')}
+          actions={
+            <>
+              <Button variant="primary" onClick={continueSession}>
+                이어 쓰기
+              </Button>
+              <Button onClick={() => setChoice('new')}>새 회차</Button>
+            </>
+          }
+        >
+          <p className="panel-meta">
+            {resume.seq}회차, 녹음 {resume.voice.recordings}건, 수기 없음
+          </p>
+        </Dialog>
+      )}
 
       <div className="wire-container rail-grid record-grid" data-grid="true">
         <aside className="record-side">

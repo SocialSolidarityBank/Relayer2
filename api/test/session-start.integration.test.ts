@@ -29,11 +29,9 @@ describe.skipIf(!enabled)('session start', () => {
     expect(briefing.status).toBe(200);
     expect((await briefing.json()).last_session_summary.session_seq).toBe(1);
 
-    // 녹음이 붙으면 상태가 따라온다. 다시 시작하면 409 — 이미 회차다.
+    // 녹음이 붙으면 상태가 따라온다.
     const rec = await (await upload(session_id, worker, silentWav())).json();
     expect(rec.session_id).toBe(session_id);
-    const again = await req(`/cases/${case_id}/sessions/start`, worker, 'POST', { session_id });
-    expect(again.status).toBe(409);
     const after = await (await req(`/cases/${case_id}/detail`, worker)).json();
     expect(after.sessions.find((s: { id: number }) => s.id === session_id).voice.recordings).toBe(1);
 
@@ -59,6 +57,27 @@ describe.skipIf(!enabled)('session start', () => {
       scheduled_at: '2026-09-21T01:00:00Z', method: 'phone',
     })).json();
     expect((await req(`/cases/${case_id}/sessions/start`, worker, 'POST', { session_id: foreign.session_id })).status).toBe(404);
+  });
+
+  it('reuses an unwritten session (recording, no memo) on start and refuses once memo is written', async () => {
+    // 녹음만 하고 나간 회차는 `이어 쓰기`로 다시 연다(2026-09-18 Q D12) — 새 회차가 생기지 않는다.
+    const { worker, case_id } = await fixture();
+    const { session_id, seq } = await (await req(`/cases/${case_id}/sessions/start`, worker, 'POST', { method: 'phone' })).json();
+    await upload(session_id, worker, silentWav());
+    const before = await (await req(`/sessions/${session_id}`, worker)).json();
+
+    const again = await req(`/cases/${case_id}/sessions/start`, worker, 'POST', { session_id, method: 'in_person' });
+    expect(again.status).toBe(201);
+    expect(await again.json()).toEqual({ session_id, seq });
+    const reopened = await (await req(`/sessions/${session_id}`, worker)).json();
+    expect(reopened.held_at).toBe(before.held_at); // 처음 시작한 시각 그대로
+    expect(reopened.method).toBe('in_person');
+    const detail = await (await req(`/cases/${case_id}/detail`, worker)).json();
+    expect(detail.sessions).toHaveLength(1);
+
+    // 수기가 채워지면 기록된 회차다 — 다시 시작하면 409.
+    await req(`/sessions/${session_id}`, worker, 'PATCH', { memo: '연체 3건.' });
+    expect((await req(`/cases/${case_id}/sessions/start`, worker, 'POST', { session_id })).status).toBe(409);
   });
 
   it('keeps memo when a later save omits it and clears it when sent empty', async () => {
