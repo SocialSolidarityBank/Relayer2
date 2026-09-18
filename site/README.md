@@ -82,10 +82,41 @@ cd site && sed -i '' 's|"/#/|"https://앱주소/#/|g' index.html guide-user.html
    docker exec relayer-db psql -U relayer -d postgres -c "drop database relayer_shots"
    ```
 
-## 색과 서체
+## 디자인을 어디서 가져왔나
 
-색과 모서리 값의 정본은 `web/src/styles/tokens.css` 다. `site.css` 는 그중 쓰는 값만 옮긴 사본이다.
-앱 색을 바꾸려면 토큰을 먼저 고치고 이 파일을 맞춘다.
+값의 정본은 앱이다. 이 폴더는 사본이고, 사본을 먼저 고치면 앱과 어긋난다.
 
-서체는 앱과 같은 스택(Pretendard 계열)을 쓴다. Chillax 는 워드마크 `Relayer` 한 곳에만 쓴다.
+| 가져온 것 | 정본 |
+|---|---|
+| 색, 모서리, 간격, 글자 계단, 모션 | `web/src/styles/tokens.css` |
+| 버튼 알약 해부도, 배지, 아웃라인 카드, 호버 흐름 | `web/src/styles/wire.css` |
+| 머리줄 그라데이션 선, 활성 내비 어휘 | `web/src/styles/shell.css` |
+| 값 확정 이력과 근거 | 루트 `DESIGN.md` |
+
+원 출처는 `SocialSolidarityBank/CCC` 의 `design/tokens.css` 이고 릴레이어가 값 그대로 이식했다.
+
+부품은 앱과 같은 실측값을 쓴다.
+
+- 버튼: 알약, 높이 32, 좌우 14, 글자 14/600. 아웃라인은 브랜드 그라데이션 1px,
+  프라이머리는 행동 그라데이션 면 + 잉크 50% 1px. 호버에 그라데이션이 흐르고 누르면 1px 내려간다.
+  첫 화면 한 쌍만 높이 40(앱 입력칸 높이)에 좌우 20 이다.
+- 배지: 알약, 높이 22, 좌우 8, 12/400. 중립은 회색 1px, 민트와 라벤더는 면을 채우고 흰 글자다.
+- 카드: 회색 1px + 흰 면 + 모서리 12. 그림자는 없다. 민트는 사람, 라벤더는 주의, 블루는 시간이다.
+- 활성 표시: 블루 tint 면 + 브랜드 그라데이션 1px + 잉크 글자. 머리줄의 현재 장과 목차가 같이 쓴다.
+- 머리줄 아래 1px 은 3색 축(블루, 민트, 라벤더)이다. 그라데이션을 구조선으로 쓰는 자리는 여기뿐이다.
+
+이 폴더에만 있는 값은 셋이다. 첫 화면 제목 한 단, 첫 화면 리드 18/400, 구획 간격 96(좁은 화면 64).
+이유는 `site.css` 머리말에 있다.
+
+서체는 앱과 같은 스택(Pretendard 계열)을 쓴다. Chillax 는 워드마크 `Relayer` 한 곳에만 쓰고,
 파일은 `fonts/` 에 함께 두므로 바깥 서버를 부르지 않는다.
+
+## 정렬 검사
+
+글이나 부품을 고친 뒤에는 실제 렌더에서 중심 좌표를 재서 확인한다.
+
+```bash
+cd node_modules/.pnpm/@playwright+test@1.63.0/node_modules
+node ~/developer/tools/align-tools/align-check.mjs http://127.0.0.1:8081/index.html \
+  '[{"name":"버튼 라벨 중앙","selectors":[".btn .btn-text",".btn"],"axis":"xy","tolerance":1}]'
+```

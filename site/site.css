@@ -1,17 +1,23 @@
 /* 릴레이어 소개와 가이드 페이지 전용 스타일.
  *
- * 색과 형태 값은 앱 토큰(web/src/styles/tokens.css)에서 가져왔다. 그 파일이 정본이고 이 파일은 사본이다.
- * 앱 색을 바꾸려면 tokens.css 를 고친 뒤 아래 값을 맞춘다. 이 파일만 고치면 앱과 어긋난다.
+ * 값의 정본은 앱이다. 색, 형태, 간격, 글자 계단은 `web/src/styles/tokens.css`,
+ * 부품의 해부도(버튼, 배지, 카드, 활성 어휘)는 `web/src/styles/wire.css` 와 `shell.css` 에서 가져왔다.
+ * 토큰 값을 바꾸려면 tokens.css 를 먼저 고치고 아래를 맞춘다. 이 파일만 고치면 앱과 어긋난다.
+ * 원 출처는 SocialSolidarityBank/CCC 의 design/tokens.css 이며 릴레이어가 값 그대로 이식했다.
  *
- * 앱에 없고 이 페이지에만 있는 값은 세 가지다. 이유를 적어 둔다.
- *   1. 큰 제목 세 단(--d1 ~ --d3): 앱 제목은 28px 이 위다. 소개 페이지 첫 화면은 그보다 커야 한다.
- *   2. 본문 17px: 앱 본문은 16px 이고, 읽기만 하는 페이지라 한 단 올렸다.
- *   3. 화면 사진 모서리 16px: 카드 12px 보다 큰 면이라 같은 값이면 각져 보인다.
- * 모서리 규칙은 셋뿐이다. 버튼과 입력 6px, 카드 12px, 화면 사진 16px.
+ * 앱에 없고 이 페이지에만 있는 값은 셋이다. 그 외에 새 값을 만들지 않는다.
+ *   1. 첫 화면 제목 한 단(--display). 앱 제목은 28 이 위다. 소개 페이지 첫 화면은 그보다 커야 한다.
+ *   2. 첫 화면 리드 18/400. 앱의 18 은 제목(600) 자리라 굵기만 다른 짝을 새로 둔다.
+ *   3. 구획 간격 96(좁은 화면 64). 앱의 --section-gap 32 는 한 화면 안의 구획 간격이고,
+ *      스크롤로 읽는 페이지의 구획 사이는 그보다 넓다. 둘 다 4의 배수 계단 안이다.
+ *
+ * 형태 규칙은 앱과 같이 셋뿐이다.
+ *   알약(--radius-pill) = 버튼과 배지 / 12(--radius-card) = 카드와 화면 사진 / 6(--radius-control) = 내비 항목과 건너뛰기
+ * 그림자는 쓰지 않는다. 앱이 2026-08-05 에 본문 카드 그림자를 폐지하고 아웃라인 카드로 갔다.
  */
 
 /* Chillax 는 워드마크 Relayer 한 곳에만 쓴다. 글과 제목은 앱과 같은 서체 스택이다.
- * 출처: Fontshare(Indian Type Foundry), 무료 상업 사용 허용. 파일은 site/fonts 에 같이 둔다. */
+ * 출처: Fontshare(Indian Type Foundry). 파일은 site/fonts 에 같이 둔다. */
 @font-face {
   font-family: 'Chillax';
   src: url('fonts/Chillax-Semibold.woff2') format('woff2');
@@ -21,46 +27,94 @@
 }
 
 :root {
+  /* ── 중립 ── */
   --canvas: #FAFAF9;
   --panel: #FFFFFF;
-  --muted: #F5F5F4;
   --ink: #3D3445;
   --sub: #534E57;
   --line: #D7D3CE;
+
+  /* ── 파스텔 3계열 ── deep = 글자와 아이콘, tint = 옅은 면 ── */
   --mint-deep: #56CC99;
   --lavender-deep: #7D4E9B;
+  --blue-deep: #486997;
+  --mint-tint: #E4F4EC;
+  --lavender-tint: #F2E7F7;
+  --blue-tint: #E7EEF8;
+
+  /* ── 채운 배지 면 ── 기본 배정 순서는 민트, 라벤더다 ── */
+  --badge-mint: #56CC99;
+  --badge-lavender: #C890F0;
+  --on-badge: #FFFFFF;
+
+  /* ── 그라데이션 ── 이 표 밖에 만들지 않는다 ── */
   --gradient-frame: linear-gradient(90deg, #93C1F5 0%, #8ED9B8 50%, #CBA8E2 100%);
   --gradient-brand: linear-gradient(90deg, #8ED9B8 0%, #CBA8E2 100%);
   --gradient-action: linear-gradient(135deg, #A8E3C6 0%, #D1B3E3 100%);
+  --gradient-hover: linear-gradient(90deg, #E7EEF8 0%, #F2E7F7 100%);
   --on-action: #3D3445;
   --line-on-action: rgba(61, 52, 69, 0.5);
-  --shadow-soft: -2px 2px 8px rgba(86, 204, 153, 0.15), 2px 2px 8px rgba(200, 144, 240, 0.15);
 
+  /* ── 형태 ── */
   --radius-control: 6px;
   --radius-card: 12px;
-  --radius-shot: 16px;
-  --radius-pill: 9999px; /* 상태 표시 하나에만 쓴다. 버튼은 직사각이다 */
+  --radius-pill: 9999px;
+  --control-height: 40px;
+  --pill-height: 32px;
+  --badge-height: 22px;
 
-  --font-sans: 'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif;
-  --font-mark: 'Chillax', var(--font-sans);
-  --d1: clamp(2.25rem, 5vw, 3.5rem);
-  --d2: clamp(1.625rem, 2.8vw, 2.25rem);
-  --d3: 1.25rem;
-  --body: 1.0625rem;
-  --small: 0.9375rem;
+  /* ── 간격 ── 4의 배수와 승인된 하프스텝(2, 6, 10, 14)만 ── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-2-5: 10px;
+  --space-3: 12px;
+  --space-3-5: 14px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --list-indent: 18px;
 
+  /* ── 레이아웃 ── */
+  --header-height: 64px;
   --page-max: 1200px;
   --page-pad-x: 32px;
-  --measure: 38rem;
-  --section-gap: 112px;
+  --page-pad-y: 48px;
+  --grid-min: 420px;
+  --grid-min-dense: 280px;
+  --section-gap: 96px;
+  --measure: 38rem; /* 읽는 글의 폭. 앱은 여러 줄 설명에 72ch 를 쓴다 */
 
+  /* ── 글자 ── */
+  --font-sans: 'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif;
+  --font-mark: 'Chillax', var(--font-sans);
+  --text-2xl: 28px;
+  --text-xl: 24px;
+  --text-lg: 18px;
+  --text-md: 16px;
+  --text-sm: 14px;
+  --text-detail: 13px;
+  --text-badge: 12px;
+  --display: clamp(var(--text-2xl), 4.2vw, 48px); /* 이 페이지 전용 */
+  --leading-tight: 1.25;
+  --leading-snug: 1.35;
+  --leading-body: 1.55;
+  --tracking-base: -0.01em;
+
+  /* ── 모션 ── 시간 2단 + 이징 1종이 전부다 ── */
   --motion-fast: 120ms;
   --motion-base: 200ms;
-  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --motion-flow-period: 1600ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 }
 
 @media (max-width: 767px) {
-  :root { --page-pad-x: 20px; --section-gap: 72px; }
+  :root {
+    --page-pad-x: 16px;
+    --page-pad-y: 32px;
+    --section-gap: 64px;
+  }
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -72,33 +126,44 @@ body {
   background: var(--canvas);
   color: var(--ink);
   font-family: var(--font-sans);
-  font-size: var(--body);
+  font-size: var(--text-md);
   font-weight: 400;
-  line-height: 1.7;
-  letter-spacing: -0.01em;
+  line-height: var(--leading-body);
+  letter-spacing: var(--tracking-base);
   -webkit-font-smoothing: antialiased;
 }
 
 a { color: inherit; }
-
 img { display: block; max-width: 100%; height: auto; }
 
-:focus-visible {
-  outline: 2px solid var(--lavender-deep);
+/* 초점은 앱과 같은 한 규칙이다: 블루 deep 2px, 바깥 2px. */
+a:focus-visible,
+button:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--blue-deep);
   outline-offset: 2px;
 }
 
-/* 건너뛰기 링크. 키보드로 들어온 사람이 머리줄 링크를 세 번 지나지 않게 한다. */
+/* 평시 창(50%)에서 출발해 좌우를 오가고 다시 50% 로. 호버 진입과 이탈에 튐이 없다. */
+@keyframes motion-flow {
+  0% { background-position: 50% 0; }
+  25% { background-position: 100% 0; }
+  75% { background-position: 0% 0; }
+  100% { background-position: 50% 0; }
+}
+
 .skip {
   position: absolute;
   left: -9999px;
-  top: 8px;
-  padding: 8px 14px;
+  top: var(--space-2);
+  padding: var(--space-2) var(--space-3-5);
   background: var(--panel);
+  border: 1px solid var(--line);
   border-radius: var(--radius-control);
   z-index: 40;
 }
-.skip:focus { left: 16px; }
+.skip:focus { left: var(--space-4); }
 
 .wrap {
   width: 100%;
@@ -116,7 +181,8 @@ img { display: block; max-width: 100%; height: auto; }
   background: rgba(250, 250, 249, 0.92);
   backdrop-filter: blur(8px);
 }
-/* 앱 머리줄과 같은 장치다. 3색 축(블루, 민트, 라벤더) 1px 선 하나로 아래를 가른다. */
+/* 앱 머리줄과 같은 장치다. 3색 축(블루, 민트, 라벤더) 1px 선 하나로 아래를 가른다.
+ * 그라데이션을 구조선으로 쓰는 자리는 이 프레임 선 하나뿐이다. */
 .top::after {
   content: '';
   display: block;
@@ -124,21 +190,23 @@ img { display: block; max-width: 100%; height: auto; }
   background: var(--gradient-frame);
 }
 .top-row {
-  height: 64px;
+  height: var(--header-height);
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: var(--space-6);
 }
-/* 홈으로 가는 워드마크. 앱 머리줄의 3색 축(블루, 민트, 라벤더)을 글자에 그대로 입힌다.
+
+/* 홈으로 가는 워드마크. 앱 머리줄의 3색 축을 글자에 그대로 입힌다.
  * base 값(#93C1F5 등)이 아니라 deep 값을 쓴다: base 는 캔버스 위에서 글자로 서지 않는다.
- * 로고타입은 WCAG 1.4.3 의 글자 대비 대상이 아니지만, 가장 옅은 지점(민트 deep)이 가운데로
- * 오게 두어 글자 모양은 양 끝의 진한 값이 잡는다. 그라데이션을 못 그리는 환경에서는
- * color 로 잉크가 남는다. */
+ * 로고타입은 WCAG 1.4.3 의 글자 대비 대상이 아니지만 그 예외에 기대지 않고, 가장 옅은
+ * 지점(민트)을 가운데로 보내 글자 모양은 양 끝의 진한 값이 잡게 둔다.
+ * 그라데이션을 못 그리는 환경에서는 color 로 잉크가 남는다. */
 .mark {
   font-family: var(--font-mark);
   font-weight: 600;
-  font-size: 1.375rem;
+  font-size: var(--text-xl);
   letter-spacing: -0.005em;
+  line-height: normal;
   text-decoration: none;
   margin-right: auto;
   color: var(--ink);
@@ -152,154 +220,242 @@ img { display: block; max-width: 100%; height: auto; }
 @supports not ((background-clip: text) or (-webkit-background-clip: text)) {
   .mark { -webkit-text-fill-color: currentColor; background: none; }
 }
+
 .top-nav {
   display: flex;
   align-items: center;
-  gap: 20px;
-  font-size: var(--small);
+  gap: var(--space-2);
+  font-size: var(--text-sm);
 }
-/* :not(.btn) 가 필요하다. `.top-nav a` 는 `.btn-small` 보다 명시도가 높아, 이걸 빼면 머리줄
+/* 머리줄 링크는 앱 내비 항목과 같은 상자다: 높이 32, 좌우 10, 모서리 6.
+ * :not(.btn) 이 필요하다. `.top-nav a` 는 `.btn` 보다 명시도가 높아, 이걸 빼면 머리줄
  * 로그인 버튼의 좌우 여백이 0 이 되고 글자색까지 보조색으로 덮인다(실측 좌우 1px). */
 .top-nav a:not(.btn) {
-  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--pill-height);
+  padding: 0 var(--space-2-5);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
   color: var(--sub);
-  padding: 6px 0;
+  text-decoration: none;
+  white-space: nowrap;
 }
-.top-nav a:not(.btn):hover { color: var(--ink); }
+@media (hover: hover) {
+  .top-nav a:not(.btn):hover {
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
+    color: var(--ink);
+  }
+}
+/* 지금 보는 장은 앱의 활성 내비와 같은 어휘다: 블루 tint 채움 + 브랜드 그라데이션 1px.
+ * 글자는 --ink 다. tint 면 위의 --blue-deep 은 대비가 모자라 라벨이 흐려진다. */
 .top-nav a[aria-current='page'] {
+  background: linear-gradient(var(--blue-tint), var(--blue-tint)) padding-box,
+    var(--gradient-brand) border-box;
   color: var(--ink);
   font-weight: 600;
-  box-shadow: inset 0 -2px 0 var(--mint-deep);
 }
-/* 좁은 화면에서 머리줄은 한 줄로 남는다. 글자가 두 줄로 접히면 높이가 흔들린다. */
+/* 좁은 화면에서 머리줄은 한 줄로 남는다. 글자가 두 줄로 접히면 높이가 흔들린다.
+ * 페이지 안 앵커(하는 일)는 접고 장 이동과 로그인만 남긴다. */
 @media (max-width: 599px) {
-  .top-row { gap: 12px; }
-  .top-nav { gap: 12px; font-size: 0.8125rem; }
-  .top-nav a { white-space: nowrap; }
+  .top-row { gap: var(--space-3); }
+  .top-nav { gap: var(--space-1); font-size: var(--text-detail); }
+  .top-nav a:not(.btn) { padding: 0 var(--space-2); }
   .top-nav a[data-optional] { display: none; }
-  .mark { font-size: 1.125rem; }
-  .top-nav .btn-small { min-height: 36px; padding: 0 12px; }
+  .mark { font-size: var(--text-lg); }
+}
+/* 320px 에서는 장 이동 링크까지 접고 워드마크와 로그인만 남긴다. 세 링크를 억지로 넣으면
+ * 머리줄이 화면 밖으로 25px 넘친다(실측). 장 이동은 꼬리줄과 소개 페이지가 갖는다. */
+@media (max-width: 359px) {
+  .top-nav a:not(.btn) { display: none; }
 }
 
-/* ───────── 버튼 ───────── */
+/* ───────── 버튼 ───────── wire.css `.wire-button` 해부도 그대로 ─────────
+ * 아웃라인이 있는 버튼은 전부 --gradient-brand 1px, 아웃라인이 없는 버튼은 면으로 선다
+ * (프라이머리 = --gradient-action). 알약이고 높이는 32 하나, 글자는 14/600 이다.
+ * 채움을 바꿀 때는 --button-fill 만 바꾼다. background 를 덮으면 그라데이션 테두리가 사라진다. */
 
 .btn {
+  --button-fill: var(--panel);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 48px;
-  padding: 0 20px;
-  border-radius: var(--radius-control);
+  gap: var(--space-2);
+  min-height: var(--pill-height);
+  padding: 0 var(--space-3-5);
   border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(var(--button-fill), var(--button-fill)) padding-box,
+    var(--gradient-brand) border-box;
+  background-size: 200% auto;
+  background-position: 50% 0;
+  color: var(--ink);
   font: inherit;
-  font-size: var(--small);
+  font-size: var(--text-sm);
   font-weight: 600;
+  line-height: normal;
+  text-align: center;
   text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
-  transition: transform var(--motion-fast) var(--ease);
 }
-.btn:active { transform: translateY(1px); }
-
 .btn-primary {
   background: var(--gradient-action);
+  background-size: 200% auto;
+  background-position: 50% 0;
   border-color: var(--line-on-action);
   color: var(--on-action);
 }
-/* 세컨더리 테두리는 앱과 같은 방식이다. 면은 흰색, 테두리만 브랜드 그라데이션이다. */
-.btn-quiet {
-  background:
-    linear-gradient(var(--panel), var(--panel)) padding-box,
-    var(--gradient-brand) border-box;
+/* 첫 화면 한 쌍만 한 단 크다. 높이는 새 값이 아니라 앱의 --control-height(입력칸 높이)고
+ * 좌우 여백도 계단의 20 이다. 다른 자리의 버튼은 전부 앱과 같은 32 다. */
+.btn-lg {
+  min-height: var(--control-height);
+  padding: 0 var(--space-5);
+}
+
+@media (hover: hover) {
+  .btn:hover { --button-fill: color-mix(in srgb, var(--ink) 6%, var(--panel)); }
+  .btn-primary:hover { background: var(--gradient-action); filter: brightness(0.96); }
+  /* 흐름. 그라데이션을 가진 버튼만 흐른다. 아웃라인 버튼은 아웃라인이, 프라이머리는 채움이 흐른다. */
+  .btn:hover {
+    animation: motion-flow calc(var(--motion-flow-period) * 2) var(--ease-standard) infinite;
+  }
+}
+/* 누름은 transform 만 쓴다. */
+.btn:active { transform: translateY(1px); }
+
+/* ───────── 배지 ───────── wire.css `.wire-badge` 해부도 그대로 ─────────
+ * 높이 22, 좌우 8, 알약, 12/400. 기본은 중립 아웃라인이고 톤을 주면 면을 채운다. */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  height: var(--badge-height);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--text-badge);
+  font-weight: 400;
+  line-height: normal;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+/* 계열 배지. 민트는 사람과 담당, 라벤더는 승인과 권한 자리에 먼저 배정한다. */
+.badge[data-tone='mint'] { background: var(--badge-mint); border-color: var(--badge-mint); color: var(--on-badge); }
+.badge[data-tone='lavender'] { background: var(--badge-lavender); border-color: var(--badge-lavender); color: var(--on-badge); }
+
+/* ───────── 카드 ───────── wire.css `.surface-card` 해부도 그대로 ─────────
+ * 아웃라인 카드다. 회색 --line 1px + --panel 채움 + 모서리 12. 그림자는 없다.
+ * 그라데이션 테두리는 선택과 활성의 어휘이므로 상시로 두르지 않는다. */
+
+.card {
+  padding: var(--space-6);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--panel);
   color: var(--ink);
 }
-.btn-small { min-height: 40px; padding: 0 16px; }
-
-/* ───────── 첫 화면 ───────── */
-
-.hero { padding-top: 88px; }
-.hero-title {
-  margin: 0;
-  font-size: var(--d1);
-  font-weight: 600;
-  line-height: 1.18;
-  letter-spacing: -0.025em;
-}
-.hero-lead {
-  margin: 20px 0 0;
-  max-width: var(--measure);
-  font-size: 1.1875rem;
-  color: var(--sub);
-}
-.hero-actions {
-  margin-top: 32px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-/* 누른 뒤 무엇이 열리는지 버튼 바로 아래에서 말한다. 이 줄이 이 페이지의 본래 목적이다. */
-.hero-note {
-  margin: 16px 0 0;
-  max-width: var(--measure);
-  font-size: var(--small);
-  color: var(--sub);
-}
+/* 콜아웃 톤. 민트는 사람과 소속, 라벤더는 주의와 대기, 블루는 시간과 상태다. */
+.card[data-tone='mint'] { background: var(--mint-tint); }
+.card[data-tone='lavender'] { background: var(--lavender-tint); }
+.card[data-tone='info'] { background: var(--blue-tint); }
 
 /* ───────── 화면 사진 ───────── */
 
 .shot {
   margin: 0;
-  border-radius: var(--radius-shot);
-  background:
-    linear-gradient(var(--panel), var(--panel)) padding-box,
-    var(--gradient-brand) border-box;
-  border: 1px solid transparent;
-  box-shadow: var(--shadow-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--panel);
   overflow: hidden;
 }
-.shot img {
-  width: 100%;
-  border-bottom: 1px solid var(--line);
-}
+.shot img { width: 100%; border-bottom: 1px solid var(--line); }
 .shot figcaption {
-  padding: 12px 16px;
-  font-size: var(--small);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
   color: var(--sub);
 }
-.hero-shot { margin-top: 56px; }
+.hero-shot { margin-top: var(--space-10); }
 
-/* ───────── 구획 ───────── */
+/* ───────── 제목과 구획 ───────── */
 
 .section { margin-top: var(--section-gap); }
 .section-title {
-  margin: 0 0 12px;
-  font-size: var(--d2);
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-2xl);
   font-weight: 600;
-  line-height: 1.25;
-  letter-spacing: -0.02em;
+  line-height: var(--leading-tight);
 }
-/* 상태 표시를 단 제목만 기하 정렬로 바꾼다. vertical-align 은 기준선을 쓰므로 줄상자 가운데와
- * 2.1px 어긋났다(align-check 실측). 제목이 길어지면 표시는 다음 줄로 넘어간다. */
-.section-title:has(.tag) {
+@media (max-width: 767px) {
+  .section-title { font-size: var(--text-xl); }
+}
+/* 상태 표시를 단 제목만 기하 정렬로 바꾼다. vertical-align 은 기준선을 쓰므로 줄상자
+ * 가운데와 2.1px 어긋났다(align-check 실측). 제목이 길어지면 표시는 다음 줄로 넘어간다. */
+.section-title:has(.badge) {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: var(--space-2-5);
 }
-.section-title:has(.tag) .tag { margin-left: 0; vertical-align: baseline; }
 .section-lead {
   margin: 0;
   max-width: var(--measure);
+  color: var(--sub);
+}
+.section-sub {
+  margin: var(--section-gap) 0 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: var(--leading-snug);
+}
+.section-foot {
+  margin: var(--space-6) 0 0;
+  max-width: var(--measure);
+  color: var(--sub);
+}
+
+/* ───────── 첫 화면 ───────── */
+
+/* 첫 화면 위 여백은 앱의 페이지 세로 패딩과 같은 값이다. */
+.hero { padding-top: var(--page-pad-y); }
+.hero-title {
+  margin: 0;
+  font-size: var(--display);
+  font-weight: 600;
+  line-height: var(--leading-tight);
+  letter-spacing: -0.02em;
+}
+.hero-lead {
+  margin: var(--space-5) 0 0;
+  max-width: var(--measure);
+  font-size: var(--text-lg);
+  color: var(--sub);
+}
+.hero-actions {
+  margin-top: var(--space-8);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+/* 누른 뒤 무엇이 열리는지 버튼 바로 아래에서 말한다. 이 줄이 이 페이지의 본래 목적이다. */
+.hero-note {
+  margin: var(--space-4) 0 0;
+  max-width: var(--measure);
+  font-size: var(--text-sm);
   color: var(--sub);
 }
 
 /* ───────── 펼침 목록 ───────── */
 
 .unfold {
-  margin-top: 40px;
+  margin-top: var(--space-10);
   display: grid;
   grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
-  gap: 40px;
+  gap: var(--space-10);
   align-items: start;
 }
 .unfold-list {
@@ -313,25 +469,28 @@ img { display: block; max-width: 100%; height: auto; }
   position: relative;
   width: 100%;
   display: block;
-  padding: 20px 28px 20px 0;
+  padding: var(--space-5) var(--space-8) var(--space-5) 0;
   background: none;
   border: 0;
   font: inherit;
-  font-size: var(--d3);
+  font-size: var(--text-lg);
   font-weight: 600;
+  line-height: var(--leading-snug);
   color: var(--sub);
   text-align: left;
   cursor: pointer;
-  transition: color var(--motion-fast) var(--ease);
+  transition: color var(--motion-fast) var(--ease-standard);
 }
 .unfold-head:hover { color: var(--ink); }
 .unfold-item[data-open='true'] .unfold-head { color: var(--ink); }
-/* 열렸는지 닫혔는지 알리는 표시다. 장식이 아니라 상태다. 자주 묻는 것 목록과 같은 문법을 쓴다. */
+/* 열렸는지 닫혔는지 알리는 표시다. 장식이 아니라 상태다.
+ * 앱은 이 자리에 꺽쇠 글리프를 쓰지만, 그 SVG 를 정적 페이지 세 장에 복제하지 않는다.
+ * 자주 묻는 것 목록과 같은 문법을 쓴다. */
 .unfold-head::after {
   content: '+';
   position: absolute;
   right: 0;
-  top: 20px;
+  top: var(--space-5);
   font-weight: 400;
   color: var(--sub);
 }
@@ -340,17 +499,17 @@ img { display: block; max-width: 100%; height: auto; }
 .unfold-body {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows var(--motion-base) var(--ease);
+  transition: grid-template-rows var(--motion-base) var(--ease-standard);
 }
 .unfold-item[data-open='true'] .unfold-body { grid-template-rows: 1fr; }
 .unfold-body > div { overflow: hidden; }
 .unfold-body p {
-  margin: 0 0 20px;
+  margin: 0 0 var(--space-5);
   max-width: 30rem;
   color: var(--sub);
 }
-.unfold-body .shot { display: none; margin-bottom: 24px; }
-.unfold-media { position: sticky; top: 96px; }
+.unfold-body .shot { display: none; margin-bottom: var(--space-6); }
+.unfold-media { position: sticky; top: calc(var(--header-height) + var(--space-8)); }
 
 @media (max-width: 899px) {
   .unfold { grid-template-columns: 1fr; gap: 0; }
@@ -358,51 +517,29 @@ img { display: block; max-width: 100%; height: auto; }
   .unfold-body .shot { display: block; }
 }
 
-/* ───────── 상태 표시와 세 갈래 ───────── */
+/* ───────── 세 갈래 ───────── */
 
-/* 아직 만들고 있는 것에 붙인다. 만든 것과 만들 것을 글로만 구분하면 읽는 사람이 놓친다. */
-.tag {
-  display: inline-block;
-  vertical-align: middle;
-  margin-left: 10px;
-  padding: 0 10px;
-  height: 22px;
-  line-height: 20px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
-  font-size: 0.75rem;
-  font-weight: 400;
-  letter-spacing: 0;
-  color: var(--sub);
-}
-
-/* 카드가 아니라 윗선으로 묶는다. 같은 층의 세 갈래라 높이도 테두리도 필요 없다. */
+/* 카드가 아니라 윗선으로 묶는다. 같은 층의 세 갈래라 면도 테두리도 필요 없다.
+ * 선은 회색 --line 이다. 그라데이션은 구조선이 아니라 프레임과 활성 어휘의 몫이다. */
 .trio {
-  margin-top: 40px;
+  margin-top: var(--space-10);
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
-  gap: 32px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--grid-min-dense)), 1fr));
+  gap: var(--space-8);
 }
-.trio > div { border-top: 2px solid var(--mint-deep); padding-top: 16px; }
-.trio h3 { margin: 0 0 8px; font-size: var(--d3); font-weight: 600; }
-.trio p { margin: 0; color: var(--sub); }
-
-.section-sub {
-  margin: 72px 0 0;
-  font-size: var(--d3);
+.trio > div { border-top: 1px solid var(--line); padding-top: var(--space-4); }
+.trio h3 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-lg);
   font-weight: 600;
+  line-height: var(--leading-snug);
 }
-.section-foot {
-  margin: 24px 0 0;
-  max-width: var(--measure);
-  color: var(--sub);
-}
+.trio p { margin: 0; color: var(--sub); }
 
 /* ───────── 순서 ───────── */
 
 .steps {
-  margin: 40px 0 0;
+  margin: var(--space-10) 0 0;
   padding: 0;
   list-style: none;
   counter-reset: step;
@@ -414,16 +551,17 @@ img { display: block; max-width: 100%; height: auto; }
 .steps li {
   counter-increment: step;
   background: var(--canvas);
-  padding: 24px 0;
+  padding: var(--space-6) 0;
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
+  grid-template-columns: var(--space-10) minmax(0, 1fr);
   align-items: baseline;
-  gap: 16px;
+  gap: var(--space-4);
 }
-/* 번호를 쓰는 이유는 순서가 실제로 있기 때문이다. 세 단계를 건너뛰면 다음이 열리지 않는다. */
+/* 번호를 쓰는 이유는 순서가 실제로 있기 때문이다. 세 단계를 건너뛰면 다음이 열리지 않는다.
+ * 민트 deep 글자는 앱의 폼 묶음 제목(legend)이 쓰는 값과 같다. */
 .steps li::before {
   content: counter(step);
-  font-size: var(--d3);
+  font-size: var(--text-lg);
   font-weight: 600;
   color: var(--mint-deep);
 }
@@ -434,24 +572,21 @@ img { display: block; max-width: 100%; height: auto; }
 /* ───────── 문 안내 ───────── */
 
 .doors {
-  margin-top: 40px;
+  margin-top: var(--space-10);
   display: grid;
-  gap: 16px;
+  gap: var(--space-4);
 }
 .door {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-card);
-  padding: 24px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 20px;
+  gap: var(--space-5);
   align-items: center;
 }
 .door h3 {
-  margin: 0 0 6px;
-  font-size: var(--d3);
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-lg);
   font-weight: 600;
+  line-height: var(--leading-snug);
 }
 .door p { margin: 0; color: var(--sub); }
 @media (max-width: 599px) {
@@ -461,125 +596,140 @@ img { display: block; max-width: 100%; height: auto; }
 /* ───────── 가이드 두 장 ───────── */
 
 .guides {
-  margin-top: 40px;
+  margin-top: var(--space-10);
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--grid-min)), 1fr));
+  gap: var(--space-5);
 }
-.guide-card {
-  display: block;
-  padding: 28px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-card);
-  text-decoration: none;
-  transition: box-shadow var(--motion-base) var(--ease);
+.guide-card { display: block; text-decoration: none; }
+.guide-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2-5);
+  margin-bottom: var(--space-2);
 }
-.guide-card:hover { box-shadow: var(--shadow-soft); }
-.guide-card h3 { margin: 0 0 8px; font-size: var(--d3); font-weight: 600; }
-.guide-card p { margin: 0 0 16px; color: var(--sub); }
-.guide-card ul { margin: 0; padding-left: 18px; color: var(--sub); font-size: var(--small); }
+.guide-card h3 {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: var(--leading-snug);
+}
+.guide-card p { margin: 0 0 var(--space-4); color: var(--sub); }
+.guide-card ul {
+  margin: 0;
+  padding-left: var(--list-indent);
+  color: var(--sub);
+  font-size: var(--text-sm);
+}
+/* 클릭해서 들어가는 카드의 호버. 앱과 같은 어휘다: 채움은 tint 쌍, 테두리는 브랜드
+ * 그라데이션이 되어 같은 흐름을 탄다. */
+@media (hover: hover) {
+  a.guide-card:hover {
+    border-color: transparent;
+    background: var(--gradient-hover) padding-box, var(--gradient-brand) border-box;
+    background-size: 200% auto;
+    animation: motion-flow calc(var(--motion-flow-period) * 2) var(--ease-standard) infinite;
+  }
+}
 
 /* ───────── 꼬리줄 ───────── */
 
 .foot {
   margin-top: var(--section-gap);
   border-top: 1px solid var(--line);
-  padding: 40px 0 64px;
-  font-size: var(--small);
+  padding: var(--space-10) 0 var(--space-10);
+  font-size: var(--text-sm);
   color: var(--sub);
 }
-.foot-row { display: flex; flex-wrap: wrap; gap: 24px; align-items: baseline; }
-.foot-row nav { display: flex; flex-wrap: wrap; gap: 16px; margin-left: auto; }
+.foot-row { display: flex; flex-wrap: wrap; gap: var(--space-6); align-items: baseline; }
+.foot-row nav { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-left: auto; }
 .foot p { margin: 0; max-width: var(--measure); }
-.foot-note { margin-top: 16px !important; }
+.foot-note { margin-top: var(--space-4) !important; }
 
 /* ───────── 가이드 본문 ───────── */
 
 .doc {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
-  gap: 56px;
-  padding-top: 56px;
+  gap: var(--space-10);
+  padding-top: var(--page-pad-y);
   align-items: start;
 }
 .doc-toc {
   position: sticky;
-  top: 96px;
-  font-size: var(--small);
+  top: calc(var(--header-height) + var(--space-8));
+  font-size: var(--text-sm);
 }
 .doc-toc p {
-  margin: 0 0 12px;
+  margin: 0 0 var(--space-3);
+  padding-inline: var(--space-2-5);
   font-weight: 600;
+  color: var(--sub);
 }
-.doc-toc ol {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  border-left: 1px solid var(--line);
-}
+.doc-toc ol { margin: 0; padding: 0; list-style: none; }
+/* 목차 항목도 앱 내비 항목과 같은 상자다. 지금 읽는 구획이 활성 어휘를 입는다. */
 .doc-toc a {
-  display: block;
-  padding: 7px 0 7px 14px;
-  margin-left: -1px;
+  display: flex;
+  align-items: center;
+  min-height: var(--pill-height);
+  padding: 0 var(--space-2-5);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
   color: var(--sub);
   text-decoration: none;
-  border-left: 2px solid transparent;
 }
-.doc-toc a:hover { color: var(--ink); }
+@media (hover: hover) {
+  .doc-toc a:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); }
+}
 .doc-toc a[aria-current='true'] {
+  background: linear-gradient(var(--blue-tint), var(--blue-tint)) padding-box,
+    var(--gradient-brand) border-box;
   color: var(--ink);
   font-weight: 600;
-  border-left-color: var(--mint-deep);
 }
-/* 좁은 화면에서 목차는 글 위에 얹힌 작은 카드다. 세로로 길게 세우면 본문이 한 화면 밖으로 밀린다. */
+/* 좁은 화면에서 목차는 글 위에 얹힌 카드다. 세로로 길게 세우면 본문이 한 화면 밖으로 밀린다. */
 @media (max-width: 899px) {
-  .doc { grid-template-columns: 1fr; gap: 28px; }
-  .doc-toc {
-    position: static;
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-card);
-    padding: 16px 20px;
-  }
-  .doc-toc ol { border-left: 0; columns: 2; column-gap: 20px; }
-  .doc-toc a,
-  .doc-toc a[aria-current='true'] { padding: 5px 0; margin-left: 0; border-left: 0; }
+  .doc { grid-template-columns: 1fr; gap: var(--space-8); }
+  .doc-toc { position: static; }
+  .doc-toc ol { columns: 2; column-gap: var(--space-5); }
 }
 
 .doc-head { max-width: var(--measure); }
 .doc-head h1 {
   margin: 0;
-  font-size: var(--d2);
+  font-size: var(--text-2xl);
   font-weight: 600;
-  line-height: 1.25;
-  letter-spacing: -0.02em;
+  line-height: var(--leading-tight);
 }
-.doc-head p { margin: 16px 0 0; color: var(--sub); }
+@media (max-width: 767px) {
+  .doc-head h1 { font-size: var(--text-xl); }
+}
+.doc-head p { margin: var(--space-4) 0 0; color: var(--sub); }
 
 .doc-body > section {
-  padding-top: 72px;
-  scroll-margin-top: 88px;
+  padding-top: var(--section-gap);
+  scroll-margin-top: calc(var(--header-height) + var(--space-4));
 }
 .doc-body h2 {
-  margin: 0 0 16px;
-  font-size: 1.5rem;
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-xl);
   font-weight: 600;
-  letter-spacing: -0.02em;
+  line-height: var(--leading-tight);
 }
 .doc-body h3 {
-  margin: 32px 0 8px;
-  font-size: var(--d3);
+  margin: var(--space-8) 0 var(--space-2);
+  font-size: var(--text-lg);
   font-weight: 600;
+  line-height: var(--leading-snug);
 }
 .doc-body p, .doc-body li { max-width: var(--measure); }
 /* 순서 목록은 자기 폭을 쓴다. 읽기 폭 제한을 그대로 받으면 칸 배경이 오른쪽에 남는다. */
-.doc-body .steps { max-width: none; padding-left: 0; margin: 32px 0 16px; }
+.doc-body .steps { max-width: none; padding-left: 0; margin: var(--space-8) 0 var(--space-4); }
 .doc-body .steps li { max-width: none; margin-bottom: 0; }
-.doc-body p { margin: 0 0 16px; }
-.doc-body ul, .doc-body ol { margin: 0 0 16px; padding-left: 20px; }
-.doc-body li { margin-bottom: 8px; }
-.doc-body .shot { margin: 24px 0 32px; }
+.doc-body p { margin: 0 0 var(--space-4); }
+.doc-body ul, .doc-body ol { margin: 0 0 var(--space-4); padding-left: var(--list-indent); }
+.doc-body li { margin-bottom: var(--space-2); }
+.doc-body .shot { margin: var(--space-6) 0 var(--space-8); }
 
 /* 화면에 실제로 적힌 말. 가이드의 안내와 화면의 글자가 같은 것을 가리키게 한다. */
 .ui {
@@ -588,25 +738,29 @@ img { display: block; max-width: 100%; height: auto; }
   white-space: nowrap;
 }
 
+/* 안내줄 안 조각. 제목 16/600 --ink, 본문 14 --sub 는 앱의 notice 짝과 같다. */
 .callout {
-  margin: 0 0 16px;
-  padding: 20px 24px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-card);
+  margin: 0 0 var(--space-4);
   max-width: var(--measure);
+  padding: var(--space-5) var(--space-6);
 }
-.callout b { display: block; margin-bottom: 4px; }
-.callout p { margin: 0; color: var(--sub); }
+.callout b {
+  display: block;
+  margin-bottom: var(--space-1);
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--ink);
+}
+.callout p { margin: 0; font-size: var(--text-sm); color: var(--sub); }
 
 .faq {
-  margin-top: 16px;
+  margin-top: var(--space-4);
   max-width: var(--measure);
   border-top: 1px solid var(--line);
 }
 .faq details { border-bottom: 1px solid var(--line); }
 .faq summary {
-  padding: 18px 0;
+  padding: var(--space-4) 0;
   font-weight: 600;
   cursor: pointer;
   list-style: none;
@@ -615,27 +769,25 @@ img { display: block; max-width: 100%; height: auto; }
 .faq summary::after {
   content: '+';
   float: right;
-  color: var(--sub);
   font-weight: 400;
+  color: var(--sub);
 }
 .faq details[open] summary::after { content: '\2212'; }
-.faq p { margin: 0 0 18px; color: var(--sub); }
+.faq p { margin: 0 0 var(--space-4); font-size: var(--text-sm); color: var(--sub); }
 
 .doc-next {
-  margin-top: 72px;
-  padding: 24px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-card);
+  margin-top: var(--section-gap);
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: var(--space-4);
   align-items: center;
 }
 .doc-next p { margin: 0; flex: 1 1 260px; }
 
+/* prefers-reduced-motion: reduce 에서 전환을 없앤다. 앱과 같은 계약이다.
+ * 0 이 아니라 없애는 것은 transitionend 를 기다리는 코드가 없기 때문이다. */
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .unfold-body { transition: none; }
-  .btn { transition: none; }
+  .unfold-body, .unfold-head { transition: none; }
+  .btn:hover, a.guide-card:hover { animation: none; }
 }

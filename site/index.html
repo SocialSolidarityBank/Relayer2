@@ -20,7 +20,7 @@
       <a href="#what" data-optional>하는 일</a>
       <a href="guide-user.html">사용자 가이드</a>
       <a href="guide-admin.html">관리자 가이드</a>
-      <a class="btn btn-quiet btn-small" href="/#/login"><span class="btn-text">로그인</span></a>
+      <a class="btn" href="/#/login"><span class="btn-text">로그인</span></a>
     </nav>
   </div>
 </header>
@@ -35,8 +35,8 @@
       다음 회차 화면에 그대로 올라옵니다.
     </p>
     <div class="hero-actions">
-      <a class="btn btn-primary" href="/#/signup"><span class="btn-text">사용해 보기</span></a>
-      <a class="btn btn-quiet" href="/#/login"><span class="btn-text">로그인</span></a>
+      <a class="btn btn-primary btn-lg" href="/#/signup"><span class="btn-text">사용해 보기</span></a>
+      <a class="btn btn-lg" href="/#/login"><span class="btn-text">로그인</span></a>
     </div>
     <p class="hero-note">
       처음 쓰는 기관은 <b>사용해 보기</b>에서 관리자 계정을 만듭니다. 계정을 이미 받았다면 <b>로그인</b>,
@@ -124,7 +124,7 @@
   <!-- LLM 위키. 아직 만들고 있는 기능이다. 준비 중 표시를 지우지 않는다.
        아래 다섯 칸은 상담 기록하기 화면에 이미 있는 1부터 5까지의 구획이다. -->
   <section class="wrap section" id="wiki">
-    <h2 class="section-title">LLM 위키로 기록을 잇습니다 <span class="tag">준비 중</span></h2>
+    <h2 class="section-title">LLM 위키로 기록을 잇습니다 <span class="badge">준비 중</span></h2>
     <p class="section-lead">
       회차마다 흩어진 기록을 서로 가리키게 만들어 다음 상담에서 같은 것을 다시 찾지 않게 합니다.
       이 기능은 아직 만들고 있고, 아래 다섯 칸으로 나눠 적는 방식은 지금 화면에 있습니다.
@@ -208,21 +208,21 @@
     <h2 class="section-title">어디로 들어가면 되나요</h2>
     <p class="section-lead">릴레이어는 기관 안에서 쓰는 도구입니다. 자기 자리를 골라 주세요.</p>
     <div class="doors">
-      <div class="door">
+      <div class="card door">
         <div>
           <h3>우리 기관이 처음 씁니다</h3>
           <p>관리자 계정을 만들고 기관 이름과 사업을 등록합니다. 그다음 실무자를 초대할 수 있습니다.</p>
         </div>
-        <a class="btn btn-primary btn-small" href="/#/signup"><span class="btn-text">사용해 보기</span></a>
+        <a class="btn btn-primary" href="/#/signup"><span class="btn-text">사용해 보기</span></a>
       </div>
-      <div class="door">
+      <div class="card door">
         <div>
           <h3>계정을 이미 받았습니다</h3>
           <p>기관에서 받은 아이디와 비밀번호로 들어옵니다.</p>
         </div>
-        <a class="btn btn-quiet btn-small" href="/#/login"><span class="btn-text">로그인</span></a>
+        <a class="btn" href="/#/login"><span class="btn-text">로그인</span></a>
       </div>
-      <div class="door">
+      <div class="card door">
         <div>
           <h3>아직 계정이 없습니다</h3>
           <p>
@@ -231,7 +231,7 @@
           </p>
         </div>
       </div>
-      <div class="door">
+      <div class="card door">
         <div>
           <h3>상담을 받는 당사자입니다</h3>
           <p>
@@ -248,8 +248,11 @@
     <h2 class="section-title">가이드</h2>
     <p class="section-lead">화면을 그대로 따라가며 읽는 두 장입니다.</p>
     <div class="guides">
-      <a class="guide-card" href="guide-user.html">
-        <h3>사용자 가이드</h3>
+      <a class="card guide-card" href="guide-user.html">
+        <div class="guide-card-head">
+          <h3>사용자 가이드</h3>
+          <span class="badge" data-tone="mint">실무자</span>
+        </div>
         <p>상담을 맡은 실무자가 하루를 어떻게 쓰는지 순서대로 봅니다.</p>
         <ul>
           <li>로그인한 뒤 처음 보이는 화면</li>
@@ -257,8 +260,11 @@
           <li>다음 회차 잡기와 종결</li>
         </ul>
       </a>
-      <a class="guide-card" href="guide-admin.html">
-        <h3>관리자 가이드</h3>
+      <a class="card guide-card" href="guide-admin.html">
+        <div class="guide-card-head">
+          <h3>관리자 가이드</h3>
+          <span class="badge" data-tone="lavender">관리자</span>
+        </div>
         <p>기관을 열고 실무자를 붙이고 기록을 관리하는 순서를 봅니다.</p>
         <ul>
           <li>기관 정보와 사업 등록</li>
