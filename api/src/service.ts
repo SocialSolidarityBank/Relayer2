@@ -178,7 +178,7 @@ export async function saveIntake(
     detail?: Record<string, unknown>;
     cards?: NewCardInput[];
   },
-): Promise<{ session_id: number }> {
+): Promise<{ session_id: number; revised: boolean }> {
   // 상담 자유 글에는 건강·채무 같은 민감정보가 섞인다. 동의 없이 저장하지 않는다(P1).
   await assertProgramActive(caseId);
   await assertConsent(caseId, 'sensitive_information_processing');
@@ -217,6 +217,8 @@ export async function saveIntake(
           memo = ${input.memo === undefined ? intake.memo : encryptText(input.memo)},
           detail = ${tx.json(detail)}
         where id = ${sessionId}`;
+      // 원본이 바뀌면 그것으로 만든 사례 기억은 틀린 것이다. 같은 트랜잭션에서 지운다(SPEC §15-6).
+      await tx`delete from case_memories where case_id = ${caseId}`;
     } else {
       const [other] = await tx<{ id: number }[]>`
         select id from sessions where case_id = ${caseId} limit 1`;
@@ -254,7 +256,7 @@ export async function saveIntake(
       const fresh = input.cards.filter((c) => !keep.has(`${c.kind}\u0000${c.text}`));
       await insertCards(tx as unknown as typeof sql, caseId, sessionId, fresh);
     }
-    return { session_id: sessionId };
+    return { session_id: sessionId, revised: Boolean(intake) };
   });
 }
 
@@ -365,7 +367,7 @@ export async function recordSession(
     /** 소요 분. 안 보내면 있던 값을 지키고, null 은 지운다. */
     duration_min?: number | null;
   },
-): Promise<{ session_id: number; unchecked: number }> {
+): Promise<{ session_id: number; case_id: number; unchecked: number; revised: boolean }> {
   const [owner] = await sql<Array<{ case_id: number; status: string }>>`
     select case_id, status from sessions where id = ${sessionId}`;
   if (owner) {
@@ -404,6 +406,9 @@ export async function recordSession(
           and (${target.kind} <> 'intake' or c.kind <> 'judgment')
           and not exists (select 1 from card_outcomes o where o.card_id = c.id)`;
     }
+    // 원본이 바뀌면 그것으로 만든 사례 기억은 틀린 것이다. 같은 트랜잭션에서 지운다(SPEC §15-6) —
+    // 뒤에서 도는 재생성이 실패해도 옛 기억이 초안에 들어가는 창이 없다.
+    if (wasDone) await tx`delete from case_memories where case_id = ${target.case_id}`;
 
     const carry = carryOverOnRecord(target, sessions);
     // 빠진 칸은 지우지 않고 둔다. 방식이 대면이 아니면 장소는 없다 — 남은 장소도 지운다.
@@ -460,7 +465,12 @@ export async function recordSession(
         values (${row.card_id}, ${sessionId}, ${row.result}, ${full.follow ?? null},
                 ${encryptText(full.reason)}, ${encryptText(full.note)})`;
     }
-    return { session_id: sessionId, unchecked: rows.filter((r) => r.result === 'unchecked').length };
+    return {
+      session_id: sessionId,
+      case_id: target.case_id,
+      unchecked: rows.filter((r) => r.result === 'unchecked').length,
+      revised: wasDone,
+    };
   });
 }
 
