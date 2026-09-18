@@ -78,14 +78,21 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
   await fold.getByLabel('한 줄 설명').fill('마법사에서 만든 사업');
   await fold.getByRole('button', { name: '저장', exact: true }).click();
   await expect(fold.locator('summary')).toContainText('마법사에서 만든 사업');
+  const stepSaved = page.waitForResponse((r) => r.url().endsWith('/settings/onboarding/step') && r.status() === 200);
   await page.getByRole('button', { name: '다음' }).click();
 
   // 4단계: 실무자 초대 — 링크를 하나 만들어 실무자가 먼저 들어오게 한다. 마법사가 끝나기 전이라 그 사람은 '기관 준비 중' 을 본다.
+  await expect(page.getByRole('tab', { name: '4. 실무자 초대', selected: true })).toBeVisible();
+  // 재진입(QA P2 #9): 세션이 끊겨 다시 들어와도 서 있던 단계에서 선다 — 1단계로 되돌아가지 않는다.
+  await stepSaved;
+  await page.reload();
   await expect(page.getByRole('tab', { name: '4. 실무자 초대', selected: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: '실무자 초대' })).toBeVisible();
   await page.getByRole('button', { name: '링크 만들기' }).click();
   const inviteLink = (await page.locator('code').first().textContent()) ?? '';
   expect(inviteLink).toMatch(/#\/invite\//);
+  // 링크 아래 QR(온보딩 후속 3).
+  await expect(page.getByRole('img', { name: '초대 링크 QR' })).toBeVisible();
   const worker = await browser.newPage();
   await worker.goto(inviteLink.replace(/^https?:\/\/[^/]+/, base));
   await worker.locator('#iv-email').fill('e2e-worker');
@@ -101,6 +108,17 @@ test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까�
   for (const name of ['1. AI 정리', '2. 녹음 글로 옮기기', '3. 데이터베이스']) {
     await expect(page.locator('details.wire-card-details summary', { hasText: name })).toBeVisible();
   }
+  // 상태 배지는 민트/코랄뿐이다(QA P2 #8 — blue 톤 없음).
+  await expect(page.locator('.connection-list .wire-badge[data-tone="blue"]')).toHaveCount(0);
+  // 설정 가이드는 아코디언 안 알약이고 누르면 팝업이다(온보딩 후속 2).
+  const dbFold = page.locator('details.wire-card-details', { hasText: '3. 데이터베이스' });
+  await dbFold.locator('summary').click();
+  await dbFold.getByRole('button', { name: '설정 가이드' }).click();
+  const guide = page.locator('#guide-db-dialog');
+  await expect(guide).toBeVisible();
+  await expect(guide.getByRole('heading', { name: '데이터베이스 설정 가이드' })).toBeVisible();
+  await guide.getByRole('button', { name: '닫기' }).click();
+  await expect(guide).toBeHidden();
   await page.getByRole('button', { name: '완료' }).click();
 
   // ── 완료 화면 = 기관 요약 → 상담 일정 ──────────────────────────

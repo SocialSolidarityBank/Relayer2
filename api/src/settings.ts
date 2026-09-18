@@ -196,9 +196,16 @@ export async function completeOnboarding(actorId: number): Promise<void> {
     where id = 1`;
 }
 
-export async function isOnboarded(): Promise<boolean> {
-  const [row] = await sql<Array<{ onboarded_at: string | null }>>`select onboarded_at from organization where id = 1`;
-  return row?.onboarded_at != null;
+/** 마법사 진행 단계(0~4). 단계를 옮길 때마다 적어 두어 세션이 끊겨도 그 자리에서 다시 선다(QA P2 #9). */
+export async function setOnboardingStep(actorId: number, step: number): Promise<void> {
+  await sql`update organization set onboarding_step = ${step}, updated_at = now(), updated_by = ${actorId} where id = 1`;
+}
+
+/** `/me` 가 싣는 마법사 상태 — 끝났는지, 안 끝났으면 어느 단계인지. */
+export async function onboardingState(): Promise<{ onboarded: boolean; onboarding_step: number }> {
+  const [row] = await sql<Array<{ onboarded_at: string | null; onboarding_step: number }>>`
+    select onboarded_at, onboarding_step from organization where id = 1`;
+  return { onboarded: row?.onboarded_at != null, onboarding_step: row?.onboarding_step ?? 0 };
 }
 
 // ── AI 키 ──────────────────────────────────────────────────────────────────

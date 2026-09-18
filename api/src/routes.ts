@@ -265,7 +265,7 @@ const documentAccess = async (raw: string, actorId: number): Promise<number> => 
 // 마법사를 마쳤는지와 기관 워크스페이스(이름·주소 이름)도 함께 싣는다 — 화면이 이것으로 관리자를 마법사에,
 // 실무자를 '기관 준비 중' 에 붙들어 둔다(서버 잠금 없음).
 app.get('/me', async (c) =>
-  c.json({ ...c.get('actor'), onboarded: await settings.isOnboarded(), workspace: await settings.workspaceInfo() }),
+  c.json({ ...c.get('actor'), ...(await settings.onboardingState()), workspace: await settings.workspaceInfo() }),
 );
 
 app.post('/cases', async (c) => {
@@ -870,6 +870,14 @@ app.post('/settings/onboarding/complete', async (c) => {
   if (adminOnly(c)) return c.json(DENY, 403);
   await settings.completeOnboarding(c.get('actor').id);
   return c.json({ ok: true, onboarded: true });
+});
+
+/** 마법사 단계 기록(QA P2 #9). 관리자 전용. 화면이 단계를 옮길 때마다 부른다. */
+app.put('/settings/onboarding/step', async (c) => {
+  if (adminOnly(c)) return c.json(DENY, 403);
+  const { step } = z.object({ step: z.number().int().min(0).max(4) }).parse(await c.req.json());
+  await settings.setOnboardingStep(c.get('actor').id, step);
+  return c.json({ ok: true, onboarding_step: step });
 });
 
 /**

@@ -12,6 +12,7 @@
  * 다르다. 방금 초대한 사람은 아무도 안 맡았는데 `담당자`라 부르면 화면이 거짓말한다.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { encode as encodeQr } from 'uqr';
 import {
   ASSIGN_PAGE_SIZE,
   addProgram,
@@ -76,6 +77,7 @@ import {
 } from '../ui.tsx';
 import { setTheme, themeChoice, type ThemeChoice } from '../theme.ts';
 import { DatePicker } from '../date-picker.tsx';
+import { Dialog } from '../dialog.tsx';
 import { AUDIT_DAYS, AUDIT_KIND_TABS, AuditScreen } from './audit.tsx';
 
 const date = (s: string) => new Date(s).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
@@ -283,19 +285,64 @@ export function SettingsScreen({
 // ── 공통 ──────────────────────────────────────────────────────────────────
 
 /**
+ * 판이 처음 부르는 값 하나(2026-09-18 QA — 연결 판과 같은 규율). 실패하면 `불러오는 중` 에 갇히지 않고
+ * `LoadError`(`다시 불러오기`)로 되돌아온다. 401 은 로그인 만료라 셸이 로그인 화면으로 바꾸게 다시 읽는다(routes.tsx 와 같은 경로).
+ * `deps` 가 바뀌면 다시 부른다. 늦게 온 응답은 버린다(`live`).
+ */
+export function useLoad<T>(load: () => Promise<T>, deps: readonly unknown[] = []) {
+  const [data, setData] = useState<T | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    let live = true;
+    setData(null);
+    setError(null);
+    load()
+      .then((v) => {
+        if (live) setData(v);
+      })
+      .catch((e) => {
+        if (e instanceof Unauthorized) {
+          window.location.reload();
+          return;
+        }
+        if (live) setError(e instanceof Error ? e.message : '불러오기 실패');
+      });
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [...deps, retry]);
+  return { data, setData, error, reload: () => setRetry((n) => n + 1) };
+}
+
+/** `useLoad` 실패 자리. 까닭 한 줄과 `다시 불러오기`. */
+export function LoadError({ error, onRetry }: { error: string; onRetry: () => void }) {
+  return (
+    <>
+      <ErrorText>{error}</ErrorText>
+      <FormActions>
+        <Button onClick={onRetry}>다시 불러오기</Button>
+      </FormActions>
+    </>
+  );
+}
+
+/**
  * 내 정보(2026-09-18 L4 I1·I2). 읽는 값(아이디·역할·기관)은 한 행, 고치는 칸(이름·연락처·이메일)도
  * 한 행이다. `저장` 은 카드 머리 오른쪽 끝 — 본문 맨 아래까지 내려가 찾을 일이 없다.
  */
 function ProfilePane() {
-  const [p, setP] = useState<Profile | null>(null);
-  const [orgName, setOrgName] = useState('');
+  const view = useLoad(async () => {
+    const [profile, org] = await Promise.all([getProfile(), getOrg()]);
+    return { profile, orgName: org.name };
+  });
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  useEffect(() => {
-    void getProfile().then(setP);
-    void getOrg().then((o) => setOrgName(o.name));
-  }, []);
-  if (!p) return <Empty>불러오는 중</Empty>;
+  if (view.error) return <Card title="내 정보"><LoadError error={view.error} onRetry={view.reload} /></Card>;
+  if (!view.data) return <Empty>불러오는 중</Empty>;
+  const { profile: p, orgName } = view.data;
+  const setP = (next: Profile) => view.setData({ profile: next, orgName });
 
   const save = async () => {
     setErr(null);
@@ -814,23 +861,48 @@ function AssignDrawer({
   );
 }
 
+/**
+ * 초대 링크 QR(2026-09-18 온보딩 후속 3). 링크 아래, 역할 열 안에 선다. 모듈을 `<path>` 하나로 그린다 —
+ * 화면 테마와 무관하게 늘 검정 위 흰색이어야 카메라가 읽는다. `uqr`(무의존, 7KB)이 부호화만 맡는다.
+ */
+function InviteQr({ link }: { link: string }) {
+  const { size, data } = encodeQr(link, { border: 1 });
+  let d = '';
+  for (let y = 0; y < size; y += 1) for (let x = 0; x < size; x += 1) if (data[y][x]) d += `M${x} ${y}h1v1h-1z`;
+  return (
+    <svg className="invite-qr" viewBox={`0 0 ${size} ${size}`} role="img" aria-label="초대 링크 QR" shapeRendering="crispEdges">
+      <rect width={size} height={size} fill="#fff" />
+      <path d={d} fill="#000" />
+    </svg>
+  );
+}
+
 export function InvitePane() {
-  const [rows, setRows] = useState<Invite[] | null>(null);
+  const sent = useLoad(listInvites);
   const [role, setRole] = useState<'worker' | 'admin'>('worker');
   const [note, setNote] = useState('');
   const [link, setLink] = useState<string | null>(null);
-
-  useEffect(() => {
-    void listInvites().then(setRows);
-  }, []);
+  const [err, setErr] = useState<string | null>(null);
 
   const make = async () => {
-    const { token } = await createInvite(role, note.trim() || null);
-    setLink(`${window.location.origin}${window.location.pathname}#/invite/${token}`);
-    setNote('');
-    setRows(await listInvites());
+    setErr(null);
+    try {
+      const { token } = await createInvite(role, note.trim() || null);
+      setLink(`${window.location.origin}${window.location.pathname}#/invite/${token}`);
+      setNote('');
+      sent.setData(await listInvites());
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : '링크 만들기 실패');
+    }
   };
-
+  const revoke = async (id: number) => {
+    setErr(null);
+    try {
+      sent.setData(await revokeInvite(id));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : '취소 실패');
+    }
+  };
   return (
     <>
       <Card
@@ -849,8 +921,9 @@ export function InvitePane() {
                 <option value="admin">관리자</option>
               </select>
             </Field>
-            {/* 역할 아래는 만든 링크(뒤에 QR)가 서는 자리다. 링크는 지금 한 번만 보인다 — 표에는 해시만 남는다. */}
+            {/* 역할 아래는 만든 링크와 QR 이 서는 자리다. 링크는 지금 한 번만 보인다 — 표에는 해시만 남는다. */}
             <div className="invite-link-slot" aria-live="polite">
+              {err && <ErrorText>{err}</ErrorText>}
               {link && (
                 <div className="wire-form-field">
                   <span className="wire-form-label">초대 링크</span>
@@ -860,6 +933,7 @@ export function InvitePane() {
                     </div>
                     <Button onClick={() => void navigator.clipboard.writeText(link)}>복사하기</Button>
                   </div>
+                  <InviteQr link={link} />
                 </div>
               )}
             </div>
@@ -873,12 +947,14 @@ export function InvitePane() {
       </Card>
 
       <Card title="보낸 초대">
-        {rows === null ? (
+        {sent.error ? (
+          <LoadError error={sent.error} onRetry={sent.reload} />
+        ) : sent.data === null ? (
           <Empty>불러오는 중</Empty>
-        ) : rows.length === 0 ? (
+        ) : sent.data.length === 0 ? (
           <Empty>보낸 초대 없음</Empty>
         ) : (
-          rows.map((v) => {
+          sent.data.map((v) => {
             const state = v.accepted_at
               ? '들어옴'
               : v.revoked_at
@@ -893,7 +969,7 @@ export function InvitePane() {
                   desc={`${date(v.created_at)} 만듦, ${date(v.expires_at)}까지, ${state}`}
                   action={
                     state === '기다리는 중' ? (
-                      <Button onClick={() => void revokeInvite(v.id).then(setRows)}>취소하기</Button>
+                      <Button onClick={() => void revoke(v.id)}>취소하기</Button>
                     ) : undefined
                   }
                 />
@@ -913,24 +989,19 @@ export function InvitePane() {
  * 마지막 관리자를 내리는 것은 서버가 막는다.
  */
 function WorkersPane({ me }: { me: { id: number } }) {
-  const [rows, setRows] = useState<Worker[] | null>(null);
-  const [programs, setPrograms] = useState<Program[]>([]);
+  const progs = useLoad(() => listPrograms(true));
   const [programId, setProgramId] = useState<number | null>(programFromHash);
+  const staff = useLoad(() => listWorkers(programId ?? undefined), [programId]);
   const [viewing, setViewing] = useState<Worker | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  useEffect(() => {
-    void listPrograms(true).then(setPrograms);
-  }, []);
-  useEffect(() => {
-    setRows(null);
-    void listWorkers(programId ?? undefined).then(setRows);
-  }, [programId]);
+  const programs = progs.data ?? [];
+  const rows = staff.data;
 
   const changeRole = async (w: Worker, role: 'worker' | 'admin') => {
     setErr(null);
     try {
       await setWorkerRole(w.id, role);
-      setRows(await listWorkers(programId ?? undefined));
+      staff.setData(await listWorkers(programId ?? undefined));
       // 자기 자신을 내렸으면 다음 요청부터 실무자다 — 셸이 알아야 하니 다시 읽게 한다.
       if (w.id === me.id) window.location.reload();
     } catch (e) {
@@ -957,7 +1028,9 @@ function WorkersPane({ me }: { me: { id: number } }) {
         </select>
       </Field>
       {err && <ErrorText>{err}</ErrorText>}
-      {rows === null ? (
+      {progs.error || staff.error ? (
+        <LoadError error={progs.error ?? staff.error ?? ''} onRetry={progs.error ? progs.reload : staff.reload} />
+      ) : rows === null ? (
         <Empty>불러오는 중</Empty>
       ) : rows.length === 0 ? (
         <Empty>{picked ? `${picked.name} 진행 중 사례 담당 실무자 없음` : '실무자 없음'}</Empty>
@@ -1094,12 +1167,10 @@ export const orgPayload = (o: Org): Org => ({
 
 /** 설정 › 기관 정보. 접속 주소는 제목 옆 배지다(읽기 전용, 배포 설정) — 없으면 배지도 없다. */
 export function OrgPane() {
-  const [org, setOrg] = useState<OrgView | null>(null);
+  const { data: org, setData: setOrg, error, reload } = useLoad(getOrg);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  useEffect(() => {
-    void getOrg().then(setOrg);
-  }, []);
+  if (error) return <Card title="기관 정보"><LoadError error={error} onRetry={reload} /></Card>;
   if (!org) return <Empty>불러오는 중</Empty>;
 
   const save = async () => {
@@ -1136,7 +1207,7 @@ const period = (p: Program) => (p.starts_on || p.ends_on ? `${p.starts_on ?? '�
 
 /** 펼친 사업 한 장 — 파생 정보(담당 실무자·당사자 수)와 고치기 칸. 종료·복구는 접힌 머리의 버튼이다(K1). */
 function ProgramDetail({ program: p, onChanged }: { program: Program; onChanged: () => Promise<void> }) {
-  const [workers, setWorkers] = useState<Worker[] | null>(null);
+  const staff = useLoad(() => listWorkers(p.id), [p.id]);
   const [draft, setDraft] = useState<ProgramInput>({
     name: p.name,
     starts_on: p.starts_on,
@@ -1144,9 +1215,6 @@ function ProgramDetail({ program: p, onChanged }: { program: Program; onChanged:
     description: p.description,
   });
   const [err, setErr] = useState<string | null>(null);
-  useEffect(() => {
-    void listWorkers(p.id).then(setWorkers);
-  }, [p.id]);
 
   const save = async () => {
     setErr(null);
@@ -1168,7 +1236,20 @@ function ProgramDetail({ program: p, onChanged }: { program: Program; onChanged:
         </div>
         <div className="wire-data-row">
           <dt>담당 실무자</dt>
-          <dd>{workers === null ? '불러오는 중' : workers.length === 0 ? '없음' : workers.map((w) => w.name).join(', ')}</dd>
+          <dd>
+            {staff.error ? (
+              <>
+                {staff.error}{' '}
+                <Button onClick={staff.reload}>다시 불러오기</Button>
+              </>
+            ) : staff.data === null ? (
+              '불러오는 중'
+            ) : staff.data.length === 0 ? (
+              '없음'
+            ) : (
+              staff.data.map((w) => w.name).join(', ')
+            )}
+          </dd>
         </div>
       </dl>
       {!p.retired_at && (
@@ -1230,22 +1311,20 @@ function ProgramDetail({ program: p, onChanged }: { program: Program; onChanged:
  * 마법사의 사업 단계도 이 화면이다(`onChanged`).
  */
 export function ProgramsPane({ onChanged }: { onChanged?: (programs: Program[]) => void } = {}) {
-  const [programs, setPrograms] = useState<Program[] | null>(null);
   const [name, setName] = useState('');
   /** 방금 만든 사업. 그 아코디언을 펼쳐 놓아 바로 정보를 적게 한다. */
   const [justAdded, setJustAdded] = useState<number | null>(null);
   const [warning, setWarning] = useState<{ program: Program; counts: RetireWarning } | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  const reload = async () => {
+  const fetchPrograms = async () => {
     const rows = await listPrograms(true);
-    setPrograms(rows);
     onChanged?.(rows);
+    return rows;
   };
-  useEffect(() => {
-    void reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const list = useLoad(fetchPrograms);
+  const programs = list.data;
+  const reload = async () => list.setData(await fetchPrograms());
 
   const add = async () => {
     if (!name.trim()) return;
@@ -1275,6 +1354,15 @@ export function ProgramsPane({ onChanged }: { onChanged?: (programs: Program[]) 
       setErr(e instanceof Error ? e.message : '사업 종료 실패');
     }
   };
+  const reopen = async (p: Program) => {
+    setErr(null);
+    try {
+      await reopenProgram(p.id);
+      await reload();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : '복구 실패');
+    }
+  };
 
   return (
     <>
@@ -1297,7 +1385,9 @@ export function ProgramsPane({ onChanged }: { onChanged?: (programs: Program[]) 
           </Button>
         </div>
         {err && <ErrorText>{err}</ErrorText>}
-        {programs === null ? (
+        {list.error ? (
+          <LoadError error={list.error} onRetry={list.reload} />
+        ) : programs === null ? (
           <Empty>불러오는 중</Empty>
         ) : programs.length === 0 ? (
           <Empty>사업 없음</Empty>
@@ -1316,7 +1406,7 @@ export function ProgramsPane({ onChanged }: { onChanged?: (programs: Program[]) 
                       aria-label={`${p.name} 복구`}
                       onClick={(e) => {
                         e.stopPropagation();
-                        void reopenProgram(p.id).then(reload);
+                        void reopen(p);
                       }}
                     >
                       복구
@@ -1370,16 +1460,15 @@ export function ProgramsPane({ onChanged }: { onChanged?: (programs: Program[]) 
  * 이메일 등 정해진 방식으로 고지하고 다시 받아야 한다.
  */
 function ConsentPane() {
-  const [rows, setRows] = useState<ConsentCopy[] | null>(null);
+  const { data: rows, setData: setRows, error, reload } = useLoad(getConsentCopy);
   const [editing, setEditing] = useState<ConsentCopy | null>(null);
-  useEffect(() => {
-    void getConsentCopy().then(setRows);
-  }, []);
 
   return (
     <>
       <Card title="동의서 문안">
-        {rows === null ? (
+        {error ? (
+          <LoadError error={error} onRetry={reload} />
+        ) : rows === null ? (
           <Empty>불러오는 중</Empty>
         ) : (
           rows.map((r) => (
@@ -1546,11 +1635,8 @@ function DownloadPane() {
   const [kind, setKind] = useState<'전부' | AuditKind>('전부');
   const [actor, setActor] = useState('');
   const [withNames, setWithNames] = useState(false);
-  const [workers, setWorkers] = useState<Worker[]>([]);
-
-  useEffect(() => {
-    void listWorkers().then(setWorkers);
-  }, []);
+  const staff = useLoad(() => listWorkers());
+  const workers = staff.data ?? [];
 
   const href = auditCsvHref(
     { days, kind: kind === '전부' ? undefined : kind, actor: actor ? Number(actor) : undefined },
@@ -1630,34 +1716,20 @@ function DownloadPane() {
 
 /**
  * 외부 서비스 연결(2026-09-17 Q, 이름은 2026-09-18 QA). 아코디언 셋 — AI 정리·녹음 글로 옮기기·데이터베이스. 접힌 줄에 상태·제공자·출처가 한 줄로 서고,
- * 펼치면 설정 자리다: AI 는 키 넣기, STT·DB 는 설정 가이드(랜딩의 가이드를 팝업으로 — 다음 세션).
+ * 펼치면 설정 자리다: 셋 다 `설정 가이드` 알약(누르면 팝업), AI 는 그 아래 키 넣기.
  * OpenAI 키는 서버가 검증한 뒤 암호문으로 저장하고 값은 다시 보여 주지 않는다 — 저장돼 있으면 `••••••••` 로만 말한다.
  * 마법사의 5단계와 설정이 같은 화면이다.
  */
 export function ConnectionsPane() {
-  const [c, setC] = useState<Connections | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [retry, setRetry] = useState(0);
+  const { data: c, setData: setC, error, reload } = useLoad(getConnections);
   const [key, setKey] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
-  useEffect(() => {
-    void getConnections()
-      .then(setC)
-      .catch((e) => {
-        // 401 은 로그인 만료다 — 셸이 로그인 화면으로 바꾸게 다시 불러온다(routes.tsx 와 같은 경로).
-        if (e instanceof Unauthorized) { window.location.reload(); return; }
-        setError(e instanceof Error ? e.message : '연결 상태 불러오기 실패');
-      });
-  }, [retry]);
   if (error) {
     return (
       <Card title="API 연결 관리">
-        <ErrorText>연결 상태 불러오기 실패</ErrorText>
-        <FormActions>
-          <Button onClick={() => { setError(null); setRetry((n) => n + 1); }}>다시 불러오기</Button>
-        </FormActions>
+        <LoadError error={error} onRetry={reload} />
       </Card>
     );
   }
@@ -1687,16 +1759,24 @@ export function ConnectionsPane() {
       <span>{text}</span>
     </span>
   );
-  /** 설치 순서와 안내. 무엇을 어디서, 그리고 AI(이 도구)가 어디까지 돕는지. */
-  const guide = (steps: Array<[string, ReactNode]>) => (
-    <ol className="connection-guide">
-      {steps.map(([label, body]) => (
-        <li key={label}>
-          <strong>{label}</strong>
-          <span>{body}</span>
-        </li>
-      ))}
-    </ol>
+  /**
+   * 설정 가이드 — 설치 순서와 안내(무엇을 어디서, AI(이 도구)가 어디까지 돕는지). 아코디언 안에서는 `설정 가이드`
+   * 알약 하나이고 누르면 팝업이다(2026-09-18 온보딩 후속 2) — 본문에 펼쳐 두면 키 칸이 안내문 아래로 밀렸다.
+   */
+  const guide = (id: string, title: string, steps: Array<[string, ReactNode]>) => (
+    // 카드 본문이 grid 라 알약이 폭을 다 차지한다 — flex 한 겹으로 제 크기를 지킨다.
+    <div className="connection-guide-row">
+      <Dialog id={`guide-${id}`} title={`${title} 설정 가이드`} trigger="설정 가이드" className="connection-guide-dialog">
+        <ol className="connection-guide">
+          {steps.map(([label, body]) => (
+            <li key={label}>
+              <strong>{label}</strong>
+              <span>{body}</span>
+            </li>
+          ))}
+        </ol>
+      </Dialog>
+    </div>
   );
   const ext = (href: string, label: string) => (
     <a href={href} target="_blank" rel="noreferrer">
@@ -1709,10 +1789,10 @@ export function ConnectionsPane() {
       <p className="panel-meta">AI 정리 · 녹음 글로 옮기기 · 데이터베이스 — 순서대로 연결, AI 정리 먼저</p>
       <div className="connection-list">
         <Fold title="1. AI 정리" group="connections" desc={row(c.ai.connected, `${c.ai.provider} · ${c.ai.model} · ${aiSource}`)}>
-          {guide([
+          {guide('ai', 'AI 정리', [
             ['키 발급', <>{ext('https://platform.openai.com/api-keys', 'OpenAI API keys')} → Create new secret key → 복사(한 번만 표시)</>],
             ['결제', <>{ext('https://platform.openai.com/settings/organization/billing', 'Billing')} 카드 등록 — 미등록이면 호출 거절</>],
-            ['여기 입력', '아래 칸에 붙여 넣고 저장 — 서버가 OpenAI 확인 후 암호문 저장'],
+            ['여기 입력', 'AI 정리 칸의 OpenAI API 키에 붙여 넣고 저장 — 서버가 OpenAI 확인 후 암호문 저장'],
             ['AI가 돕는 범위', '키 검증·저장·연결 상태 확인·요약 생성 — 계정 가입·결제·키 발급은 사람'],
           ])}
           {c.ai.provider === 'openai' && (
@@ -1738,10 +1818,9 @@ export function ConnectionsPane() {
         <Fold
           title="2. 녹음 글로 옮기기"
           group="connections"
-         
           desc={row(c.stt.connected, `${c.stt.provider}${c.stt.region ? ` · ${c.stt.region}` : ''} · 서버 ${c.stt.env}`)}
         >
-          {guide([
+          {guide('stt', '녹음 글로 옮기기', [
             ['리소스 만들기', <>{ext('https://portal.azure.com/#create/Microsoft.CognitiveServicesSpeechServices', 'Azure Speech 리소스 만들기')} — 리전 Korea Central, 요금제 S0</>],
             ['키·리전 확인', 'Azure 포털 › 리소스 › Keys and Endpoint 에서 KEY 1 과 Location/Region'],
             ['서버에 넣기', <>기관 서버 <code>.env</code> 의 <code>AZURE_SPEECH_KEY</code>·<code>AZURE_SPEECH_REGION</code> 입력 후 앱 재시작(<code>docs/deploy.md</code>)</>],
@@ -1749,7 +1828,7 @@ export function ConnectionsPane() {
           ])}
         </Fold>
         <Fold title="3. 데이터베이스" group="connections" desc={row(c.db.connected, `Postgres · 서버 ${c.db.env}`)}>
-          {guide([
+          {guide('db', '데이터베이스', [
             ['DB 준비', <>{ext('https://supabase.com/dashboard', 'Supabase')} 프로젝트(서울 리전) 또는 기관 서버의 Postgres 17</>],
             ['연결 문자열', <>Supabase › Project Settings › Database 의 URI(<code>postgres://…</code>) → 기관 서버 <code>.env</code> 의 <code>DATABASE_URL</code></>],
             ['표 만들기', <><code>node api/src/migrate.ts</code> 로 스키마 적용 후 앱 재시작 — 백업은 <code>scripts/backup.sh</code></>],
@@ -1764,15 +1843,14 @@ export function ConnectionsPane() {
 // ── 실무자 ────────────────────────────────────────────────────────────────
 
 function RequestPane({ me }: { me: { id: number } }) {
-  const [rows, setRows] = useState<RequestRow[] | null>(null);
-  useEffect(() => {
-    void listRequests().then(setRows);
-  }, [me.id]);
+  const { data: rows, error, reload } = useLoad(listRequests, [me.id]);
   return (
     <Card
       title="내가 올린 배정 요청"
     >
-      {rows === null ? (
+      {error ? (
+        <LoadError error={error} onRetry={reload} />
+      ) : rows === null ? (
         <Empty>불러오는 중</Empty>
       ) : rows.length === 0 ? (
         <Empty>올린 요청 없음</Empty>
