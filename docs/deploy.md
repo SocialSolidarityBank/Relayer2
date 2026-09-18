@@ -32,13 +32,21 @@ docker run -p 8787:8787 --env-file .env relayer:0.1.0
 | 이름 | 없으면 |
 |---|---|
 | `DATABASE_URL` | 로컬 기본값으로 붙는다(배포에서는 반드시 준다) |
-| `PII_ENC_KEY` | 금고·자유 글 암복호가 실패한다. base64 32바이트 |
+| `PII_ENC_KEY` | 금고·자유 글·Blob 파일 암복호가 실패한다. base64 32바이트 |
 | `SESSION_SECRET` | 로그인이 실패한다 |
 | `PORT` | 8787 |
 | `RELAYER_SLUG` | 화면의 `주소` 행이 숨는다(읽기 전용 값, 화면에서 못 바꾼다). 기관별 서브도메인의 라벨(아래) |
 | `RELAYER_PUBLIC_URL` | 있으면 `주소` 에 slug 대신 이 접속 주소를 보인다(예: `https://yeondae.relayer.kr`) |
+| `STORAGE_BACKEND` | `fs`. Azure Blob을 쓰는 배포는 `blob` |
+| `VOICE_ROOT` | `./voice`. `STORAGE_BACKEND=fs`에서만 사용 |
+| `DOC_ROOT` | `./documents`. `STORAGE_BACKEND=fs`에서만 사용 |
+| `AZURE_STORAGE_CONNECTION_STRING` | `STORAGE_BACKEND=blob`이면 아래 계정+키 두 변수와 둘 중 하나가 반드시 필요 |
+| `AZURE_STORAGE_ACCOUNT` | 연결 문자열을 쓰지 않는 Blob 배포의 저장소 계정 이름 |
+| `AZURE_STORAGE_ACCOUNT_KEY` | 연결 문자열을 쓰지 않는 Blob 배포의 저장소 계정 키 |
 
-**`PII_ENC_KEY` 는 백업과 다른 곳에 둔다.** 잃으면 자유 글과 금고를 영영 못 읽는다(`SPEC.md` §13).
+**`PII_ENC_KEY` 는 백업과 다른 곳에 둔다.** 잃으면 자유 글·금고·Blob의 음성·문서를 영영 못 읽는다(`SPEC.md` §13·§16).
+Blob 백엔드는 고정 컨테이너 `voice`·`documents`를 만들고, 업로드 전에 이 키에서 HKDF-SHA-256
+라벨 `storage`로 파생한 별도 키로 AES-256-GCM 암호화한다. 연결 문자열이 있으면 계정+키보다 우선한다.
 
 ## 올리기 전에
 

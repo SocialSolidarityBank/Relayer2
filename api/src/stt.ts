@@ -2,12 +2,17 @@
 //
 //   녹음 동의 → 녹음 저장 → STT 동의 → 외부 전사 → 가림 → 초안 → 사람이 확인해야 기록
 //
-// 음성 원본은 **기관 안에만** 둔다. 밖으로 나가는 것은 STT 호출 한 번뿐이고 그것도 동의가 있어야 한다.
+// 음성 원본은 **기관 전용 저장소에만** 둔다. 밖으로 나가는 것은 STT 호출 한 번뿐이고 그것도 동의가 있어야 한다.
 // 전사문은 회차 기록의 후보이지 기록이 아니다 — 승인 게이트는 AI 초안과 같다.
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import type { Readable } from 'node:stream';
 import { z } from 'zod';
+import {
+  getStorage,
+  peekStoredBody,
+  readStoredBytes,
+  StorageObjectNotFound,
+} from './storage.ts';
 import {
   assertCaseAccess,
   assertCaseOpen,
@@ -38,8 +43,6 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 /** 정본이 `azure` 로 못박았다. 다른 곳으로 음성을 보내려면 정본을 먼저 고친다. */
 const PROVIDER = 'azure' as const;
 
-/** 음성이 사는 곳. 기관 디스크다. 백업 스크립트는 여기를 건드리지 않는다. */
-const VOICE_ROOT = resolve(process.env.VOICE_ROOT ?? './voice');
 
 /**
  * 한 번에 받는 음성의 상한. 라우트의 본문 제한과 같은 값이다.
@@ -214,8 +217,9 @@ export async function saveRecording(
   // 어느 쪽이 없든 실패가 아니라 건너뜀이다. 이유는 화면이 그대로 보여 준다.
   const autoStart = await autoTranscribeGate(session.case_id);
 
-  const days = RETENTION_DAYS[CONSENT_COPY.voice_original_retention_period.retentionDuration ?? ''];
-  if (!days) throw new Error('보유기간 문구 해석 실패');
+  const retention = CONSENT_COPY.voice_original_retention_period.retentionDuration;
+  if (!retention) throw new Error('보유기간 문구 해석 실패');
+  const days = RETENTION_DAYS[retention];
 
   const sha256 = createHash('sha256').update(audio).digest('hex');
   // 같은 회차에 같은 파일을 두 번 올리면 새 물건이 아니다 — 있는 행을 돌려준다.
@@ -228,12 +232,11 @@ export async function saveRecording(
     return dup;
   }
 
-  // 사례별로 나눠 둔다. 사례를 통째로 지울 때 폴더 하나만 지우면 된다.
+  // 사례별로 나눠 둔다. 사례를 통째로 지울 때 같은 접두사를 쓴다.
   // 파일명은 우리가 만든다 — 보낸 쪽 파일명은 그 자체로 정보가 샌다.
-  const relPath = join(String(session.case_id), `${sessionId}-${randomUUID()}.${format}`);
-  const full = join(VOICE_ROOT, relPath);
-  await mkdir(dirname(full), { recursive: true, mode: 0o700 });
-  await writeFile(full, audio, { mode: 0o600, flag: 'wx' });
+  const relPath = `${session.case_id}/${sessionId}-${randomUUID()}.${format}`;
+  const storage = getStorage();
+  await storage.put('voice', relPath, audio, { overwrite: false });
 
   const deleteAfter = new Date(Date.now() + days * 86_400_000).toISOString();
   let row: Recording;
@@ -246,8 +249,8 @@ export async function saveRecording(
               ${autoStart.state}, ${autoStart.note})
       returning ${RECORDING_COLUMNS}`;
   } catch (err) {
-    // 행이 없는 파일은 아무도 지우지 않는다. 쓰고 실패했으면 바로 치운다.
-    await rm(full, { force: true });
+    // 행이 없는 객체는 아무도 지우지 않는다. 원래 DB 오류를 보존하며 최선으로 치운다.
+    await storage.delete('voice', relPath).catch(() => undefined);
     throw err;
   }
 
@@ -290,7 +293,12 @@ export async function listRecordings(sessionId: number, actorId: number): Promis
 export async function readRecordingAudio(
   recordingId: number,
   actorId: number,
-): Promise<{ recording: Recording; bytes: Uint8Array; content_type: string }> {
+): Promise<{
+  recording: Recording;
+  body: Readable;
+  bytes: number;
+  content_type: string;
+}> {
   const caseId = await caseIdOfRecording(recordingId);
   if (caseId === null) throw new NotFound('녹음 없음');
   await assertCaseAccess(caseId, actorId);
@@ -300,18 +308,29 @@ export async function readRecordingAudio(
     from recordings where id = ${recordingId}`;
   if (!rec) throw new NotFound('녹음 없음');
   if (rec.deleted_at) throw new RecordingRejected('보유기간 만료로 삭제된 녹음');
-  const full = join(VOICE_ROOT, rec.rel_path);
-  const info = await stat(full);
-  if (info.size > SPEECH_MAX_BYTES) {
+  const stored = await getStorage().open('voice', rec.rel_path).catch((error: unknown) => {
+    if (error instanceof StorageObjectNotFound) throw new RecordingRejected('녹음 파일 없음');
+    throw error;
+  });
+  if (stored.plaintextBytes > SPEECH_MAX_BYTES) {
+    stored.body.destroy();
     throw new RecordingRejected('재생 불가, 허용 크기 초과');
   }
-  const bytes = await readFile(full);
-  const format = detectFormat(bytes, rec.content_type);
-  if (!format) throw new RecordingRejected('녹음 파일 형식 불일치');
+  const { prefix, body } = await peekStoredBody(stored, 12);
+  const format = detectFormat(prefix, rec.content_type);
+  if (!format) {
+    body.destroy();
+    throw new RecordingRejected('녹음 파일 형식 불일치');
+  }
   await audit({ actorId, action: 'voice.read', caseId, fields: [`recording=${recordingId}`] });
-  // 파일을 읽는 사이 배정이 빠졌다면 바이트를 내보내지 않는다.
+  // 객체를 여는 사이 배정이 빠졌다면 바이트를 내보내지 않는다.
   await assertCaseAccess(caseId, actorId);
-  return { recording: rec, bytes, content_type: FORMAT_INFO[format].mime };
+  return {
+    recording: rec,
+    body,
+    bytes: stored.plaintextBytes,
+    content_type: FORMAT_INFO[format].mime,
+  };
 }
 
 const AzureResultSchema = z.object({
@@ -362,10 +381,14 @@ async function transcribeAudio(
     throw new SttUnavailable('전사 제공자 주소 설정 오류');
   }
 
+  const blobBytes =
+    audio.buffer instanceof ArrayBuffer
+      ? new Uint8Array(audio.buffer, audio.byteOffset, audio.byteLength)
+      : Uint8Array.from(audio);
   const form = new FormData();
   form.append(
     'audio',
-    new Blob([audio], { type: FORMAT_INFO[format].mime }),
+    new Blob([blobBytes], { type: FORMAT_INFO[format].mime }),
     `audio.${FORMAT_INFO[format].ext}`,
   );
   form.append('definition', JSON.stringify({ locales: ['ko-KR'], profanityFilterMode: 'None' }));
@@ -516,12 +539,15 @@ async function transcribeRecording(recordingId: number, actorId: number): Promis
   await assertCaseOpen(session.case_id);
   await assertConsent(session.case_id, 'external_stt_processing');
 
-  const full = join(VOICE_ROOT, rec.rel_path);
-  const info = await stat(full);
-  if (info.size > SPEECH_MAX_BYTES) {
+  const stored = await getStorage().open('voice', rec.rel_path).catch((error: unknown) => {
+    if (error instanceof StorageObjectNotFound) throw new RecordingRejected('녹음 파일 없음');
+    throw error;
+  });
+  if (stored.plaintextBytes > SPEECH_MAX_BYTES) {
+    stored.body.destroy();
     throw new RecordingRejected('전사 불가, 허용 크기 초과');
   }
-  const audio = await readFile(full);
+  const audio = await readStoredBytes(stored, SPEECH_MAX_BYTES);
   const format = detectFormat(audio, rec.content_type);
   if (!format) throw new RecordingRejected('전사 불가, 알 수 없는 음성 형식');
   // 파일을 읽는 사이 권한·동의가 바뀔 수 있다. 외부 전송 바로 앞에서 다시 확인한다.
@@ -704,25 +730,22 @@ export async function sweepExpiredRecordings(): Promise<{
   let deleted = 0;
   let missing = 0;
   let failed = 0;
+  const storage = getStorage();
   for (const rec of due) {
-    const full = join(VOICE_ROOT, rec.rel_path);
     try {
-      await rm(full);
-      deleted += 1;
-    } catch (err) {
-      if (err && typeof err === 'object' && 'code' in err && err.code === 'ENOENT') {
-        // 이미 없는 파일도 지운 것으로 표시한다. 없는 것을 계속 붙들고 있을 이유가 없다.
-        missing += 1;
-      } else {
-        // 권한·디스크 오류는 지운 게 아니다. 표시하지 않고 다음 청소 때 다시 본다.
-        failed += 1;
-        continue;
-      }
+      const result = await storage.delete('voice', rec.rel_path);
+      if (result === 'deleted') deleted += 1;
+      else missing += 1;
+    } catch {
+      // 권한·저장소 오류는 지운 게 아니다. 표시하지 않고 다음 청소 때 다시 본다.
+      failed += 1;
+      continue;
     }
     await sql`update recordings set deleted_at = now() where id = ${rec.id}`;
   }
   if (due.length > 0) {
     await audit({
+      actorId: 0,
       action: 'voice.sweep',
       fields: [`deleted=${deleted}`, `missing=${missing}`, `failed=${failed}`],
     });
@@ -745,9 +768,10 @@ export async function withdrawCaseRecordings(
     where s.case_id = ${caseId} and r.deleted_at is null`;
   let deleted = 0;
   let failed = 0;
+  const storage = getStorage();
   for (const rec of rows) {
     try {
-      await rm(join(VOICE_ROOT, rec.rel_path), { force: true });
+      await storage.delete('voice', rec.rel_path);
     } catch {
       failed += 1;
       continue;

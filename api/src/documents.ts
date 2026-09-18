@@ -1,19 +1,17 @@
 // 서면 문서(2026-09-16 Q). 상담 중 받은 종이·파일을 사례에 붙인다.
 //
-//   동의 확인 → 기관 디스크에 저장 → 목록 → 내려받기(감사에 남긴다) → 기한이 지나면 삭제
+//   동의 확인 → 기관 전용 저장소에 저장 → 목록 → 내려받기(감사에 남긴다) → 기한이 지나면 삭제
 //
 // 음성과 같은 규칙이다. 바이트는 DB 에 넣지 않고, 지울 날을 처음부터 박고, 지운 뒤에도 행은 남긴다.
 // 다른 점 하나 — **문서는 다시 열어 본다.** 그래서 내려받을 때마다 누가 언제 열었는지 남긴다.
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import type { Readable } from 'node:stream';
+import { getStorage, StorageObjectNotFound } from './storage.ts';
 import { assertConsent } from './service.ts';
 import { audit } from './audit.ts';
 import { CONSENT_COPY, RETENTION_DAYS } from './consent.ts';
 import { sql } from './db.ts';
 
-/** 문서가 사는 곳. 기관 디스크다. 백업 스크립트도 저장소도 건드리지 않는다. */
-const DOC_ROOT = resolve(process.env.DOC_ROOT ?? './documents');
 
 /** 받는 형식. 실행 파일과 압축을 받지 않는다 — 상담에서 주고받을 물건이 아니다. */
 const ALLOWED = new Set([
@@ -71,19 +69,24 @@ export async function saveDocument(input: {
 
   const days = RETENTION_DAYS[CONSENT_COPY.document_attachment.retentionDuration ?? 'institution_retention_30d'];
   const sha256 = createHash('sha256').update(input.bytes).digest('hex');
-  // 사례별로 나눠 둔다. 사례를 통째로 지울 때 폴더 하나만 지우면 된다.
+  // 사례별로 나눠 둔다. 사례를 통째로 지울 때 같은 접두사를 쓴다.
   // 원본 파일명은 쓰지 않는다 — `김민희_진단서.pdf` 는 그 자체로 정보가 샌다.
-  const relPath = join(String(input.caseId), `${Date.now()}-${sha256.slice(0, 12)}`);
-  const full = join(DOC_ROOT, relPath);
-  await mkdir(dirname(full), { recursive: true, mode: 0o700 });
-  await writeFile(full, input.bytes, { mode: 0o600 });
+  const relPath = `${input.caseId}/${Date.now()}-${sha256.slice(0, 12)}`;
+  const storage = getStorage();
+  await storage.put('documents', relPath, input.bytes);
 
   const deleteAfter = new Date(Date.now() + days * 86_400_000).toISOString();
-  const [row] = await sql<DocumentRow[]>`
-    insert into documents (case_id, session_id, label, rel_path, bytes, content_type, sha256, delete_after, created_by)
-    values (${input.caseId}, ${input.sessionId ?? null}, ${label}, ${relPath},
-            ${input.bytes.byteLength}, ${input.contentType}, ${sha256}, ${deleteAfter}, ${input.actorId})
-    returning ${COLUMNS}`;
+  let row: DocumentRow;
+  try {
+    [row] = await sql<DocumentRow[]>`
+      insert into documents (case_id, session_id, label, rel_path, bytes, content_type, sha256, delete_after, created_by)
+      values (${input.caseId}, ${input.sessionId ?? null}, ${label}, ${relPath},
+              ${input.bytes.byteLength}, ${input.contentType}, ${sha256}, ${deleteAfter}, ${input.actorId})
+      returning ${COLUMNS}`;
+  } catch (error) {
+    await storage.delete('documents', relPath).catch(() => undefined);
+    throw error;
+  }
 
   await audit({
     actorId: input.actorId,
@@ -108,13 +111,16 @@ export async function listDocuments(caseId: number): Promise<DocumentRow[]> {
 export async function readDocument(
   id: number,
   actorId: number,
-): Promise<{ row: DocumentRow; bytes: Uint8Array }> {
+): Promise<{ row: DocumentRow; body: Readable; bytes: number }> {
   const [row] = await sql<Array<DocumentRow & { rel_path: string }>>`
     select ${COLUMNS}, rel_path from documents where id = ${id}`;
   if (!row) throw new DocumentRejected('문서 없음');
   if (row.deleted_at) throw new DocumentRejected('보유기간 만료로 삭제된 문서');
 
-  const bytes = new Uint8Array(await readFile(join(DOC_ROOT, row.rel_path)));
+  const stored = await getStorage().open('documents', row.rel_path).catch((error: unknown) => {
+    if (error instanceof StorageObjectNotFound) throw new DocumentRejected('문서 파일 없음');
+    throw error;
+  });
 
   await audit({
     actorId,
@@ -123,33 +129,43 @@ export async function readDocument(
     fields: [`document=${id}`, `label=${row.label}`],
   });
 
-  return { row, bytes };
+  return { row, body: stored.body, bytes: stored.plaintextBytes };
 }
 
 /**
  * 기한이 지난 문서를 지운다. 파일을 지우고 행은 남긴다 —
  * 음성과 같은 규칙이다.
  */
-export async function sweepExpiredDocuments(): Promise<{ deleted: number; missing: number }> {
+export async function sweepExpiredDocuments(): Promise<{
+  deleted: number;
+  missing: number;
+  failed: number;
+}> {
   const due = await sql<Array<{ id: number; rel_path: string; case_id: number }>>`
     select id, rel_path, case_id from documents
     where deleted_at is null and delete_after <= now()`;
 
   let deleted = 0;
   let missing = 0;
+  let failed = 0;
+  const storage = getStorage();
   for (const doc of due) {
-    const full = join(DOC_ROOT, doc.rel_path);
     try {
-      await stat(full);
-      await rm(full, { force: true });
-      deleted += 1;
+      const result = await storage.delete('documents', doc.rel_path);
+      if (result === 'deleted') deleted += 1;
+      else missing += 1;
     } catch {
-      missing += 1;
+      failed += 1;
+      continue;
     }
     await sql`update documents set deleted_at = now() where id = ${doc.id}`;
   }
   if (due.length > 0) {
-    await audit({ action: 'document.sweep', fields: [`deleted=${deleted}`, `missing=${missing}`] });
+    await audit({
+      actorId: 0,
+      action: 'document.sweep',
+      fields: [`deleted=${deleted}`, `missing=${missing}`, `failed=${failed}`],
+    });
   }
-  return { deleted, missing };
+  return { deleted, missing, failed };
 }

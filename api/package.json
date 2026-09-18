@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@azure/storage-blob": "^12.33.0",
     "@hono/node-server": "^1.13.7",
     "@node-rs/argon2": "^2.2.1",
     "hono": "^4.6.14",

@@ -1,4 +1,5 @@
 // 라우터 하나, 검증 한 곳. 베타 API 6개(PLAN §5).
+import { Readable } from 'node:stream';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { actorFromCookie, clearCookie, issueCookie, login, type Actor } from './auth.ts';
@@ -572,11 +573,11 @@ app.get('/sessions/:id/recordings', async (c) => {
 
 app.get('/recordings/:id/audio', async (c) => {
   const recordingId = await recordingAccess(c.req.param('id'), c.get('actor').id);
-  const { bytes, content_type } = await readRecordingAudio(recordingId, c.get('actor').id);
-  return new Response(bytes, {
+  const { body, bytes, content_type } = await readRecordingAudio(recordingId, c.get('actor').id);
+  return new Response(Readable.toWeb(body) as ReadableStream<Uint8Array>, {
     headers: {
       'content-type': content_type,
-      'content-length': String(bytes.byteLength),
+      'content-length': String(bytes),
       'content-disposition': 'inline',
       'cache-control': 'no-store',
     },
@@ -649,11 +650,12 @@ app.get('/cases/:id/documents', async (c) => {
 
 app.get('/documents/:id', async (c) => {
   const documentId = await documentAccess(c.req.param('id'), c.get('actor').id);
-  const { row, bytes } = await readDocument(documentId, c.get('actor').id);
+  const { row, body, bytes } = await readDocument(documentId, c.get('actor').id);
   // 파일 이름은 사람이 붙인 이름을 쓴다. 원본 파일명은 저장하지 않는다.
-  return new Response(bytes, {
+  return new Response(Readable.toWeb(body) as ReadableStream<Uint8Array>, {
     headers: {
       'content-type': row.content_type,
+      'content-length': String(bytes),
       'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(row.label)}`,
       'cache-control': 'no-store',
     },
