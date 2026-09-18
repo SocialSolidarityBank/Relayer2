@@ -4,6 +4,7 @@
 // 15초 다시보기는 폐지했다(2026-09-17 Q) — 화면·탭·버튼 어디에도 두지 않는다.
 import { useEffect, useState, type ReactNode } from 'react';
 import {
+  appUrl,
   documentHref,
   getAccess,
   getBriefing,
@@ -513,7 +514,7 @@ function Access({ caseId }: { caseId: number }) {
     void getAccess(caseId).then(setState);
   }, [caseId]);
 
-  const link = issued ? `${window.location.origin}/#/access/${issued.token}` : null;
+  const link = issued ? appUrl(`/access/${issued.token}`) : null;
 
   const issue = async () => {
     setBusy(true);
