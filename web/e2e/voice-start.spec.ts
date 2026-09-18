@@ -72,28 +72,28 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
   await page.getByRole('tab', { name: '회차별 요약' }).click();
   // 한 회차가 한 접힘 카드다(2026-09-17 Q). 기록 상태는 펼친 본문의 `기록 상태` 구역에 있다.
   const fold = page.locator('details', { hasText: '1회차' }).first();
-  await fold.locator('summary').click();
+  // 머리 가운데는 행동 버튼 넷이 차지한다(2026-09-18 Q F4) — 제목 글자를 눌러 펼친다.
+  await fold.locator('.seq-head-no').click();
   await expect(fold).toContainText('수기 미작성');
   await expect(fold).toContainText('녹음 1');
   await expect(fold).toContainText('전사 건너뜀');
 
-  // ── 원본 드로어 — `회차별 원본 보기` 탭이 유일한 입구다(2026-09-18 Q) ──
-  // 전용 화면(`/full`)으로 떠나지 않는다. 수기·녹음이 둘 다 있으면 드로어 안에서 오간다.
+  // ── 원본 팝업 — 큰 모달 두 열, 왼쪽 수기·오른쪽 녹음 전사(2026-09-18 Q E2) ──
+  // 전용 화면(`/full`)으로 떠나지 않는다. 두 열이 늘 같이 서므로 오가는 탭이 없다.
   await page.getByRole('tab', { name: '회차별 원본 보기' }).click();
   await page
     .locator('.wire-repeat-card', { hasText: '1회차' })
     .getByRole('button', { name: '원본 보기' })
     .click();
-  const drawer = page.getByRole('dialog', { name: '1회차 상담 기록' });
-  await expect(drawer).toContainText('수기 미작성');
-  await drawer.getByRole('tab', { name: '녹음 전사' }).click();
-  const voiceDrawer = page.getByRole('dialog', { name: '1회차 녹음 전사' });
-  await expect(voiceDrawer.locator('audio')).toHaveCount(1);
-  await expect(voiceDrawer).toContainText('전사 건너뜀');
-  await voiceDrawer.getByRole('button', { name: '닫기' }).click();
-  await expect(voiceDrawer).toBeHidden();
+  const original = page.getByRole('dialog', { name: '1회차 원본' });
+  await expect(original.getByRole('region', { name: '수기 기록' })).toContainText('수기 미작성');
+  const voiceCol = original.getByRole('region', { name: '녹음 전사' });
+  await expect(voiceCol.locator('audio')).toHaveCount(1);
+  await expect(voiceCol).toContainText('전사 건너뜀');
+  await original.getByRole('button', { name: '닫기' }).click();
+  await expect(original).toBeHidden();
 
-  // ── 드로어를 닫으면 목록이 그대로 있다 ───────────────────────
+  // ── 팝업을 닫으면 목록이 그대로 있다 ───────────────────────
   await expect(page.getByRole('heading', { name: NAME })).toBeVisible();
   await expect(page.getByRole('tab', { name: '회차별 원본 보기' })).toBeVisible();
 });

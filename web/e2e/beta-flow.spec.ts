@@ -179,17 +179,29 @@ test('등록부터 회차 기록·이어받기까지 한 바퀴', async ({ page 
   await expect(goalDialog).toBeHidden();
 
   // ── 회차별 원본 보기: 2회차가 넘긴 다음 상담 목표 ───────────
-  // 원본 입구는 이 탭 하나이고, 열리는 것은 드로어다(2026-09-18 Q).
+  // 열리는 것은 큰 팝업 두 열(수기 · 녹음 전사)이다(2026-09-18 Q E2 — 드로어 폐지).
   await page.getByRole('tab', { name: '회차별 원본 보기' }).click();
   await page
     .locator('.wire-repeat-card', { hasText: '2회차' })
     .getByRole('button', { name: '원본 보기' })
     .click();
-  const originalDrawer = page.getByRole('dialog', { name: '2회차 상담 기록' });
-  await expect(originalDrawer).toContainText(NEXT_GOAL);
-  await originalDrawer.getByRole('button', { name: '닫기' }).click();
-  await expect(originalDrawer).toBeHidden();
-  // 드로어를 닫아도 회차 목록을 떠나지 않는다 — 그게 모달·전용 화면 대신 드로어를 쓰는 이유다.
+  const originalDialog = page.getByRole('dialog', { name: '2회차 원본' });
+  await expect(originalDialog.getByRole('region', { name: '수기 기록' })).toContainText(NEXT_GOAL);
+  await expect(originalDialog.getByRole('region', { name: '녹음 전사' })).toContainText('올라온 녹음 없음');
+  // 원문 수정은 편집 모드 + 리비전 로그다(D3, L5 `POST /sessions/:id/revisions`). 저장하면 원문이
+  // 바뀌고 수정 기록이 남는다 — 지울 수 없다.
+  const written = originalDialog.getByRole('region', { name: '수기 기록' });
+  await written.getByRole('button', { name: '수정', exact: true }).click();
+  const memoBox = originalDialog.getByRole('textbox', { name: '오늘 상담 내용' });
+  await expect(memoBox).toHaveValue('내역서는 아직 못 뗐다고 함.');
+  await memoBox.fill('내역서는 아직 못 뗐다고 함. 다음 주 발급 예정.');
+  await written.getByRole('button', { name: '저장', exact: true }).click();
+  await expect(written).toContainText('다음 주 발급 예정.');
+  await expect(written).toContainText('수정 기록 1');
+  await expect(memoBox).toHaveCount(0);
+  await originalDialog.getByRole('button', { name: '닫기' }).click();
+  await expect(originalDialog).toBeHidden();
+  // 팝업을 닫아도 회차 목록을 떠나지 않는다.
   await expect(page.getByRole('tab', { name: '회차별 원본 보기' })).toBeVisible();
 
   // ── 확인할 과제·오늘 물어볼 것은 상담 기록하기의 레일이 보여 준다 ──
@@ -404,16 +416,16 @@ test('인테이크를 다시 열어 고쳐 쓴다', async ({ page }) => {
   await expect(page).toHaveURL(/\/schedule$/);
 
   // 다시 열면 적어 둔 것이 그대로 있다.
-  // 한 번 쓴 인테이크는 메뉴에 없다 — 회차별 요약에서 고쳐 쓴다.
-  await openInfo(page, '회차별 요약');
+  // 한 번 쓴 인테이크는 메뉴에 없다 — 원본 팝업의 잠근 인테이크 화면에서 `수정` 으로 고쳐 쓴다
+  // (2026-09-18 Q F4 — 요약 머리의 `수정` 은 요약문 수정이다).
+  await openInfo(page, '회차별 원본 보기');
   await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
-  await page
-    .locator('section.wire-card')
-    .filter({ has: page.getByRole('heading', { name: '회차별 요약' }) })
-    .locator('details', { hasText: '인테이크' })
-    .getByRole('button', { name: '수정' })
-    .click();
+  await page.locator('.wire-repeat-card', { hasText: '인테이크' }).getByRole('button', { name: '원본 보기' }).click();
+  const intakeOriginal = page.getByRole('dialog', { name: '1회차 원본' });
+  await expect(intakeOriginal.locator('#overall-goal')).toHaveValue('처음 적은 목표');
+  await intakeOriginal.getByRole('button', { name: '수정', exact: true }).click();
   await expect(page).toHaveURL(/\/intake$/);
+  await expect(intakeOriginal).toHaveCount(0);
   await expect(page.locator('#overall-goal')).toHaveValue('처음 적은 목표');
   await expect(page.locator('section.wire-card').filter({ has: page.getByRole('heading', { name: '수행할 과제' }) }))
     .toContainText('처음 적은 과제');
@@ -472,12 +484,10 @@ test('회차를 고쳐 쓰고, 적어만 둔 줄도 저장된다', async ({ page
   await page.getByRole('button', { name: '저장' }).click();
   await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
 
-  // 당사자 정보 › 회차별 요약에서 그 회차를 고쳐 쓴다
-  await openInfo(page, '회차별 요약');
-  const summary = page
-    .locator('section.wire-card')
-    .filter({ has: page.getByRole('heading', { name: '회차별 요약' }) });
-  await summary.locator('details', { hasText: '2회차' }).getByRole('button', { name: '수정' }).click();
+  // 당사자 정보 › 회차별 원본 보기 팝업의 `기록 수정` 으로 그 회차를 고쳐 쓴다(2026-09-18 Q F4)
+  await openInfo(page, '회차별 원본 보기');
+  await page.locator('.wire-repeat-card', { hasText: '2회차' }).getByRole('button', { name: '원본 보기' }).click();
+  await page.getByRole('dialog', { name: '2회차 원본' }).getByRole('button', { name: '기록 수정' }).click();
   await expect(page).toHaveURL(/\/edit$/);
 
   // 지난번에 적은 것과 매긴 결과가 그대로 서 있다
@@ -492,6 +502,9 @@ test('회차를 고쳐 쓰고, 적어만 둔 줄도 저장된다', async ({ page
   // 완료로 바꿨으니 확인할 과제에서 빠지고, 회차는 늘지 않는다
   await expect(page.locator('.wire-container')).not.toContainText(task);
   await openInfo(page, '회차별 요약');
+  const summary = page
+    .locator('section.wire-card')
+    .filter({ has: page.getByRole('heading', { name: '회차별 요약' }) });
   await expect(summary).toContainText('2회차');
   await expect(summary).not.toContainText('3회차');
 });
@@ -530,8 +543,8 @@ test('민감정보 동의가 없으면 기록을 저장하지 못하고, 받으�
   const sensitive = consent.locator('details', { has: page.getByText('민감정보 처리', { exact: true }) });
   await expect(sensitive.locator('.fold-title-desc')).toContainText('동의 없음');
   await sensitive.locator('summary').click();
-  await expect(sensitive.getByText('동의문', { exact: true })).toBeVisible();
-  const sensitiveCheck = sensitive.getByRole('checkbox', { name: '이 항목에 동의함' });
+  await expect(sensitive.getByText('동의 내용', { exact: true })).toBeVisible();
+  const sensitiveCheck = sensitive.getByRole('checkbox', { name: '동의', exact: true });
   await expect(sensitiveCheck).not.toBeChecked();
   // `check()` 대신 클릭이다 — 저장 동안 입력이 잠시 잠겨 Playwright 의 즉시 확인이 어긋난다.
   await sensitiveCheck.click();
@@ -615,13 +628,13 @@ test('자유 글을 저장하고 다시 열면 그대로 읽힌다', async ({ pa
   await page.getByRole('button', { name: '저장' }).click();
   await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
 
-  // 원본은 `회차별 원본 보기` 탭이 유일한 입구이고, 열리는 것은 드로어다(2026-09-18 Q).
+  // 원본은 `회차별 원본 보기` 탭에서 큰 팝업으로 연다(2026-09-18 Q E2).
   await openInfo(page, '회차별 원본 보기');
   await page
     .locator('.wire-repeat-card', { hasText: '2회차' })
     .getByRole('button', { name: '원본 보기' })
     .click();
-  await expect(page.getByRole('dialog', { name: '2회차 상담 기록' })).toContainText(memo);
+  await expect(page.getByRole('dialog', { name: '2회차 원본' })).toContainText(memo);
 });
 
 // P2 당사자 열람. 당사자는 로그인하지 않고 링크+코드로 자기 정보와 일정만 본다.
