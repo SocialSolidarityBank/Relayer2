@@ -1,5 +1,5 @@
 // 라우터 하나, 검증 한 곳. 베타 API 6개(PLAN §5).
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { z } from 'zod';
 import { actorFromCookie, clearCookie, issueCookie, login, type Actor } from './auth.ts';
@@ -124,9 +124,16 @@ app.get('/health', (c) => c.json({ ok: true }));
  * 확장자나 정규식으로 판정하지 않으므로 아래 허용 목록 규율(§isWebAsset)과 부딪히지 않는다:
  * 공개되는 것은 그 폴더에 **파일로 놓인 것**뿐이다.
  * 캐시 금지 미들웨어보다 앞이라 이 파일들에는 `no-store` 가 붙지 않는다(공개 페이지다).
+ *
+ * 수명은 60초다. 헤더를 안 주면 Cloudflare 가 자기 기본값(`max-age=14400`, 4시간)을 얹어
+ * 새로 배포한 CSS 가 네 시간 동안 옛것으로 나간다(2026-09-18 실측: `cf-cache-status: HIT`,
+ * `age: 1370`). 공개 페이지라 캐시는 필요하지만 배포가 반영되는 시간이 분 단위여야 한다.
  */
-app.get('/', serveStatic({ root: './site', path: './index.html' }));
-app.get('/*', serveStatic({ root: './site' }));
+const siteCache = (_path: string, c: Context): void => {
+  c.header('cache-control', 'public, max-age=60');
+};
+app.get('/', serveStatic({ root: './site', path: './index.html', onFound: siteCache }));
+app.get('/*', serveStatic({ root: './site', onFound: siteCache }));
 
 /**
  * API 응답은 저장하지 않는다. 이름·연락처·상담 내용이 실려 나가므로
