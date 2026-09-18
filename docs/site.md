@@ -11,14 +11,21 @@ site/                 공개되는 것만
   index.html          소개(랜딩)
   guide-user.html     사용자 가이드, 실무자용
   guide-admin.html    관리자 가이드
+  404.html            없는 주소. 앱이 낸다
   site.css            색과 형태. 앱 토큰의 사본이다
   site.js             펼침 목록과 가이드 목차 표시
+  robots.txt          크롤러. 앱 입구 둘만 막는다
+  sitemap.xml         세 쪽
   fonts/              Chillax, 영문 전용
   img/cover.webp      첫 화면 커버. 배경이 비어 있는 워드마크 그림
+  img/og.png          링크 미리보기 1200x630
+  img/icon-32.png     파비콘
+  img/icon-180.png    애플 터치 아이콘
   shots/              화면 사진
 
 docs/site.md          이 문서
 scripts/site-check-text.mjs   한글 검수
+scripts/deploy-site.sh        배포(관리자만)
 ```
 
 ## 보기
@@ -40,6 +47,10 @@ node scripts/site-check-text.mjs
 
 구획을 하나 늘릴 때는 `<section>` 하나를 복사하고, 가이드라면 목차(`data-toc`)에 줄 하나를 더한다.
 `id` 를 같게 맞추면 목차 표시가 따라온다.
+
+제목이나 설명을 바꿀 때는 `head` 안의 것도 같이 본다. 한 쪽에 같은 말이 세 군데 있다.
+`<title>`, `<meta name="description">`, `<meta property="og:title">`(과 `og:description`).
+링크 미리보기는 og 쪽을 읽으므로 이것을 두고 가면 카카오톡에는 옛 제목이 뜬다.
 
 ## 앱으로 가는 링크
 
