@@ -16,8 +16,8 @@ API = "https://app.infisical.com/api"
 # 없으면 배포를 멈춘다.
 WANT = ("DATABASE_URL", "PII_ENC_KEY", "SESSION_SECRET")
 
-# 없으면 그냥 건너뛴다 — **AI 가 없어도 제품은 돈다.**
-# 왼쪽이 Infisical 의 이름, 오른쪽이 앱이 읽는 이름이다.
+# 없는 이름은 건너뛴다. 각 소비자(deploy.py·azure/login.py)가 자기 필수 이름을 검사한다.
+# 왼쪽이 Infisical 이름, 오른쪽이 로컬 env 이름이다.
 OPTIONAL = {
     "RELAYER_OPENAI_API_KEY": "OPENAI_API_KEY",
     "GEMINI_API_KEY": "GEMINI_API_KEY",
@@ -27,6 +27,13 @@ OPTIONAL = {
     "AZURE_SPEECH_ENDPOINT": "AZURE_SPEECH_ENDPOINT",
     "AZURE_SPEECH_REGION": "AZURE_SPEECH_REGION",
     "VOICE_ENABLED": "VOICE_ENABLED",
+    "AZURE_STORAGE_ACCOUNT_KEY": "AZURE_STORAGE_ACCOUNT_KEY",
+    "AZURE_CLIENT_ID": "AZURE_CLIENT_ID",
+    "AZURE_CLIENT_SECRET": "AZURE_CLIENT_SECRET",
+    "AZURE_TENANT_ID": "AZURE_TENANT_ID",
+    "AZURE_SUBSCRIPTION_ID": "AZURE_SUBSCRIPTION_ID",
+    "RELAYER_SLUG": "RELAYER_SLUG",
+    "RELAYER_PUBLIC_URL": "RELAYER_PUBLIC_URL",
     "VOICE_ROOT": "VOICE_ROOT",
 }
 
@@ -85,7 +92,7 @@ def main() -> None:
     print(f".env 작성: {' '.join(WANT)} PORT" + (f" + {' '.join(extra)}" if extra else " (AI 키 없음 — AI 정리는 503)"))
     for name in vanished:
         print(f"경고: 직전 .env 에 있던 {name} 가 Infisical 응답에 없습니다.\n"
-              f"      이름이 바뀌었거나 다른 폴더로 옮겨졌을 수 있습니다. AI 정리는 503 이 됩니다.")
+              "      이름이 바뀌었거나 다른 폴더로 옮겨졌을 수 있어 해당 기능·배포를 중단해야 합니다.")
 
 
 main()

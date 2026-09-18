@@ -56,6 +56,7 @@ OpenAI 키 하나가 죽으면서 두 제품이 같이 멈췄다.
 | `AZURE_SPEECH_KEY` | RELAYER2가 사용하는 Azure Speech 인증 |
 | `AZURE_SPEECH_REGION` | 해당 Speech 리소스의 지역 |
 | `AZURE_SPEECH_ENDPOINT` | 리소스 전용 HTTPS 엔드포인트. 지역 대신 지정 가능 |
+| `AZURE_STORAGE_ACCOUNT_KEY` | ACA Blob `voice`·`documents` 접근. Blob 배포에서만 필수 |
 
 2026-09-16 Q가 기존 키 재사용을 허용하여, `ccc-stt-koreacentral`의 **기존 KEY 2**를 이 경로에 등록했다.
 `AZURE_SPEECH_REGION=koreacentral`, `VOICE_ENABLED=1`도 등록했다. 기존 Azure 키의 재생성이나 CCC 설정 변경은 하지 않았다.
@@ -63,6 +64,22 @@ Azure 인증 HTTP 200과 합성 한국어 음성의 Fast Transcription → 승�
 
 이 키는 기존 Speech 리소스를 공유하므로 사용량·요금·키 회전의 영향을 함께 받는다. 향후 KEY 2를 회전하면 RELAYER2도 갱신해야 한다.
 키 값은 출력하거나 별도 파일로 저장하지 않았으며, 실제 사람의 녹음은 검증에 사용하지 않았다. 운영 프로세스 반영 여부는 코드 배포와 별도로 확인한다.
+
+### Azure 배포 서비스 프린시펄
+
+조건부 액세스가 맥미니 디바이스 로그인을 막으므로, Q 승인 뒤 플래너가 등록된 맥북에서
+전용 서비스 프린시펄을 만들고 아래 이름을 같은 `prod:/RELAYER2`에 넣는다.
+
+| 이름 | 용도 |
+|---|---|
+| `AZURE_CLIENT_ID` | 서비스 프린시펄 client ID |
+| `AZURE_CLIENT_SECRET` | 서비스 프린시펄 secret |
+| `AZURE_TENANT_ID` | Entra tenant |
+| `AZURE_SUBSCRIPTION_ID` | 배포 대상 subscription |
+
+`scripts/azure/login.py`만 이 네 값을 소비한다. 플래너 지정 명령의 `-p`로 client secret을
+`az` 자식 프로세스에 넘기되 shell history에는 남기지 않고, Azure CLI 출력도 숨긴다.
+구독을 명시적으로 선택·대조한다. 디바이스 코드 로그인은 재시도하지 않는다.
 
 ---
 
