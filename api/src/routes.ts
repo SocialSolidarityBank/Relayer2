@@ -1,5 +1,6 @@
 // 라우터 하나, 검증 한 곳. 베타 API 6개(PLAN §5).
-import { Hono, type Context } from 'hono';
+import { readFileSync } from 'node:fs';
+import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { z } from 'zod';
 import { actorFromCookie, clearCookie, issueCookie, login, type Actor } from './auth.ts';
@@ -132,11 +133,41 @@ app.get('/health', (c) => c.json({ ok: true }));
  * 새로 배포한 CSS 가 네 시간 동안 옛것으로 나간다(2026-09-18 실측: `cf-cache-status: HIT`,
  * `age: 1370`). 공개 페이지라 캐시는 필요하지만 배포가 반영되는 시간이 분 단위여야 한다.
  */
-const siteCache = (_path: string, c: Context): void => {
-  c.header('cache-control', 'public, max-age=60');
-};
-app.get('/', serveStatic({ root: './site', path: './index.html', onFound: siteCache }));
-app.get('/*', serveStatic({ root: './site', onFound: siteCache }));
+const siteRoot = './site';
+const siteCacheHeader = 'public, max-age=60';
+app.get(
+  '/',
+  serveStatic({
+    root: siteRoot,
+    path: './index.html',
+    onFound: (_path, c) => c.header('cache-control', siteCacheHeader),
+  }),
+);
+app.get(
+  '/*',
+  serveStatic({ root: siteRoot, onFound: (_path, c) => c.header('cache-control', siteCacheHeader) }),
+);
+
+/**
+ * 없는 쪽은 공개 404 쪽을 돌려준다. 이것이 없으면 주소를 잘못 친 방문자가
+ * `{"error":"로그인 필요"}` 를 본다(2026-09-18 실측).
+ *
+ * 걸러 내는 조건 둘이다. `isWebAsset` 인 주소는 앱이 갖고(루트·`/test`·`/app`·`/assets/*`),
+ * 브라우저가 쪽을 달라고 온 요청(`Accept: text/html`)만 이 쪽을 본다. 화면이 `fetch` 로
+ * 부르는 자료 경로는 `*\/*` 로 오므로 그대로 로그인 게이트로 간다.
+ * 404 는 401 보다 알려 주는 것이 적다. 있는지 없는지를 말하지 않는다.
+ */
+app.get('/*', (c, next) => {
+  const path = new URL(c.req.url).pathname;
+  if (isWebAsset(path)) return next();
+  if (!(c.req.header('accept') ?? '').includes('text/html')) return next();
+  try {
+    return c.html(readFileSync(`${siteRoot}/404.html`, 'utf8'), 404);
+  } catch {
+    // 그 파일이 없는 배포(site/ 없이 앱만 띄운 경우)는 종전대로 로그인 게이트가 답한다.
+    return next();
+  }
+});
 
 /**
  * API 응답은 저장하지 않는다. 이름·연락처·상담 내용이 실려 나가므로
