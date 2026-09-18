@@ -30,6 +30,34 @@ export function decryptPii(packed: string | null | undefined): string | null {
   return Buffer.concat([decipher.update(Buffer.from(body, 'base64')), decipher.final()]).toString('utf8');
 }
 
+const BINARY_IV_BYTES = 12;
+const BINARY_TAG_BYTES = 16;
+const BINARY_HEADER_BYTES = 1 + BINARY_IV_BYTES + BINARY_TAG_BYTES;
+
+/**
+ * 음성·문서 바이트용 봉투. 문자열 금고와 같은 PII_ENC_KEY를 직접 AES-256-GCM에 쓴다.
+ * 첫 바이트는 키 버전, 이어서 IV(12)·인증 태그(16)·암호문 순서다.
+ */
+export function encryptPiiBytes(plain: Uint8Array): Uint8Array {
+  const iv = randomBytes(BINARY_IV_BYTES);
+  const cipher = createCipheriv('aes-256-gcm', key(), iv);
+  const body = Buffer.concat([cipher.update(plain), cipher.final()]);
+  return Buffer.concat([Buffer.from([KEY_VERSION]), iv, cipher.getAuthTag(), body]);
+}
+
+export function decryptPiiBytes(packed: Uint8Array): Uint8Array {
+  if (packed.byteLength < BINARY_HEADER_BYTES) throw new Error('invalid encrypted bytes');
+  const bytes = Buffer.from(packed.buffer, packed.byteOffset, packed.byteLength);
+  const version = bytes[0];
+  if (version !== KEY_VERSION) throw new Error(`unknown pii key version: ${version}`);
+  const iv = bytes.subarray(1, 1 + BINARY_IV_BYTES);
+  const tag = bytes.subarray(1 + BINARY_IV_BYTES, BINARY_HEADER_BYTES);
+  const body = bytes.subarray(BINARY_HEADER_BYTES);
+  const decipher = createDecipheriv('aes-256-gcm', key(), iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(body), decipher.final()]);
+}
+
 /**
  * 자유 글 암호화(P1). 금고와 같은 열쇠·같은 포맷을 쓴다.
  * 컬럼 타입은 그대로 text 이고 값만 암호문이 된다.

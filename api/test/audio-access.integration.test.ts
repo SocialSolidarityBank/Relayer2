@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { DATABASE_URL, sql } from '../src/db.ts';
 import { app } from '../src/routes.ts';
 import { ensureProgram } from './voice-fixture.ts';
@@ -49,6 +51,10 @@ describe.skipIf(!enabled)('recording access and comparison',()=>{
     const saved=await upload();
     expect(saved.status).toBe(201);
     const recording=await saved.json();
+    const [{ rel_path: relPath }] = await sql<Array<{ rel_path: string }>>`
+      select rel_path from recordings where id = ${recording.id}`;
+    const rawAudio = await readFile(join(process.env.VOICE_ROOT ?? './voice', relPath));
+    expect(rawAudio).not.toEqual(Buffer.from(silentWav()));
     for(const actor of [b,admin]) {
       expect((await req(`/recordings/${recording.id}/audio`,actor)).status).toBe(403);
       expect((await req(`/recordings/${recording.id}/transcript`,actor,'POST',{})).status).toBe(403);
