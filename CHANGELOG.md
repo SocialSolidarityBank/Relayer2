@@ -1,34 +1,34 @@
-# Changelog
+# 변경 기록
 
-Release notes for the public Relayer repository. Dates use the release date recorded in Git.
+공개 릴리스 변경 기록입니다. 각 날짜는 해당 릴리스에 표시한 날짜이며, 아직 태그가 생성되지 않은 릴리스의 예정 공개일을 포함합니다.
 
 ## [0.2.0] — 2026-09-18
 
-### Added
+### 추가됨
 
-- Prepared the public fork for institution-controlled operation with sanitized fork/setup guidance, externalized operations documentation, and a container distribution path.
-- Added first-administrator signup and the workspace setup wizard, including resumable setup, institution information, programs, worker invitations, and external-service guidance.
-- Expanded the current workspace UI for schedules, participant information, case assignment, session editing and revision history, and consent management.
-- Added the implemented AI, speech/STT, and document flows with consent gates, masking, human review, audit records, and retention handling.
+- 기관이 통제하는 공개 포크 운영을 위해 포크·설정 안내를 정리하고, 운영 문서를 외부용으로 분리했으며, 컨테이너 배포 경로를 마련했다.
+- 최초 관리자 가입과 워크스페이스 설정 마법사를 추가했다. 마법사는 중단한 단계에서 다시 시작할 수 있으며, 기관 정보·사업·실무자 초대·외부 서비스 안내를 포함한다.
+- 현재 워크스페이스 UI에 일정, 당사자 정보, 사례 배정, 회차 편집과 리비전 이력, 동의 관리를 확장했다.
+- 동의 게이트, 가림 처리, 사람 검토, 감사 기록, 보존 처리를 포함한 AI·음성/STT·문서 흐름을 구현했다.
 
-### Changed
+### 변경됨
 
-- The container serves the built web application and API together and applies pending migrations before starting the server. This documents distribution readiness; it does not claim a production deployment.
+- 컨테이너가 빌드된 웹 애플리케이션과 API를 함께 제공하고, 서버를 시작하기 전에 미적용 마이그레이션을 적용한다. 이는 배포 준비 상태를 설명하는 것이며, 운영 배포 성공을 의미하지 않는다.
 
 ## [0.2.0-p1] — 2026-09-15
 
-### Added
+### 추가됨
 
-- Completed the real-data safety gate: separate personal-data and sensitive-information consent decisions, withdrawal handling, consent-copy hashes, and consent event records.
-- Added access auditing, encryption for free-text records, and backup/restore rehearsal procedures.
+- 실데이터 안전 관문을 완성했다. 개인정보와 민감정보 동의 결정을 분리하고, 철회 처리·동의 문안 해시·동의 사건 기록을 추가했다.
+- 열람 감사 기록, 자유 글 암호화, 백업·복구 리허설 절차를 추가했다.
 
-### Changed
+### 변경됨
 
-- Established the privacy, consent, audit, encryption, and backup controls required before moving beyond synthetic beta data.
+- 합성 베타를 넘어가기 전에 필요한 개인정보 보호, 동의, 감사, 암호화, 백업 통제를 마련했다.
 
 ## [0.1.0] — 2026-09-15
 
-### Added
+### 추가됨
 
-- Published the initial synthetic-data beta flow from participant registration and intake through scheduling, session recording, the short pre-session briefing, participant information, and case closure.
-- Kept AI and STT outside the initial beta so the core record-and-review flow could be exercised without external processing.
+- 당사자 등록과 인테이크부터 상담 일정, 회차 기록, 짧은 상담 전 다시보기, 당사자 정보, 사례 종결까지 이어지는 최초의 합성 데이터 베타 흐름을 공개했다.
+- 초기 베타에서는 AI와 STT를 제외해 외부 처리 없이 핵심 기록·검토 흐름을 실행할 수 있게 했다.
