@@ -19,13 +19,10 @@ PLAYWRIGHT_BASE_URL=http://localhost:8798 PLAYWRIGHT_API_PREFIX= VOICE_ENABLED=1
 함정 넷 — 다 겪었다.
 
 1. **`--workers=1` 필수.** 전 spec 이 DB 하나를 공유한다. 병렬이면 서로의 데이터를 밟는다.
-2. **seed 뒤 `programs` 를 채워야 한다.** `0016_settings.sql` 이 *그때 있던* `support_cases` 에서
-   역채움하므로 migrate → seed 순서인 일회용 DB 에서는 0건이 된다. 안 채우면 당사자 등록의 `사업명`
-   선택창이 비어 여러 spec 이 60초씩 타임아웃한다.
-   ```bash
-   docker exec relayer-db psql -U relayer -d <일회용DB> -c \
-     "insert into programs(name) select distinct program_name from support_cases where program_name <> '' on conflict do nothing"
-   ```
+2. **`programs` 역채움은 이제 필요 없다**(2026-09-18 통합 검증). `0025_onboarding_programs.sql` 이
+   `support_cases.program_name` 을 걷고 `programs` 를 정본으로 만들면서 `seed.ts` 가 사업을 직접 만든다.
+   구 역채움 명령(`insert into programs(name) select distinct program_name …`)은 이제
+   `column "program_name" does not exist` 로 죽는다 — 돌리지 않는다.
 3. **녹음 spec 은 `VOICE_ENABLED=1`** 이 필요하다(STT 키 없이 `전사 건너뜀` 으로 지난다).
 4. **다른 레인 마이그레이션이 오면** `DATABASE_URL=…/relayer_design node api/src/migrate.ts` 뒤 서버를 다시
    띄운다. 안 하면 e2e 가 12개씩 떨어진다. 서버 소스(`api/`)가 바뀐 pull 뒤에도 재시작해야 한다
@@ -43,15 +40,16 @@ PLAYWRIGHT_BASE_URL=http://localhost:8798 PLAYWRIGHT_API_PREFIX= VOICE_ENABLED=1
   docker exec relayer-db psql -U relayer -d postgres -c "create database relayer_design"
   node --env-file=.env.design api/src/migrate.ts && node --env-file=.env.design api/src/seed.ts
   docker exec relayer-db psql -U relayer -d relayer_design -tAc "
-    insert into programs(name) select distinct program_name from support_cases where program_name <> '' on conflict do nothing;
     insert into case_assignments(case_id, user_id, assigned_by)
       select 1, u.id, (select id from users where email='test1') from users u where u.email in ('test1','test2')
       on conflict do nothing"
   ```
-  마지막 두 줄이 없으면 `사업` 선택창이 비어 여러 spec 이 타임아웃하고, `measure-cards` 가 사례를 못 찾는다.
+  시드가 사업 하나와 사례 하나(`test2` 배정)를 만든다. 위 한 줄은 **관리자(`test1`)에게도 그 사례를 배정**해
+  관리자 계정으로 사례 화면을 실측할 수 있게 하는 것뿐이다(안 해도 e2e 는 지난다).
   **PII_ENC_KEY 를 바꾸면 기존 금고를 못 읽는다** — DB 를 새로 만들 때만 새 열쇠를 쓴다.
-- **다른 레인의 마이그레이션을 이 DB 에 적용하지 않는다.** 0025(온보딩)를 적용했더니 `main` 코드가
-  아직 읽는 `support_cases.program_name` 이 사라져 목록이 500 이 됐다. 그 레인 검증은 그 레인 DB 에서 한다.
+- **레인 마이그레이션 경고는 끝났다**(2026-09-18 통합). 0025~0027 이 모두 `main` 에 있어 이 DB 에 그대로 적용한다.
+  구 경고(0025 를 적용했더니 `main` 코드가 아직 읽는 `support_cases.program_name` 이 사라져 목록이 500 이 됐다)는
+  그 마이그레이션이 착지하기 전의 이야기다. 다른 레인 것이 오면 `migrate` → 서버 재시작 순서만 지킨다.
 - 계정: `test1`(관리자) · `test2`(실무자, 시드 사례 1) · `test3`(당사자, 로그인 불가). 비밀번호 = 아이디
 - **접근은 역할이 아니라 배정이 정한다**(`case_assignments`). 관리자도 배정이 없으면 사례 상세가 막힌다
 - `#/cases/:id/...` 를 주소창으로 바로 열면 목록을 거치지 않아 홈으로 튕기는 자리가 있다 — 실측은 목록에서 카드를 눌러 들어간다
@@ -91,50 +89,36 @@ curl -s https://relayer.kr/health
 - 당사자 등록: 동의 항목별 접힘 카드(체크는 머리) · 필수는 별표 · 이름·연락처·이메일 3열 · 사업명·예정 회차 수 2열 + 꺽쇠 스테퍼 · 동의 요청 링크 카드를 동의 위로
 - **동의 요청 링크 카드는 한 부품**이다(`consent-link.tsx` `ConsentLinkCard`) — 당사자 등록과 당사자 정보 탭이 같이 쓴다. 등록 화면에서는 누르면 먼저 등록하고 발급한다(사례가 없으면 링크를 못 만든다)
 
-## 2026-09-18 회차 원본 드로어 (Q 승인)
+## 2026-09-18 UI 개편 통합 (레인 다섯 착지 — #52·#54·#53·#56·#55)
 
-- 회차는 아코디언, **원본은 드로어**다. 회차 머리의 `상담 기록 보기`·`녹음 전사 보기`가 오른쪽
-  드로어(`web/src/session-original.tsx`, `.side-drawer`)를 연다.
-- **입구는 `회차별 원본 보기` 탭 하나**다. 한 번 요약 머리 버튼으로 옮겼다가 되돌렸다
-  (2026-09-18 Q "원문보기 어디갔어" → 버튼 넷이 머리를 밀고 입구가 흐려졌다). 탭은 넷이고,
-  폐지한 것은 전용 화면 `상담 내용 원본 보기`(`/full`)뿐이다.
-- 수기·녹음이 둘 다 있으면 드로어 **안에서** 전환한다(`수기 기록` ↔ `녹음 전사`).
-- 팀 목업 네 벌(`~/Downloads/릴레이어_*.html` 등)은 같은 골격이지만 **1,024~1,040px 모달**이다.
-  모달은 회차 목록을 가려 대조를 못 해서 드로어로 갔다. 이모지 제목·대괄호 버튼·`…습니다` 문장체·
-  `·` 혼합 나열·배지 남용은 우리 규칙과 충돌해 채택하지 않았다.
-- 요약 머리 행동은 다시 둘(`AI 정리`·`수정`)이다. 넷이었을 때 390 에서 한 줄에 485px 이
-  필요해 카드(291px)를 넘어 잘렸다 — 767 이하 줄바꿈 규칙은 남겨 뒀다(다른 머리에도 쓴다).
+화면 정본은 **`DESIGN.md` §4** 가 갖는다(사이드바 · 당사자 목록 · 일정 예약 · 상담 기록하기 · 당사자 정보 4탭 · 설정 네 화면).
+용어는 **`GLOSSARY.md` §16**(동의 라벨 여섯 · `녹음 전사 기록` · `사업 종료` · 전역 `저장` · `담당 중인 당사자`)이다.
+근거는 `docs/ui-plan-2026-09-18.md` §0 결정표(D1~D11)와 §1 항목표.
 
-## 2026-09-18 목업 구성 이식 (Q 승인)
+이 문서에 있던 두 절은 **대체됐다** — 되살리지 않는다.
 
-- **회차 본문이 네 구역 2×2**다: `이번 상담의 핵심`(라벤더+AI 배지) · `확인된 변화`(블루) ·
-  `확인필요`(코랄) · `완료·해결`(민트). 위험 신호·기록 상태만 한 줄을 다 쓴다(`.is-wide`).
-  확인필요·완료는 **새 API 없이** `GET /cases/:id/briefing` 의 과제·질문을 `source_session_seq`
-  로 갈라 담는다(탭이 이미 한 번 받는 자료다).
-- **당사자 정보 탭 상단이 두 칸**이다: `회차 정보` + 신규 `첫상담 기록`(인테이크 원본 드로어 입구).
-  그 줄은 등높이로 펴지 않는다(`.card-grid[data-align="start"]`) — 접힘 카드가 늘어나면
-  머리 아래가 빈다(실측 B=90.1, measure-cards FAIL 로 잡혔다).
-- 목업에서 **안 가져온 것**: 이모지 제목, 1,040px 모달, 3단 중첩 아코디언, 대괄호 버튼,
-  `…습니다` 문장체, `·` 혼합 나열, 배지 남용, sky·slate 팔레트, 전사 모달의 우측 대조 패널
-  (720px 드로어에 안 들어간다 — 불일치는 `확인된 변화` 구역이 맡는다).
+- 구 `회차 원본 드로어` 절: 원본은 이제 **큰 팝업 두 열**(`dialog.tsx` `size="wide"` + `session-original.tsx` 의 `SessionOriginalDialog`)이다.
+  드로어 720px 에 수기와 전사를 나란히 못 놓아 안에서 전환해야 했던 것이 폭을 택한 이유다(Q 결정 E2·F5). 요약 머리 행동은 다시 **넷**이다(F4).
+- 구 `목업 구성 이식` 절의 `당사자 정보 탭 상단 두 칸`: **`첫상담 기록` 카드는 삭제**됐고 `회차 정보`가 가로 풀폭이다(E1).
+  회차 본문 네 구역 2×2 와 `source_session_seq` 로 가르는 규칙은 그대로이며, 구역 제목은 **배지**가 됐다(F2).
+
+목업에서 **안 가져온 것**(유지): 이모지 제목, 3단 중첩 아코디언, 대괄호 버튼, `…습니다` 문장체, `·` 혼합 나열, 배지 남용, sky·slate 팔레트.
+
+**소유 파일 규칙은 풀렸다**(2026-09-18 플래너). 레인별 소유·`ccc-preview` 식 잠금은 이 개편 동안의 장치였다.
 
 ## 알려진 것 · 다음 후보
 
-디자인·UI 후보만 추린 목록(2026-09-18 실측). Q 가 고른다.
+디자인·UI 후보만 추린 목록. **1·2 는 2026-09-18 UI 개편(G·I~L)으로 해소됐다** — 남은 것만 둔다. Q 가 고른다.
 
-1. **목표 탭** — 설명형 hint 2개 잔존(§13 위반), 카드마다 따로 선 `저장` 버튼 3벌
-2. **설정 4화면** — 제목 아래 `관리자` meta 줄 4곳, `저장하기`·`계정 삭제하기`·`사업 추가하기`
-   (§6 명사구 위반), 카드 제목이 화면 제목과 중복, `AI·전사·데이터베이스 연결 상태`·
-   `기간·실무자·종류를 정해 CSV 받기`(§6 `·` 금지)
-3. **감사(열람 기록)** — `#/audit` 라우트가 없다(상담 일정으로 튕김). 입구는 `시스템 › 열람 기록 관리`
-4. **상담 기록하기·인테이크** — 가장 긴 두 화면(579·433줄)이 §6 개정 이후 미검수
-5. **로그인·초대·당사자 열람** — 비로그인 3화면 미검수
-6. **인쇄 스타일** — 팀 목업 넷은 전부 인쇄 지향인데 우리에게 `@media print` 가 없다
-- 카드가 머리인 화면에는 **화면 이름이 없다**(Q ①ⓐ). 사이드바에 메뉴가 없는 화면(원본 보기·검토·종결)은 단서가 `뒤로` 알약뿐이다
-- `.participant-card` 여백은 이식값 20/24 그대로다(`wire.css:51`). `measure-cards` 는 카드 스스로의 여백과 내용 거리가 맞는지만 보므로 PASS 다 — §6 의 24 한 값으로 맞출지는 미결
-- 2열 목록은 줄마다 등높이다(`height:100%`) — 짧은 카드는 아래가 벌어진다. `measure-cards` 는 재는 동안만 늘림을 끈다
-- `SPEC.md`·`GLOSSARY.md` 에 `15초 다시보기` 가 화면·용어로 남아 있다(정본이라 손대지 않았다)
-- 이식만 되고 안 쓰는 CSS: 드로어·모바일 바 · 사업 전환기 · 고대비 토큰(`DESIGN.md` §10 표)
+1. **감사(열람 기록)** — `#/audit` 라우트가 없다(상담 일정으로 튕김). 입구는 `시스템 › 열람 기록 관리` 하나다
+2. **인테이크** — 가장 긴 화면(433줄)이 §6 개정 이후 미검수. 상담 기록하기는 개편에서 함께 봤다(D)
+3. **로그인·초대·당사자 열람** — 비로그인 3화면 미검수
+4. **인쇄 스타일** — 팀 목업 넷은 전부 인쇄 지향인데 우리에게 `@media print` 가 없다
+- 카드가 머리인 화면에는 **화면 이름이 없다**(Q ①ⓐ). 사이드바에 메뉴가 없는 화면(검토·종결)은 단서가 `뒤로` 알약뿐이다
+- 당사자 목록 카드는 접힘 카드라 `.participant-card` 의 이식 여백 20/24 대신 `.wire-card` 의 24 한 값을 받는다(2026-09-18 A2). `measure-cards` PASS
+- `SPEC.md` 에 `15초 다시보기` 가 화면·용어로 남아 있다(정본이라 손대지 않았다). `GLOSSARY.md` §2·§6 의 구 표기도 그대로다 — §16 이 이기는 자리만 적어 뒀다
+- 이식만 되고 안 쓰는 CSS: 모바일 바 · 사업 전환기 · 고대비 토큰(`DESIGN.md` §10 표). **드로어(`.side-drawer`)는 이제 설정이 쓴다**(J3 담당 고르기 · L3 동의 문안 수정) — 회차 원본은 팝업으로 옮겼다
+- `#/settings/assign`·`programs`·`workers` 같은 **묶음 안 항목 주소는 열리지 않는다** — `시스템` 묶음만 항목 주소를 갖는다(`nested`). 실측·e2e 는 `#/settings/staff`·`org` 로 들어간다
 - 대비 한계: 민트 묶음 제목 2.00:1 · 입력칸 경계 1.28:1 · 배지 면 위 흰 글자 2.0~2.5:1
 
 ## 운영
