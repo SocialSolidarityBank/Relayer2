@@ -93,7 +93,7 @@ DRY-RUN — 외부 시스템을 호출하거나 변경하지 않았습니다.
 2. DATABASE_URL 연결 확인: select 1
 3. Infisical prod:${secret_path}: 부모→자식 폴더 생성, 기존 DATABASE_URL PII_ENC_KEY SESSION_SECRET 건너뜀
 4. resource group ${RG}: 기존 자원 재사용
-5. storage account ${storage_account}: public blob 차단, TLS 1.2
+5. storage account ${storage_account}: public blob 차단, TLS 1.2, 계정 키 접근 끔
 6. blob containers voice documents: private
 7. Container App ${app_name}: ${ACA_ENV}, ${IMAGE}, ingress 8787, min 0/max 1
    BLOB_ACCOUNT=${storage_account}
@@ -235,7 +235,10 @@ printf '5. storage account %s\n' "$storage_account"
 ensure "$storage_account" az storage account show --name "$storage_account" --resource-group "$RG" -- \
   az storage account create --name "$storage_account" --resource-group "$RG" --location "$LOCATION" \
     --sku Standard_LRS --kind StorageV2 --min-tls-version TLS1_2 --https-only true \
-    --allow-blob-public-access false --output none
+    --allow-blob-public-access false --allow-shared-key-access false --output none
+# 계정 키(뒷문)는 잠근다 — 앱은 관리 ID(정문)만 쓴다. 이미 있던 계정도 같은 상태로 맞춘다.
+az storage account update --name "$storage_account" --resource-group "$RG" \
+  --allow-shared-key-access false --output none
 
 printf '6. blob containers voice documents\n'
 for container in voice documents; do

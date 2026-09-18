@@ -10,7 +10,7 @@
 |---|---|---|
 | Resource Group | `relayer2-prod` | 기존 그룹 재사용 |
 | Container Apps Environment | `relayer2-env` | 기존 환경 재사용 |
-| Storage Account | `relayer2<slug>` | 공개 Blob 차단, TLS 1.2 이상 |
+| Storage Account | `relayer2<slug>` | 공개 Blob 차단, TLS 1.2 이상, **계정 키 접근 끔**(관리 ID만) |
 | Blob containers | `voice`, `documents` | 둘 다 비공개 |
 | Container App | `relayer2-<slug>` | 외부 ingress, target port 8787, min 0/max 1 |
 | Infisical | `prod:/RELAYER2/<slug>` | 기관별 시크릿 정본 |
@@ -101,31 +101,12 @@ PGSCHEMA=relayer_test2 scripts/azure/provision-institution.sh test2
 `relayer2test2`, `relayer2-test2`, `prod:/RELAYER2/test2`,
 `BLOB_ACCOUNT=relayer2test2`, `PGSCHEMA=relayer_test2`와 실행 순서만 나타나야 한다.
 
-## 기존 단일 자원 처리
+## 옛 단일 자원
 
-현재 생성되어 있는 자원은 다음과 같다.
-
-- 공용 기반: `relayer2-prod`, `relayer2-env`
-- 옛 단일 배포: Storage Account `relayer2voice`, containers `voice`·`documents`,
-  placeholder Container App `relayer2`
-
-공용 Resource Group과 Container Apps Environment는 기관별 앱이 계속 재사용한다.
-옛 Storage Account와 placeholder 앱은 지금 삭제하거나 기관 앱으로 이름만 바꾸지 않는다.
-기관별 Storage Account를 공유하게 되면 관리 ID와 데이터 경계가 무너지므로
-`relayer2voice`를 `test2`나 다른 기관의 저장소로 재사용하지 않는다.
-
-별도 GO 뒤의 전환 순서는 다음과 같다.
-
-1. 기관별 Storage Account와 ACA 앱을 새 이름으로 만든다.
-2. 합성 데이터로 마이그레이션 검사, 가입 open 상태, 암호화 Blob 쓰기·읽기를 확인한다.
-3. 승인된 DNS 전환 뒤 새 앱만 쓰기를 받게 한다.
-4. `relayer2` 앱에 실사용 트래픽·시크릿·보존 데이터가 없고
-   `relayer2voice`의 두 컨테이너가 비었음을 값 없는 인벤토리로 확인한다.
-5. 복구 지점과 삭제 승인을 기록한 뒤 옛 앱과 Storage Account를 제거한다.
-
-검증 전에는 두 앱이 같은 DB에 동시에 쓰게 하지 않는다. 기존 자원 제거는 이
-프로비저닝 스크립트의 책임이 아니며 자동화하지 않는다.
-
+2026-09-18 에 정리했다: placeholder 앱 `relayer2`(MS 샘플 이미지, 실사용 없음)와 빈 Storage
+Account `relayer2voice`(두 컨테이너 0건 확인)를 삭제하고 Infisical 의 `AZURE_STORAGE_ACCOUNT_KEY` 를
+지웠다. 공용 `relayer2-prod`·`relayer2-env` 는 기관별 앱이 계속 재사용한다. 계정·권한 현황은
+`docs/accounts.md` 다.
 ## 환경 변수
 
 ACA secret reference로 주입하는 값:
