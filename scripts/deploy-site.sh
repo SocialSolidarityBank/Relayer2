@@ -16,7 +16,7 @@ site='https://relayer.kr'
 
 run() { ssh -o BatchMode=yes "$host" "cd $remote && $1"; }
 
-echo "[1/5] $host 에서 main 과의 차이를 본다"
+echo "[1/6] $host 에서 main 과의 차이를 본다"
 changed="$(run 'git fetch -q origin main && git diff --name-only HEAD origin/main')"
 if [ -z "$changed" ]; then
   echo "     새 것 없음. 이미 최신이다."
@@ -29,27 +29,38 @@ needs_migrate="$(printf '%s\n' "$changed" | grep -E '^migrations/' || true)"
 # 의존성이 바뀌었으면 받은 뒤에 설치한다. 2026-09-18 에 이것이 없어서 운영이 내려갔다.
 # 다른 레인이 `@azure/identity` 를 더했는데 그 기기에 없어, 앱이 부팅에서 죽고 502 가 났다.
 needs_install="$(printf '%s\n' "$changed" | grep -E '(^|/)(package\.json|pnpm-lock\.yaml)$' || true)"
+# 화면을 고쳤으면 **받은 뒤에 빌드한다**. `web/dist/` 는 git 밖(.gitignore)이고 launchd 진입점
+# `run-service.sh` 는 빌드하지 않으므로, 이 단계가 없으면 소스만 새것이고 내보내는 번들은
+# 옛것이다 — 2026-09-18 에 UI 변경이 배포 뒤에도 운영에 안 보이던 원인이다.
+needs_build="$(printf '%s\n' "$changed" | grep -E '^web/' || true)"
 
-echo "[2/5] 받는다"
+echo "[2/6] 받는다"
 run 'git pull -q --ff-only'
 run 'git log --oneline -1' | sed 's/^/     /'
 
 if [ -n "$needs_install" ]; then
-  echo "[3/5] 의존성이 바뀌었다. 설치한다"
+  echo "[3/6] 의존성이 바뀌었다. 설치한다"
   run 'pnpm install --frozen-lockfile' | tail -2 | sed 's/^/     /'
 else
-  echo "[3/5] 의존성은 그대로다"
+  echo "[3/6] 의존성은 그대로다"
+fi
+
+if [ -n "$needs_build" ]; then
+  echo "[4/6] 화면이 바뀌었다. 빌드한다"
+  run 'pnpm --dir web build' | tail -3 | sed 's/^/     /'
+else
+  echo "[4/6] 화면은 그대로다"
 fi
 
 if [ -n "$needs_restart" ]; then
-  echo "[4/5] 코드가 바뀌었다. 앱을 다시 띄운다"
+  echo "[5/6] 코드가 바뀌었다. 앱을 다시 띄운다"
   ssh -o BatchMode=yes "$host" 'launchctl kickstart -k gui/$(id -u)/or.bss.relayer'
   sleep 6
 else
-  echo "[4/5] 파일만 바뀌었다. 앱은 그대로 둔다"
+  echo "[5/6] 파일만 바뀌었다. 앱은 그대로 둔다"
 fi
 
-echo "[5/5] 확인"
+echo "[6/6] 확인"
 for path in / /guide-user.html /guide-admin.html /test /health; do
   code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$site$path")"
   printf '     %-20s %s\n' "$path" "$code"
