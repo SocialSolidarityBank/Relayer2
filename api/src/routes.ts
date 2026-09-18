@@ -24,7 +24,15 @@ import {
   SttUnavailable,
   withdrawCaseRecordings,
 } from './stt.ts';
-import { AiUnavailable, approveDraft, draftSession, latestDraft, openAiKey } from './ai.ts';
+import {
+  AiUnavailable,
+  approveDraft,
+  draftSession,
+  latestDraft,
+  openAiKey,
+  refreshCaseMemoryInBackground,
+  withdrawCaseMemory,
+} from './ai.ts';
 import { audit, auditCsv, auditSummary, listAudit, AUDIT_KIND_LIST } from './audit.ts';
 import { accessState, issueAccess, openAccess, revokeAccess } from './participant-access.ts';
 import {
@@ -365,7 +373,10 @@ app.put('/cases/:id/intake', async (c) => {
       cards: z.array(cardInput).optional(),
     })
     .parse(await c.req.json());
-  return c.json(await service.saveIntake(caseId, body));
+  const saved = await service.saveIntake(caseId, body);
+  // 기록이 하나 늘었다(또는 바뀌었다). 사례 기억을 뒤에서 다시 접는다 — 이 회차는 뺀다(SPEC §15-6).
+  refreshCaseMemoryInBackground(caseId, c.get('actor').id, saved.revised ? 'edit' : 'record_done', saved.session_id);
+  return c.json(saved);
 });
 
 app.post('/cases/:id/sessions', async (c) => {
@@ -434,7 +445,10 @@ app.patch('/sessions/:id', async (c) => {
       duration_min: durationMin,
     })
     .parse(await c.req.json());
-  return c.json(await service.recordSession(sessionId, { ...body, actorId: c.get('actor').id }));
+  const saved = await service.recordSession(sessionId, { ...body, actorId: c.get('actor').id });
+  // 기록이 하나 늘었다(또는 바뀌었다). 사례 기억을 뒤에서 다시 접는다 — 이 회차는 뺀다(SPEC §15-6).
+  refreshCaseMemoryInBackground(saved.case_id, c.get('actor').id, saved.revised ? 'edit' : 'record_done', sessionId);
+  return c.json(saved);
 });
 
 // 목표 탭 전용(2026-09-18 Q). 회차 저장을 거치지 않으므로 카드 결과를 건드리지 않는다.
@@ -499,6 +513,10 @@ app.post('/cases/:id/consents', async (c) => {
     (body.domain === 'counseling_recording' || body.domain === 'voice_original_retention_period')
   ) {
     await withdrawCaseRecordings(caseId, c.get('actor').id);
+  }
+  // 외부 LLM 동의를 거두면 그 동의로 만든 사례 기억도 그 자리에서 지운다.
+  if (body.decision === 'withdraw' && body.domain === 'external_llm_cross_border_processing') {
+    await withdrawCaseMemory(caseId, c.get('actor').id);
   }
   // 동의·철회는 열람이 아니지만 남긴다 — 누가 언제 받았는지가 곧 증거다.
   await audit({

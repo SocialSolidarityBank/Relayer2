@@ -32,6 +32,8 @@ export const AUDIT_KINDS = {
   'consent.record': { kind: '기록', label: '동의 받음', fold: false },
   'ai.draft': { kind: '기록', label: '외부 AI 로 보냄', fold: false },
   'ai.approve': { kind: '기록', label: 'AI 초안 승인', fold: false },
+  'ai.memory': { kind: '기록', label: '사례 기억 갱신(외부 AI 로 보냄)', fold: false },
+  'ai.memory.withdraw': { kind: '기록', label: '동의 철회로 사례 기억 삭제', fold: false },
   'document.add': { kind: '기록', label: '서면 문서 올림', fold: false },
   'document.sweep': { kind: '기록', label: '기한 지난 문서 삭제', fold: false },
   'voice.record': { kind: '기록', label: '녹음 저장', fold: false },

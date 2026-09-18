@@ -3,13 +3,16 @@
 //   동의 확인 → 마스킹 → 외부 호출 → **초안 저장** → 사람이 승인해야 기록
 //
 // 승인 전에는 어떤 것도 회차 기록이 되지 않는다. 승인은 사람만 한다(GLOSSARY §6-5).
-import { assertConsent, replaceAiCards } from './service.ts';
+//
+// 사례 기억(2026-09-18 Q, SPEC §15-6): 지난 회차 전량을 매번 보내는 대신, 사례당 한 행의 요약 캐시를
+// 초안의 과거 입력으로 쓴다. 기억도 초안처럼 비공식이며, 언제든 done 회차 전체에서 다시 만든다.
+import { assertConsent, ConsentRequired, replaceAiCards } from './service.ts';
 import { AI_PROVIDERS, type AiProviderId } from './consent.ts';
 import { audit } from './audit.ts';
 import { sql } from './db.ts';
-import { maskAll } from './domain/masking.ts';
+import { maskAll, type MaskSubject } from './domain/masking.ts';
 
-import { decryptPii, decryptText } from './pii.ts';
+import { decryptPii, decryptText, encryptText } from './pii.ts';
 import type { Card, FactChange, Session } from './domain/types.ts';
 
 /**
@@ -38,7 +41,8 @@ export type Draft = {
 
 export class AiUnavailable extends Error {}
 
-const SYSTEM = [
+/** 초안과 기억이 함께 지키는 규칙. 기억은 여기에 "무엇을 접는가"만 더한다. */
+const RULES = [
   '너는 한국 사회복지 상담 기록을 정리하는 도구다.',
   '',
   '무엇을 하는가: 실무자가 다음 상담 전에 15초만 보고 이어서 일할 수 있게 만든다.',
@@ -60,11 +64,15 @@ const SYSTEM = [
   '5. 건강·돌봄의 변화',
   '',
   '요약에 넣지 않는 것: 지각·날씨·교통 같은 잡담, 같은 말의 반복, 변화 없는 상태.',
+];
+
+const SYSTEM = [
+  ...RULES,
   '',
-  '사실관계 변화(fact_changes): [지난 회차] 자료가 함께 오면, 지난 회차에서 말한 것과 이번 회차에서',
+  '사실관계 변화(fact_changes): [사례 기억] 자료가 함께 오면, 기억에 적힌 지난 회차 내용과 이번 회차에서',
   '말한 것이 **서로 어긋나는 사실**만 찾는다(건수·금액·기간·관계·상태). 새로 알게 된 것은 아니다.',
-  '양쪽 원문을 한 문장씩 **자료에 적힌 그대로** 옮긴다. 고쳐 쓰거나 줄이지 않는다.',
-  '어느 쪽이 맞는지 판정하지 않는다 — 앞뒤 맥락만 한두 문장으로 적는다. 지난 회차 자료가 없으면 빈 배열.',
+  '양쪽 원문을 한 문장씩 **자료에 적힌 그대로** 옮긴다. 고쳐 쓰거나 줄이지 않는다. before.seq 는 기억에 적힌 회차 번호다.',
+  '어느 쪽이 맞는지 판정하지 않는다 — 앞뒤 맥락만 한두 문장으로 적는다. 사례 기억이 없으면 빈 배열.',
 ].join('\n');
 
 // 칸은 **사람이 쓰는 칸과 같다**(GLOSSARY §6-2). 그래야 승인하면 그대로 카드가 된다.
@@ -123,7 +131,10 @@ const SCHEMA = {
   },
 } as const;
 
-async function callGemini(prompt: string): Promise<Shape> {
+/** 모델에 보내는 한 요청. 초안과 기억이 규칙(system)·틀(schema)만 다르고 길은 같다. */
+type ModelRequest = { system: string; prompt: string; schema: object; name: string };
+
+async function callGemini<T>(req: ModelRequest): Promise<T> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new AiUnavailable('AI 정리 불가, GEMINI_API_KEY 없음');
   const res = await fetch(
@@ -132,13 +143,13 @@ async function callGemini(prompt: string): Promise<Shape> {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM }] },
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        systemInstruction: { parts: [{ text: req.system }] },
+        contents: [{ role: 'user', parts: [{ text: req.prompt }] }],
         // Gemini 의 스키마는 OpenAPI 계열이라 `additionalProperties` 를 모른다. 중첩까지 전부 뺀다.
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: JSON.parse(
-            JSON.stringify(SCHEMA, (k, v) => (k === 'additionalProperties' ? undefined : v)),
+            JSON.stringify(req.schema, (k, v) => (k === 'additionalProperties' ? undefined : v)),
           ),
         },
       }),
@@ -148,7 +159,7 @@ async function callGemini(prompt: string): Promise<Shape> {
   const payload = (await res.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
   const text = payload.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) throw new AiUnavailable('AI 응답 해석 실패');
-  return JSON.parse(text) as Shape;
+  return JSON.parse(text) as T;
 }
 
 /**
@@ -170,7 +181,7 @@ export async function openAiKey(): Promise<{ key: string; source: 'db' | 'env' }
  */
 const OPENAI_STORE = false;
 
-async function callOpenAi(prompt: string): Promise<Shape> {
+async function callOpenAi<T>(req: ModelRequest): Promise<T> {
   const found = await openAiKey();
   if (!found) throw new AiUnavailable('AI 정리 불가, OpenAI API 키 없음');
   const { key } = found;
@@ -186,10 +197,10 @@ async function callOpenAi(prompt: string): Promise<Shape> {
       // 응답 재사용용 보관을 끈다. 남용 감시 30일은 별건이다.
       store: OPENAI_STORE,
       input: [
-        { role: 'system', content: SYSTEM },
-        { role: 'user', content: prompt },
+        { role: 'system', content: req.system },
+        { role: 'user', content: req.prompt },
       ],
-      text: { format: { type: 'json_schema', name: 'session_draft', strict: true, schema: SCHEMA } },
+      text: { format: { type: 'json_schema', name: req.name, strict: true, schema: req.schema } },
     }),
   });
 
@@ -205,11 +216,38 @@ async function callOpenAi(prompt: string): Promise<Shape> {
       ?.find((o) => o.type === 'message')
       ?.content?.find((c) => c.type === 'output_text')?.text;
   if (!text) throw new AiUnavailable('AI 응답 해석 실패');
-  return JSON.parse(text) as Shape;
+  return JSON.parse(text) as T;
 }
 
-const callModel = (prompt: string): Promise<Shape> =>
-  PROVIDER === 'gemini' ? callGemini(prompt) : callOpenAi(prompt);
+const callModel = <T>(req: ModelRequest): Promise<T> =>
+  PROVIDER === 'gemini' ? callGemini<T>(req) : callOpenAi<T>(req);
+
+/** 어디로 어떤 설정으로 보냈는지. 초안과 기억이 같은 줄을 남긴다 — 감사가 서로 다르면 하나는 거짓이다. */
+const outboundFields = (hits: Record<string, number>): string[] => [
+  `recipient=${AI_PROVIDERS[PROVIDER].legalRecipient}`,
+  `country=${AI_PROVIDERS[PROVIDER].country}`,
+  `model=${MODEL}`,
+  // 어떤 보관 설정으로 보냈는지가 증거다. Gemini 경로에는 그 설정이 없어 남기지 않는다.
+  ...(PROVIDER === 'openai' ? [`store=${OPENAI_STORE}`] : []),
+  ...Object.entries(hits).map(([kind, n]) => `masked:${kind}=${n}`),
+];
+
+/** 마스킹 대상 — 이 사례 당사자의 가명과 금고 값. 금고가 비어 있어도 형태 규칙은 돈다. */
+async function subjectFor(caseId: number): Promise<MaskSubject> {
+  const [participant] = await sql<Array<{ pseudonym: string; enc_name: string | null; enc_phone: string | null; enc_email: string | null }>>`
+    select p.pseudonym, v.enc_name, v.enc_phone, v.enc_email
+    from support_cases c
+    join participants p on p.id = c.participant_id
+    left join participant_pii v on v.participant_id = p.id
+    where c.id = ${caseId}`;
+  if (!participant) throw new Error('사례 없음');
+  return {
+    pseudonym: participant.pseudonym,
+    name: decryptPii(participant.enc_name),
+    phone: decryptPii(participant.enc_phone),
+    email: decryptPii(participant.enc_email),
+  };
+}
 
 /** 회차 하나의 자료 조각(상담 내용 + 카드). 마스킹 전 평문이다. */
 async function sessionParts(session: Session): Promise<Array<{ label: string; text: string }>> {
@@ -223,51 +261,31 @@ async function sessionParts(session: Session): Promise<Array<{ label: string; te
 /**
  * 한 회차의 초안을 만든다. 저장된 자료만 쓰고, 보내기 전에 마스킹한다.
  * 동의(외부 LLM·국외 처리)가 없으면 호출 자체를 하지 않는다.
- * 지난 회차 자료도 함께 보낸다 — 사실관계 변화는 견줄 상대가 있어야 나온다.
- * ponytail: 지난 회차 전부를 매번 보낸다. 회차가 수십 개로 늘면 최근 N개로 자른다.
+ * 지난 회차는 사례 기억으로 보낸다 — 사실관계 변화는 견줄 상대가 있어야 나온다.
+ * 기억이 없거나 이번 회차 직전까지가 아니면 그 자리에서 다시 만든다. 그것도 안 되면 초안도 안 된다(유일 경로).
  */
 export async function draftSession(sessionId: number, actorId: number): Promise<Draft> {
   const [session] = await sql<Session[]>`select * from sessions where id = ${sessionId}`;
   if (!session) throw new Error('회차 없음');
   await assertConsent(session.case_id, 'external_llm_cross_border_processing');
 
-  const [participant] = await sql<Array<{ pseudonym: string; enc_name: string | null; enc_phone: string | null; enc_email: string | null }>>`
-    select p.pseudonym, v.enc_name, v.enc_phone, v.enc_email
-    from support_cases c
-    join participants p on p.id = c.participant_id
-    left join participant_pii v on v.participant_id = p.id
-    where c.id = ${session.case_id}`;
-
-  const subject = {
-    pseudonym: participant.pseudonym,
-    name: decryptPii(participant.enc_name),
-    phone: decryptPii(participant.enc_phone),
-    email: decryptPii(participant.enc_email),
-  };
+  const subject = await subjectFor(session.case_id);
 
   const parts = await sessionParts(session);
   if (parts.length === 0) throw new AiUnavailable('정리할 내용 없음, 상담 내용 먼저 입력');
+  // 마스킹 건수는 이번 회차 것만 센다 — 감사에 남는 값이다. 기억 쪽 건수는 기억 사건이 따로 남긴다.
   const { parts: masked, hits } = maskAll(parts, subject);
 
-  // 지난 회차는 기록된 것만, 회차 순으로. 마스킹 건수는 이번 회차 것만 센다 — 감사에 남는 값이다.
-  const previous = await sql<Session[]>`
-    select * from sessions where case_id = ${session.case_id} and seq < ${session.seq} and status = 'done' order by seq`;
-  const history: string[] = [];
-  for (const p of previous) {
-    const pParts = await sessionParts(p);
-    if (pParts.length === 0) continue;
-    const { parts: pMasked } = maskAll(pParts, subject);
-    history.push(`[지난 회차 ${p.seq}회차]`, ...pMasked.map((x) => `(${x.label}) ${x.text}`), '');
-  }
+  const memory = await memoryBefore(session, actorId);
 
   const prompt = [
     `${session.seq}회차 상담 자료다. 아래 내용만 보고 정리한다.`,
     '',
     ...masked.map((p) => `[${p.label}]\n${p.text}`),
-    ...(history.length > 0 ? ['', '---- 지난 회차 자료 (사실관계 변화를 찾는 데만 쓴다) ----', ...history] : []),
+    ...(memory ? ['', MEMORY_HEADER, memory] : []),
   ].join('\n');
 
-  const shape = await callModel(prompt);
+  const shape = await callModel<Shape>({ system: SYSTEM, prompt, schema: SCHEMA, name: 'session_draft' });
 
   const [row] = await sql<Array<{ id: number; created_at: string }>>`
     insert into ai_drafts (session_id, status, summary, changes, tasks, questions, fact_changes, mask_hits, model, created_by)
@@ -281,14 +299,7 @@ export async function draftSession(sessionId: number, actorId: number): Promise<
     actorId,
     action: 'ai.draft',
     caseId: session.case_id,
-    fields: [
-      `recipient=${AI_PROVIDERS[PROVIDER].legalRecipient}`,
-      `country=${AI_PROVIDERS[PROVIDER].country}`,
-      `model=${MODEL}`,
-      // 어떤 보관 설정으로 보냈는지가 증거다. Gemini 경로에는 그 설정이 없어 남기지 않는다.
-      ...(PROVIDER === 'openai' ? [`store=${OPENAI_STORE}`] : []),
-      ...Object.entries(hits).map(([kind, n]) => `masked:${kind}=${n}`),
-    ],
+    fields: outboundFields(hits),
   });
 
   return {
@@ -315,6 +326,196 @@ const SECTION_LABEL: Record<string, string> = {
   judgment: '실무자 의견',
   intake: '인테이크',
 };
+
+// ── 사례 기억 ──────────────────────────────────────────────────────────────────
+
+export const MEMORY_HEADER = '---- 사례 기억 (사실관계 변화를 찾는 데만 쓴다) ----';
+/** 기본값: 평문 상한. ponytail: 고정 상한 — 회차가 수십 개로 늘어 모자라면 오래된 회차 압축 규칙을 더한다. */
+export const MEMORY_MAX_CHARS = 4000;
+
+export type MemoryTrigger = 'record_done' | 'approve_draft' | 'draft_request' | 'edit';
+export type MemoryRef = { session_id: number; seq: number; card_ids: number[] };
+type MemoryShape = { text: string; refs: MemoryRef[] };
+
+const MEMORY_SYSTEM = [
+  ...RULES,
+  '',
+  '지금 할 일: 한 사례의 지난 회차 자료 전체를 **다음 회차 초안을 만들 때 대신 읽을 기억**으로 접는다.',
+  '기억에 반드시 담는다:',
+  '- 전체 상담 목표(있으면)',
+  '- 아직 안 끝난 과제와 약속, 그리고 안 된 이유',
+  '- 회차 사이에 달라진 사실(건수·금액·기간·관계·상태) — 이전과 이후를 회차 번호와 함께',
+  '- 각 항목 끝에 근거 회차 번호를 "(3회차)" 꼴로 적는다',
+  `본문은 ${MEMORY_MAX_CHARS}자를 넘기지 않는다. 오래된 회차는 짧게, 최근 회차는 자세히.`,
+  'refs 에는 실제로 읽은 회차의 session_id·seq 와 그 회차에서 근거로 쓴 card_id 만 적는다. 자료에 없는 id 는 적지 않는다.',
+].join('\n');
+
+const MEMORY_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['text', 'refs'],
+  properties: {
+    text: { type: 'string', description: `기억 본문. 기록체. ${MEMORY_MAX_CHARS}자 이내.` },
+    refs: {
+      type: 'array',
+      description: '근거로 쓴 회차와 카드. 자료에 적힌 id 만.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['session_id', 'seq', 'card_ids'],
+        properties: {
+          session_id: { type: 'integer' },
+          seq: { type: 'integer' },
+          card_ids: { type: 'array', items: { type: 'integer' } },
+        },
+      },
+    },
+  },
+} as const;
+
+/**
+ * 사례 기억을 다시 만든다. done 회차 전체(또는 `beforeSeq` 앞까지)에서 매번 처음부터 — 증분이 아니다.
+ * 그래야 원본이 고쳐져도 같은 절차로 같은 답이 나온다.
+ *
+ * 순서는 초안과 같다: 동의 확인 → 마스킹 → 외부 호출 → 저장 → 감사. 종결 사례는 얼린다(아무것도 안 함).
+ * 접을 회차가 없으면 행을 지운다. 응답의 refs 가 사례 밖 id 를 가리키면 실패다 — 지어낸 근거는 근거가 아니다.
+ *
+ * 동시 갱신은 막지 않는다. 둘 다 그 시점의 맞는 스냅샷이고, 초안은 through_seq 가 정확히 맞을 때만 읽는다.
+ * ponytail: 잠금 없음 — 같은 사례를 두 사람이 동시에 저장하는 일이 잦아지면 advisory lock 을 더한다.
+ */
+export async function refreshCaseMemory(
+  caseId: number,
+  actorId: number,
+  trigger: MemoryTrigger,
+  opts: { beforeSeq?: number } = {},
+): Promise<{ text: string; through_seq: number } | null> {
+  const [supportCase] = await sql<Array<{ status: string }>>`select status from support_cases where id = ${caseId}`;
+  if (!supportCase) throw new Error('사례 없음');
+  if (supportCase.status === 'closed') return null;
+  await assertConsent(caseId, 'external_llm_cross_border_processing');
+
+  const sessions = await sql<Session[]>`
+    select * from sessions
+    where case_id = ${caseId} and status = 'done'
+      and seq < ${opts.beforeSeq ?? 2147483647}
+    order by seq`;
+  if (sessions.length === 0) {
+    await sql`delete from case_memories where case_id = ${caseId}`;
+    return null;
+  }
+
+  const subject = await subjectFor(caseId);
+  const hits: Record<string, number> = {};
+  const lines: string[] = [];
+  const cardIdsBySession = new Map<number, Set<number>>();
+  for (const s of sessions) {
+    const cards = await sql<Card[]>`select * from cards where source_session_id = ${s.id} order by id`;
+    cardIdsBySession.set(s.id, new Set(cards.map((c) => c.id)));
+    const parts = [
+      { id: null as number | null, label: '상담 내용', text: decryptText(s.memo) ?? '' },
+      ...cards.map((c) => ({ id: c.id as number | null, label: SECTION_LABEL[c.source_section] ?? c.source_section, text: decryptText(c.text) ?? '' })),
+    ].filter((p) => p.text.trim());
+    const masked = maskAll(parts, subject);
+    for (const [kind, n] of Object.entries(masked.hits)) hits[kind] = (hits[kind] ?? 0) + n;
+    lines.push(`[${s.seq}회차 session_id=${s.id}]`);
+    masked.parts.forEach((p, i) => {
+      const id = parts[i].id;
+      lines.push(`(${p.label}${id === null ? '' : ` card_id=${id}`}) ${p.text}`);
+    });
+    lines.push('');
+  }
+  const through = sessions[sessions.length - 1].seq;
+
+  const shape = await callModel<MemoryShape>({
+    system: MEMORY_SYSTEM,
+    prompt: ['이 사례의 지난 회차 자료다. 아래 내용만 보고 기억으로 접는다.', '', ...lines].join('\n'),
+    schema: MEMORY_SCHEMA,
+    name: 'case_memory',
+  });
+  if (typeof shape.text !== 'string' || !shape.text.trim()) throw new AiUnavailable('기억 응답 해석 실패');
+  if (shape.text.length > MEMORY_MAX_CHARS) throw new AiUnavailable(`기억이 상한(${MEMORY_MAX_CHARS}자)을 넘음`);
+  const refs = Array.isArray(shape.refs) ? shape.refs : [];
+  for (const r of refs) {
+    const known = cardIdsBySession.get(r.session_id);
+    if (!known || !(r.card_ids ?? []).every((id) => known.has(id))) {
+      throw new AiUnavailable('기억 근거가 사례 밖을 가리킴');
+    }
+  }
+
+  await sql`
+    insert into case_memories (case_id, enc_text, through_seq, refs, mask_hits, model, created_by, updated_at)
+    values (${caseId}, ${encryptText(shape.text)}, ${through}, ${sql.json(refs)}, ${sql.json(hits)}, ${MODEL}, ${actorId}, now())
+    on conflict (case_id) do update set
+      enc_text = excluded.enc_text, through_seq = excluded.through_seq, refs = excluded.refs,
+      mask_hits = excluded.mask_hits, model = excluded.model, created_by = excluded.created_by, updated_at = now()`;
+
+  await audit({
+    actorId,
+    action: 'ai.memory',
+    caseId,
+    fields: [`trigger=${trigger}`, `through_seq=${through}`, ...outboundFields(hits)],
+  });
+
+  return { text: shape.text, through_seq: through };
+}
+
+/** 마지막으로 뒤에서 띄운 갱신. 시험이 시간을 재지 않고 이것을 기다린다. 서비스 코드는 읽지 않는다. */
+let lastBackgroundRefresh: Promise<void> = Promise.resolve();
+export const settleCaseMemory = (): Promise<void> => lastBackgroundRefresh;
+
+/**
+ * 저장·승인 뒤에 뒤에서 한 번. 실패해도 요청은 성공이다 — 다음 초안 요청이 다시 만든다.
+ *
+ * 방금 저장한 회차가 **마지막** 회차면 그 앞까지만 접는다: 그 회차의 초안은 "직전까지" 의 기억을 원한다.
+ * 지난 회차를 고친 것이면 전부 접는다 — 빼면 다음 초안이 그 회차를 모른다. 승인은 뺄 것이 없다.
+ */
+export function refreshCaseMemoryInBackground(
+  caseId: number,
+  actorId: number,
+  trigger: MemoryTrigger,
+  savedSessionId?: number,
+): void {
+  lastBackgroundRefresh = (async () => {
+    let beforeSeq: number | undefined;
+    if (savedSessionId !== undefined) {
+      const [row] = await sql<Array<{ seq: number; last: number }>>`
+        select s.seq, (select max(seq) from sessions where case_id = ${caseId} and status = 'done') as last
+        from sessions s where s.id = ${savedSessionId}`;
+      if (row && row.seq === row.last) beforeSeq = row.seq;
+    }
+    await refreshCaseMemory(caseId, actorId, trigger, { beforeSeq });
+  })().catch((error) => {
+    // 동의가 없거나 AI 가 없는 것은 사고가 아니라 상태다. 한 줄로 남기고 스택은 진짜 오류에만.
+    if (error instanceof ConsentRequired || error instanceof AiUnavailable) {
+      console.log(`[사례 기억] 건너뜀 case=${caseId} trigger=${trigger} · ${error.message}`);
+      return;
+    }
+    console.error(`[사례 기억] 갱신 실패 case=${caseId} trigger=${trigger}`, error);
+  });
+}
+
+/** 외부 LLM 동의를 거두면 그 동의로 만든 기억도 지운다(음성 철회와 대칭). 새 기억도 동의가 없어 안 생긴다. */
+export async function withdrawCaseMemory(caseId: number, actorId: number): Promise<number> {
+  const rows = await sql`delete from case_memories where case_id = ${caseId} returning case_id`;
+  if (rows.length > 0) await audit({ actorId, action: 'ai.memory.withdraw', caseId, fields: [] });
+  return rows.length;
+}
+
+/**
+ * 이번 회차 직전까지의 기억. 지난 done 회차가 없으면 없음. 있는데 through_seq 가 정확히 그 직전이 아니면
+ * (뒤처졌든, 이번 회차까지 접혔든) 그 자리에서 다시 만든다 — 이번 회차 자료가 기억에 섞이면 변화를 못 찾는다.
+ */
+async function memoryBefore(session: Session, actorId: number): Promise<string | null> {
+  const [{ prev }] = await sql<Array<{ prev: number | null }>>`
+    select max(seq) as prev from sessions
+    where case_id = ${session.case_id} and status = 'done' and seq < ${session.seq}`;
+  if (prev === null) return null;
+  const [row] = await sql<Array<{ enc_text: string; through_seq: number }>>`
+    select enc_text, through_seq from case_memories where case_id = ${session.case_id}`;
+  if (row && row.through_seq === prev) return decryptText(row.enc_text);
+  const fresh = await refreshCaseMemory(session.case_id, actorId, 'draft_request', { beforeSeq: session.seq });
+  return fresh?.text ?? null;
+}
 
 /** 회차의 현재 초안. 마지막 행이 현재 상태다. */
 export async function latestDraft(sessionId: number): Promise<Draft | null> {
@@ -366,6 +567,8 @@ export async function approveDraft(
     caseId: session.case_id,
     fields: [`draft=${current.id}`, edited ? 'edited=yes' : 'edited=no'],
   });
+  // 승인이 곧 기록이다 — 이 회차까지 접은 기억이 다음 회차 초안의 입력이 된다.
+  refreshCaseMemoryInBackground(session.case_id, actorId, 'approve_draft');
 
   return { ...current, id: row.id, status: 'approved', summary, changes, tasks, questions, created_at: row.created_at };
 }
