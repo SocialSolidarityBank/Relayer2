@@ -29,6 +29,7 @@ export function StructuredRecordView({
   keywords,
   onSpanClick,
   selectedSpan,
+  onKeywordClick,
 }: {
   record: StructuredRecord;
   spans: SourceSpan[];
@@ -38,6 +39,8 @@ export function StructuredRecordView({
   keywords: Keyword[];
   onSpanClick?: (spanId: string) => void;
   selectedSpan?: string | null;
+  /** 칩을 누르면 백링크를 여는 화면이 준다(원본 팝업). 없으면 칩은 그냥 배지다. */
+  onKeywordClick?: (keyword: string) => void;
 }) {
   const spanById = new Map(spans.map((s) => [s.id, s]));
   const docById = new Map(documents.map((d) => [d.id, d]));
@@ -61,11 +64,17 @@ export function StructuredRecordView({
       {keywords.length > 0 && (
         <div className="keyword-chips">
           {/* 결정적 키워드는 목표·카드에서 온 사람의 어휘(민트), LLM 추출은 라벤더(AI 산출). */}
-          {keywords.map((k) => (
-            <Badge key={k.text} tone={k.source === 'llm' ? 'lavender' : 'mint'}>
-              {k.text}
-            </Badge>
-          ))}
+          {keywords.map((k) =>
+            onKeywordClick ? (
+              <button key={k.text} type="button" className="keyword-chip" onClick={() => onKeywordClick(k.text)}>
+                <Badge tone={k.source === 'llm' ? 'lavender' : 'mint'}>{k.text}</Badge>
+              </button>
+            ) : (
+              <Badge key={k.text} tone={k.source === 'llm' ? 'lavender' : 'mint'}>
+                {k.text}
+              </Badge>
+            ),
+          )}
         </div>
       )}
       {topics.map((topic) => (

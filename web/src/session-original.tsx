@@ -11,9 +11,15 @@
 // 저장 실패는 **그 자리에 그대로** 보인다 — 성공한 척하지 않는다.
 import { useEffect, useRef, useState } from 'react';
 import {
+  Forbidden as ApiForbidden,
+  getAnalysis,
+  getBacklinks,
   getSessionRecord,
+  isTranscriptSpan,
   listRevisions,
   reviseSession,
+  type AnalysisView,
+  type Backlink,
   type Revision,
   type RevisionKind,
   type SessionRecord,
@@ -28,6 +34,9 @@ import {
 } from './speech-api.ts';
 import { Badge, Button, Empty, ErrorText, Item, Meta } from './ui.tsx';
 import { Dialog } from './dialog.tsx';
+import { ContrastPanel, type ContrastPanelProps } from './analysis-panel.tsx';
+import { StructuredRecordView, paragraphOfSpan } from './structured-record.tsx';
+import { TranscriptView } from './transcript-view.tsx';
 import { fmtBytes, fmtMs } from './screens/session-audio.tsx';
 import { IntakeScreen } from './screens/intake.tsx';
 
@@ -170,18 +179,50 @@ function Written({
   caseId,
   revisions,
   onSaved,
+  analysis,
+  structured,
+  onMode,
+  selectedSpan,
+  onSelectSpan,
+  onKeywordClick,
 }: {
   rec: SessionRecord;
   caseId: number;
   revisions: Revision[] | 'failed' | null;
   onSaved: (rev: Revision) => void;
+  /** 승인된 v6 분석이 있으면 `구조화` 보기를 켤 수 있다(인테이크는 절대 안 뜬다). */
+  analysis: AnalysisView | null;
+  structured: boolean;
+  onMode: (structured: boolean) => void;
+  selectedSpan?: string | null;
+  onSelectSpan?: (spanId: string) => void;
+  onKeywordClick?: (keyword: string) => void;
 }) {
   if (rec.kind === 'intake') return <IntakeScreen caseId={caseId} readOnly />;
+  const approved = analysis?.analysis?.status === 'approved' ? analysis.analysis.body : null;
   const written =
     (rec.memo?.trim() ?? '') !== '' || rec.cards.length > 0 || (rec.next_goal_text?.trim() ?? '') !== '';
   if (!written) return <Empty>수기 미작성</Empty>;
+  if (structured && approved) {
+    return (
+      <>
+        <WrittenModeToggle structured={structured} onMode={onMode} />
+        <StructuredRecordView
+          record={approved.record}
+          spans={analysis?.spans ?? []}
+          documents={analysis?.documents ?? []}
+          annotationsVisible
+          keywords={approved.keywords}
+          onSpanClick={onSelectSpan}
+          selectedSpan={selectedSpan}
+          onKeywordClick={onKeywordClick}
+        />
+      </>
+    );
+  }
   return (
     <>
+      {approved && <WrittenModeToggle structured={structured} onMode={onMode} />}
       <Revisable
         sessionId={rec.session_id}
         kind="memo"
@@ -219,14 +260,39 @@ function Written({
   );
 }
 
+/** 수기 열 보기 전환 — 승인된 분석이 있는 회차에만 선다(인테이크 제외). */
+function WrittenModeToggle({ structured, onMode }: { structured: boolean; onMode: (structured: boolean) => void }) {
+  return (
+    <div className="info-tabs" data-cols="2" role="tablist" aria-label="수기 보기">
+      <button type="button" role="tab" aria-selected={!structured} className="wire-step" onClick={() => onMode(false)}>
+        원문 그대로
+      </button>
+      <button type="button" role="tab" aria-selected={structured} className="wire-step" onClick={() => onMode(true)}>
+        구조화
+      </button>
+    </div>
+  );
+}
+
 function Voice({
   sessionId,
   revisions,
   onSaved,
+  analysis,
+  selectedSpan,
+  onSelectSpan,
+  filter,
+  onToggleFilter,
 }: {
   sessionId: number;
   revisions: Revision[] | 'failed' | null;
   onSaved: (rev: Revision) => void;
+  /** v6 분석이 있으면 전사 열은 문장 span 뷰로 간다 — 없으면 오늘 모습 그대로. */
+  analysis: AnalysisView | null;
+  selectedSpan?: string | null;
+  onSelectSpan?: (spanId: string) => void;
+  filter: boolean;
+  onToggleFilter: () => void;
 }) {
   const [recordings, setRecordings] = useState<Recording[] | null>(null);
   const [transcript, setTranscript] = useState<Transcript | null>(null);
@@ -307,7 +373,33 @@ function Voice({
           </div>
         ))
       )}
-      {transcript ? (
+      {analysis ? (
+        <>
+          <TranscriptView
+            spans={analysis.spans}
+            documents={analysis.documents}
+            links={analysis.analysis?.body?.links ?? []}
+            discrepancies={analysis.analysis?.body?.discrepancies ?? []}
+            record={analysis.analysis?.body?.record ?? null}
+            selectedSpan={selectedSpan}
+            onSelect={onSelectSpan}
+            filterDiscrepancies={filter}
+            onToggleFilter={onToggleFilter}
+            transcriptStatus={analysis.transcript?.status ?? null}
+            recordingsWithoutTranscript={analysis.transcript?.recordings_without_transcript ?? 0}
+          />
+          {transcript && (
+            <Revisable
+              sessionId={sessionId}
+              kind="transcript"
+              label="전사 원문"
+              text={transcriptText}
+              revisions={revisions}
+              onSaved={onSaved}
+            />
+          )}
+        </>
+      ) : transcript ? (
         <>
           <section className="seq-section original-section">
             <h3 className="seq-section-title">
@@ -349,41 +441,76 @@ function Voice({
 }
 
 /**
- * 큰 팝업 두 열. 왼쪽 수기, 오른쪽 녹음 전사 — 둘 다 늘 그려서 없는 쪽은 `없음` 으로 말한다
- * (두 열 폭이 같아야 한다, AC-E2). `focus` 는 열 때 초점을 둘 열이다(요약 탭의 버튼 둘).
- * 열고 닫는 것은 부르는 화면이 정한다(회차 목록이 어느 회차인지 안다).
+ * 큰 팝업 두 열 + 대조 패널. 왼쪽 수기, 오른쪽 녹음 전사 — 둘 다 늘 그려서 없는 쪽은
+ * `없음` 으로 말한다(두 열 폭이 같아야 한다, AC-E2). `focus` 는 열 때 초점을 둘 열이다.
+ * v6 분석이 붙은 회차는 수기 열에 `원문 그대로 | 구조화` 전환과, 문장을 고르면 수기↔전사를
+ * 나란히 놓는 대조 패널이 생긴다(≥768 우측, ≤767 하단 — `.analysis-split`).
+ * 분석 부르기가 실패해도 원본은 그대로 보인다 — 분석은 덧붙는 층이다.
  */
 export function SessionOriginalDialog({
   caseId,
   sessionId,
   seq,
   focus = 'written',
+  backlinkKeyword,
+  initialSpan,
   onClose,
   onRevised,
+  onOpenSession,
 }: {
   caseId: number;
   sessionId: number;
   seq: number;
   focus?: OriginalPart;
+  /** 열자마자 이 키워드의 백링크 목록을 패널에 띄운다(회차 카드 키워드 칩). */
+  backlinkKeyword?: string;
+  /** 열자마자 이 span 을 고르고 그 자리로 간다(백링크로 다른 회차를 열 때). */
+  initialSpan?: string;
   onClose: () => void;
   /** 리비전이 붙었다 — 부르는 화면이 그 회차의 AI 요약·불일치를 `재정리 필요` 로 표시한다. */
   onRevised?: (sessionId: number) => void;
+  /** 백링크가 다른 회차를 가리킨다 — 부르는 화면이 그 회차로 팝업을 다시 연다. */
+  onOpenSession?: (sessionId: number, spanId: string) => void;
 }) {
   const [rec, setRec] = useState<SessionRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [revisions, setRevisions] = useState<Revision[] | 'failed' | null>(null);
+  const [analysis, setAnalysis] = useState<AnalysisView | null>(null);
+  const [structured, setStructured] = useState(false);
+  const [selectedSpan, setSelectedSpan] = useState<string | null>(null);
+  const [panel, setPanel] = useState<ContrastPanelProps>({ mode: 'empty' });
+  const [filter, setFilter] = useState(false);
+  // 패널 버튼이 요청한 이동 — 구조화로 바꾼 뒤 렌더가 끝나야 span 을 찾을 수 있다.
+  const [focusRequest, setFocusRequest] = useState<{ kind: 'paragraph' | 'span'; id: string } | null>(null);
   const body = useRef<HTMLDivElement>(null);
+  const appliedSpan = useRef<string | null>(null);
+  const appliedKeyword = useRef<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     setRec(null);
     setRevisions(null);
+    setAnalysis(null);
+    setStructured(false);
+    setSelectedSpan(null);
+    setPanel({ mode: 'empty' });
+    setFilter(false);
+    setFocusRequest(null);
+    appliedSpan.current = null;
+    appliedKeyword.current = null;
     void getSessionRecord(sessionId)
       .then((r) => alive && setRec(r))
-      .catch((e) => alive && setError(e instanceof Error ? e.message : '불러오기 실패'));
+      .catch((e) =>
+        alive &&
+        setError(e instanceof ApiForbidden ? '열람 권한 없음' : e instanceof Error ? e.message : '불러오지 못함'),
+      );
     void listRevisions(sessionId)
       .then((rows) => alive && setRevisions(rows))
       .catch(() => alive && setRevisions('failed'));
+    // 분석은 원본과 따로 간다 — 실패해도 원본 두 열은 그대로다.
+    void getAnalysis(sessionId)
+      .then((a) => alive && setAnalysis(a))
+      .catch(() => undefined);
     return () => {
       alive = false;
     };
@@ -393,6 +520,97 @@ export function SessionOriginalDialog({
     body.current?.querySelector<HTMLElement>(`.original-col[data-part="${focus}"]`)?.focus();
   }, [focus, sessionId]);
 
+  const spanText = (spanId: string): string => {
+    const s = analysis?.spans.find((x) => x.id === spanId);
+    const d = s && analysis?.documents.find((x) => x.id === s.doc);
+    return s && d ? d.text.slice(s.start, s.end) : '';
+  };
+
+  const selectSpan = (spanId: string) => {
+    setSelectedSpan(spanId);
+    const body_ = analysis?.analysis?.body;
+    if (!body_) {
+      setPanel({ mode: 'empty' });
+      return;
+    }
+    const discrepancy = body_.discrepancies.find((d) => d.transcript_span === spanId);
+    const link = body_.links.find((l) => l.transcript_span === spanId);
+    if (discrepancy) {
+      setPanel({
+        mode: 'discrepancy',
+        difference: discrepancy.difference,
+        transcriptText: spanText(spanId),
+        writtenText: discrepancy.written_spans.map(spanText).join(' '),
+        paragraph: body_.record.paragraphs.find((p) => p.id === discrepancy.paragraph_id) ?? null,
+      });
+    } else if (link) {
+      setPanel({
+        mode: 'link',
+        transcriptText: spanText(spanId),
+        writtenText: link.written_spans.map(spanText).join(' '),
+        paragraph: paragraphOfSpan(body_.record, link.written_spans[0] ?? ''),
+      });
+    } else {
+      setPanel({ mode: 'empty' });
+    }
+  };
+
+  const openBacklinks = (keyword: string) => {
+    setPanel({ mode: 'backlinks', keyword, backlinks: [] });
+    void getBacklinks(caseId, keyword)
+      .then((rows) => setPanel({ mode: 'backlinks', keyword, backlinks: rows }))
+      .catch(() => setPanel({ mode: 'backlinks', keyword, backlinks: [] }));
+  };
+
+  // `연결된 수기 단락` — 수기 열을 구조화로 바꾸고 단락 제목으로 간다.
+  const goToParagraph = (paragraphId: string) => {
+    setStructured(true);
+    setFocusRequest({ kind: 'paragraph', id: paragraphId });
+  };
+
+  const goToBacklink = (item: Backlink) => {
+    if (item.session_id !== sessionId) {
+      onOpenSession?.(item.session_id, item.span_id);
+      return;
+    }
+    if (!isTranscriptSpan(item.span_id)) setStructured(true);
+    setFocusRequest({ kind: 'span', id: item.span_id });
+  };
+
+  // 이동 요청은 렌더 뒤에 처리한다 — 구조화 전환이 끝나야 span·단락이 DOM 에 있다.
+  useEffect(() => {
+    if (!focusRequest || !body.current) return;
+    if (focusRequest.kind === 'paragraph') {
+      const el = body.current.querySelector<HTMLElement>(`[data-paragraph-id="${focusRequest.id}"]`);
+      el?.querySelector<HTMLElement>('.record-paragraph-title')?.scrollIntoView({ block: 'start' });
+      const first = analysis?.analysis?.body?.record.paragraphs.find((p) => p.id === focusRequest.id)?.spans[0];
+      if (first) selectSpan(first);
+    } else {
+      const el = body.current.querySelector<HTMLElement>(`[data-span-id="${focusRequest.id}"]`);
+      el?.scrollIntoView({ block: 'center' });
+      el?.focus();
+      selectSpan(focusRequest.id);
+    }
+    setFocusRequest(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusRequest, structured, analysis]);
+
+  // 백링크로 연 회차 — 분석이 오면 그 span 을 고르고 그 자리로 간다(한 번만).
+  useEffect(() => {
+    if (!analysis || !initialSpan || appliedSpan.current === initialSpan) return;
+    appliedSpan.current = initialSpan;
+    if (!isTranscriptSpan(initialSpan)) setStructured(true);
+    setFocusRequest({ kind: 'span', id: initialSpan });
+  }, [analysis, initialSpan]);
+
+  // 키워드 칩으로 연 팝업 — 열자마자 백링크 목록을 띄운다(한 번만).
+  useEffect(() => {
+    if (!backlinkKeyword || appliedKeyword.current === backlinkKeyword) return;
+    appliedKeyword.current = backlinkKeyword;
+    openBacklinks(backlinkKeyword);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backlinkKeyword]);
+
   const onSaved = (rev: Revision) => {
     setRevisions((prev) => (prev === null || prev === 'failed' ? [rev] : [...prev, rev]));
     onRevised?.(sessionId);
@@ -400,21 +618,44 @@ export function SessionOriginalDialog({
 
   return (
     <Dialog id="session-original" title={`${seq}회차 원본`} size="wide" className="original-dialog" open onClose={onClose}>
-      <div className="original-cols" ref={body}>
-        <section className="original-col" data-part="written" tabIndex={-1} aria-label="수기 기록">
-          <h3 className="wire-subhead">수기 기록</h3>
-          {error ? (
-            <ErrorText>{error}</ErrorText>
-          ) : rec === null ? (
-            <Empty>불러오는 중</Empty>
-          ) : (
-            <Written rec={rec} caseId={caseId} revisions={revisions} onSaved={onSaved} />
-          )}
-        </section>
-        <section className="original-col" data-part="voice" tabIndex={-1} aria-label="녹음 전사">
-          <h3 className="wire-subhead">녹음 전사</h3>
-          <Voice sessionId={sessionId} revisions={revisions} onSaved={onSaved} />
-        </section>
+      <div className="analysis-split" ref={body}>
+        <div className="original-cols">
+          <section className="original-col" data-part="written" tabIndex={-1} aria-label="수기 기록">
+            <h3 className="wire-subhead">수기 기록</h3>
+            {error ? (
+              <ErrorText>{error}</ErrorText>
+            ) : rec === null ? (
+              <Empty>불러오는 중</Empty>
+            ) : (
+              <Written
+                rec={rec}
+                caseId={caseId}
+                revisions={revisions}
+                onSaved={onSaved}
+                analysis={analysis}
+                structured={structured}
+                onMode={setStructured}
+                selectedSpan={selectedSpan}
+                onSelectSpan={selectSpan}
+                onKeywordClick={openBacklinks}
+              />
+            )}
+          </section>
+          <section className="original-col" data-part="voice" tabIndex={-1} aria-label="녹음 전사">
+            <h3 className="wire-subhead">녹음 전사</h3>
+            <Voice
+              sessionId={sessionId}
+              revisions={revisions}
+              onSaved={onSaved}
+              analysis={analysis}
+              selectedSpan={selectedSpan}
+              onSelectSpan={selectSpan}
+              filter={filter}
+              onToggleFilter={() => setFilter((f) => !f)}
+            />
+          </section>
+        </div>
+        <ContrastPanel {...panel} onGoToParagraph={goToParagraph} onGoToBacklink={goToBacklink} />
       </div>
     </Dialog>
   );

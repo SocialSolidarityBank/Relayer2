@@ -780,6 +780,9 @@ body { margin: 0; }
   .analysis-split { grid-template-columns: minmax(0, 1fr); }
 }
 
+/* 수기 열 보기 전환(원문 그대로 | 구조화) — 탭 상자 어휘를 빌리되 칸은 둘이다. */
+.info-tabs[data-cols='2'] { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 0; }
+
 /* 인쇄 — 상태 띠·불일치 배경이 빠지면 판정이 사라지므로 색을 강제하고, 패널이 쪽 넘김에 잘리지 않게 한다. */
 @media print {
   .record-span[data-status],

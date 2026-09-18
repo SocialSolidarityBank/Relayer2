@@ -34,7 +34,6 @@ import {
   ConsentDetail,
   Empty,
   ErrorText,
-  FactChanges,
   Field,
   Fold,
   FormActions,
@@ -45,6 +44,7 @@ import {
 } from '../ui.tsx';
 import { ConsentLinkCard } from '../consent-link.tsx';
 import { SessionOriginalDialog, type OriginalPart } from '../session-original.tsx';
+import { SessionSummaryView } from '../session-summary.tsx';
 import { Dialog } from '../dialog.tsx';
 
 const TABS = ['당사자 정보', '회차별 요약', '회차별 원본 보기', '목표'] as const;
@@ -73,20 +73,6 @@ const AI_OFF_LABEL: Record<string, string> = {
 // 요약 수정도 리비전이다(`kind: 'summary'`, L5 §4) — 승인본을 고쳐도 로그로 남는다(F4).
 // 저장 뒤 사례 상세를 다시 받는다: 서버가 새 승인본을 쌓아 `ai_summary` 가 그것을 가리킨다.
 
-/** 줄글 여러 개는 불렛이다(F2). 한 줄이면 단락 하나. */
-const Lines = ({ text }: { text: string }) => {
-  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
-  return lines.length > 1 ? (
-    <ul className="seq-list">
-      {lines.map((l, i) => (
-        <li key={i}>{l}</li>
-      ))}
-    </ul>
-  ) : (
-    <p className="seq-text">{text}</p>
-  );
-};
-
 /**
  * 회차별 요약 — **한 회차가 한 접힘 카드**다(2026-09-17 Q). 상단 `위험 신호` 배너는 걷었다:
  * 본문 중심으로 가고, 위험 신호는 그 신호가 나온 회차 카드가 스스로 말한다(`is-crisis`).
@@ -107,7 +93,7 @@ function Sessions({
   reload: () => Promise<void>;
 }) {
   const [brief, setBrief] = useState<Briefing | null>(null);
-  const [original, setOriginal] = useState<{ sessionId: number; seq: number; focus: OriginalPart } | null>(null);
+  const [original, setOriginal] = useState<{ sessionId: number; seq: number; focus: OriginalPart; backlinkKeyword?: string; initialSpan?: string } | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
@@ -132,7 +118,6 @@ function Sessions({
       setSaving(false);
     }
   };
-
   // 아직 아무 기록이 없으면 **여기서 바로 시작할 수 있어야 한다.**
   // 빈 화면만 보여 주고 어디로 가라는 말이 없으면 위 메뉴를 뒤지게 된다.
   if (done.length === 0) {
@@ -166,25 +151,22 @@ function Sessions({
           const risks = (risk?.items ?? []).filter((r) => r.source_session_seq === s.seq);
           const transcriptLabel =
             s.voice.recordings > 0 ? TRANSCRIPT_LABEL[s.voice.transcript] : undefined;
-          // 확인필요·완료는 브리핑의 과제·질문을 **그 회차가 낳은 것**으로 갈라 담는다
-          // (`source_session_seq`). 서버를 새로 부르지 않는다 — 이미 받은 자료다.
-          const mine = <T extends { source_session_seq: number }>(rows: T[]) =>
-            rows.filter((r) => r.source_session_seq === s.seq);
-          const pending = [
-            ...mine(brief?.open_tasks?.items ?? []).map((item) => ({ kind: 'task', item })),
-            ...mine(brief?.today_questions ?? []).map((item) => ({ kind: 'question', item })),
-          ];
-          const settled = [
-            ...mine(brief?.closed_tasks ?? []).map((item) => ({ kind: 'task', item })),
-            ...mine(brief?.closed_questions ?? []).map((item) => ({ kind: 'question', item })),
-          ];
           const state = [
             s.line,
             s.written === false && '수기 미작성',
             s.voice.recordings > 0 && `녹음 ${s.voice.recordings}건`,
             transcriptLabel,
           ];
-          const summary = s.ai_summary?.summary ?? null;
+          // v6 는 사람이 통째 고친 요약(override)이 있으면 그것만, 없으면 핵심 항목을 잇는다.
+          const summary =
+            s.ai_summary == null
+              ? null
+              : s.ai_summary.kind === 'legacy'
+                ? s.ai_summary.summary
+                : (s.ai_summary.override?.text ??
+                  (s.ai_summary.summary.core.length > 0
+                    ? s.ai_summary.summary.core.map((c) => c.text).join('\n')
+                    : null));
           const isStale = s.stale.ai_summary || s.stale.mismatch;
           const openOriginal = (focus: OriginalPart) => (event: React.MouseEvent) => {
             event.stopPropagation();
@@ -237,117 +219,73 @@ function Sessions({
                 </>
               }
             >
-              {/* 팀 목업 넷(2026-09-18 검토)이 공통으로 쓰는 **네 구역**이다: 핵심 · 변화 ·
-                  확인필요 · 완료·해결. 1440에서는 2×2, 767 이하는 한 열로 내려온다.
-                  구역 제목은 배지다(F2 — 정해진 배경 + 어두운 글씨: AI 산출=라벤더, 변화=민트,
-                  확인필요=코랄, 시간·상태=블루). */}
-              <div className="seq-sections" data-cols="2">
-                {risks.length > 0 && (
-                  <section className="seq-section is-wide">
-                    <h3 className="seq-section-title is-risk">위험 신호</h3>
-                    <ul className="seq-list">
-                      {risks.map((r) => (
-                        <li key={r.card_id}>
-                          {r.text}
-                          {r.last_result === 'unchecked' && <span className="seq-section-note">지난 회차 미확인</span>}
-                        </li>
-                      ))}
-                    </ul>
-                    <p className="seq-section-note">
-                      {risk ? (AI_OFF_LABEL[risk.status.reason ?? 'ai_disabled'] ?? risk.status.state) : '확인 중'}
-                    </p>
-                  </section>
-                )}
+              {/* 위험 신호 → AI 정리(v6 구조) → 기록 상태 순으로 세로로 쌓는다(2026-09-18 Q).
+                  구역 제목은 배지다(F2 — 정해진 배경 + 어두운 글씨). */}
+              {risks.length > 0 && (
+                <section className="seq-section">
+                  <h3 className="seq-section-title is-risk">위험 신호</h3>
+                  <ul className="seq-list">
+                    {risks.map((r) => (
+                      <li key={r.card_id}>
+                        {r.text}
+                        {r.last_result === 'unchecked' && <span className="seq-section-note">지난 회차 미확인</span>}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="seq-section-note">
+                    {risk ? (AI_OFF_LABEL[risk.status.reason ?? 'ai_disabled'] ?? risk.status.state) : '확인 중'}
+                  </p>
+                </section>
+              )}
+              {editing === s.id ? (
                 <section className="seq-section">
                   <h3 className="seq-section-title is-ai">이번 상담의 핵심</h3>
-                  {editing === s.id ? (
-                    <>
-                      <div className="wire-input-box" data-control="textarea">
-                        <textarea
-                          aria-label="이번 상담의 핵심"
-                          rows={6}
-                          value={draft}
-                          disabled={saving}
-                          onChange={(e) => setDraft(e.target.value)}
-                        />
-                      </div>
-                      <FormActions>
-                        {saveError && <ErrorText>{saveError}</ErrorText>}
-                        <Button disabled={saving} onClick={() => setEditing(null)}>
-                          취소
-                        </Button>
-                        <Button
-                          variant="primary"
-                          disabled={saving || draft.trim() === '' || draft === summary}
-                          onClick={() => void saveSummary(s.id)}
-                        >
-                          {saving ? '저장 중…' : '저장'}
-                        </Button>
-                      </FormActions>
-                    </>
-                  ) : summary !== null ? (
-                    <>
-                      {isStale && <p className="seq-section-note">원본 수정됨, 재정리 필요</p>}
-                      <Lines text={summary} />
-                    </>
-                  ) : (
-                    <p className="seq-section-note">AI 정리 없음</p>
-                  )}
+                  <div className="wire-input-box" data-control="textarea">
+                    <textarea
+                      aria-label="이번 상담의 핵심"
+                      rows={6}
+                      value={draft}
+                      disabled={saving}
+                      onChange={(e) => setDraft(e.target.value)}
+                    />
+                  </div>
+                  <FormActions>
+                    {saveError && <ErrorText>{saveError}</ErrorText>}
+                    <Button disabled={saving} onClick={() => setEditing(null)}>
+                      취소
+                    </Button>
+                    <Button
+                      variant="primary"
+                      disabled={saving || draft.trim() === '' || draft === summary}
+                      onClick={() => void saveSummary(s.id)}
+                    >
+                      {saving ? '저장 중…' : '저장'}
+                    </Button>
+                  </FormActions>
                 </section>
-                <section className="seq-section">
-                  <h3 className="seq-section-title is-change">확인된 변화</h3>
+              ) : s.ai_summary == null ? (
+                <p className="seq-section-note">AI 정리 없음</p>
+              ) : (
+                <>
                   {isStale && <p className="seq-section-note">원본 수정됨, 재정리 필요</p>}
-                  {s.ai_summary && s.ai_summary.changes.length > 0 && (
-                    <ul className="seq-list">
-                      {s.ai_summary.changes.map((c, i) => (
-                        <li key={i}>{c}</li>
-                      ))}
-                    </ul>
-                  )}
-                  {s.ai_summary && s.ai_summary.fact_changes.length > 0 ? (
-                    <FactChanges items={s.ai_summary.fact_changes} />
-                  ) : (
-                    s.ai_summary != null &&
-                    s.ai_summary.changes.length === 0 && <p className="seq-section-note">달라진 사실 없음</p>
-                  )}
-                  {!s.ai_summary && <p className="seq-section-note">AI 정리 없음</p>}
-                </section>
+                  <SessionSummaryView
+                    summary={s.ai_summary.kind === 'v6' ? s.ai_summary.summary : null}
+                    keywords={s.ai_summary.kind === 'v6' ? s.ai_summary.keywords : []}
+                    override={s.ai_summary.kind === 'v6' ? s.ai_summary.override : null}
+                    legacy={s.ai_summary.kind === 'legacy' ? s.ai_summary.summary : null}
+                    sessionSeq={s.seq}
+                    onKeywordClick={(keyword) =>
+                      setOriginal({ sessionId: s.id, seq: s.seq, focus: 'written', backlinkKeyword: keyword })
+                    }
+                  />
+                </>
+              )}
+              {state.some(Boolean) && (
                 <section className="seq-section">
-                  <h3 className="seq-section-title is-warn">확인필요</h3>
-                  {pending.length === 0 ? (
-                    <p className="seq-section-note">확인할 것 없음</p>
-                  ) : (
-                    <ul className="seq-list">
-                      {pending.map((i) => (
-                        <li key={`${i.kind}-${i.item.card_id}`}>
-                          {i.item.text}
-                          {i.item.last_result === 'unchecked' && (
-                            <span className="seq-section-note">지난 회차 미확인</span>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                  <h3 className="seq-section-title is-state">기록 상태</h3>
+                  <p className="seq-text"><Meta parts={state} /></p>
                 </section>
-                <section className="seq-section">
-                  <h3 className="seq-section-title">완료·해결</h3>
-                  {settled.length === 0 ? (
-                    <p className="seq-section-note">완료된 것 없음</p>
-                  ) : (
-                    <ul className="seq-list">
-                      {settled.map((i) => (
-                        <li key={`${i.kind}-${i.item.card_id}`}>{i.item.text}</li>
-                      ))}
-                    </ul>
-                  )}
-                </section>
-                {state.some(Boolean) && (
-                  <section className="seq-section is-wide">
-                    <h3 className="seq-section-title is-state">기록 상태</h3>
-                    <p className="seq-text"><Meta parts={state} /></p>
-                  </section>
-                )}
-              </div>
+              )}
             </Fold>
           );
         })}
@@ -368,8 +306,14 @@ function Sessions({
           sessionId={original.sessionId}
           seq={original.seq}
           focus={original.focus}
+          backlinkKeyword={original.backlinkKeyword}
+          initialSpan={original.initialSpan}
           onClose={() => setOriginal(null)}
           onRevised={() => void reload()}
+          onOpenSession={(sessionId, spanId) => {
+            const target = detail.sessions.find((x) => x.id === sessionId);
+            if (target) setOriginal({ sessionId, seq: target.seq, focus: 'written', initialSpan: spanId });
+          }}
         />
       )}
     </>
@@ -889,7 +833,7 @@ function Fulls({
   caseId: number;
   reload: () => Promise<void>;
 }) {
-  const [open, setOpen] = useState<{ sessionId: number; seq: number } | null>(null);
+  const [open, setOpen] = useState<{ sessionId: number; seq: number; initialSpan?: string } | null>(null);
   const done = detail.sessions.filter((x) => x.status === 'done');
   if (done.length === 0) {
     return (
@@ -929,8 +873,13 @@ function Fulls({
           caseId={caseId}
           sessionId={open.sessionId}
           seq={open.seq}
+          initialSpan={open.initialSpan}
           onClose={() => setOpen(null)}
           onRevised={() => void reload()}
+          onOpenSession={(sessionId, spanId) => {
+            const target = detail.sessions.find((x) => x.id === sessionId);
+            if (target) setOpen({ sessionId, seq: target.seq, initialSpan: spanId });
+          }}
         />
       )}
     </Card>

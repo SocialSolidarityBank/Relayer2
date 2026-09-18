@@ -56,6 +56,8 @@ export type CaseView = {
 
 /** 401 은 로그인 만료다. 화면이 각자 처리하지 않고 한 곳에서 구분한다. */
 export class Unauthorized extends Error {}
+/** 403 은 열람 권한 없음이다. 원본 팝업처럼 그 자리에서 말해야 하는 화면이 구분한다. */
+export class Forbidden extends Error {}
 
 /** 개발은 vite 프록시(`/api`), 배포는 한 프로세스라 같은 출처 그대로다. */
 const BASE = import.meta.env.DEV ? '/api' : '';
@@ -101,6 +103,7 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
     if (res.status >= 500 || res.status === 403 || res.status === 404) {
       announce(message ?? `요청 실패 (${res.status})`);
     }
+    if (res.status === 403) throw new Forbidden(message ?? '열람 권한 없음');
     throw new Error(message ?? `${res.status}`);
   }
   return (await res.json()) as T;
@@ -187,7 +190,7 @@ export type CaseDetail = {
     line: string;
     memo: string | null;
     today_goal_text: string | null;
-    ai_summary: { summary: string; changes: string[]; fact_changes: FactChange[] } | null;
+  ai_summary: SessionAiSummary | null;
     /** 수기가 있는가. 녹음만 하고 아직 안 적은 회차는 false — 화면이 '수기 미작성'을 그린다. */
     written: boolean;
     /** 녹음·전사 상태. 여러 녹음이면 가장 최근 녹음 기준. */
@@ -307,40 +310,6 @@ export const issueAccess = (caseId: number) =>
   });
 export const revokeAccess = (caseId: number) =>
   json<{ ok: true }>(`/cases/${caseId}/access`, { method: 'DELETE' });
-
-/** 회차간 사실관계 변화. 양쪽 원문을 그대로 들고 온다. 판정은 없다. */
-export type FactChange = {
-  topic: string;
-  before: { seq: number; quote: string };
-  after: { seq: number; quote: string };
-  note: string;
-};
-
-export type Draft = {
-  id: number;
-  session_id: number;
-  status: 'draft' | 'approved';
-  summary: string;
-  changes: string[];
-  tasks: string[];
-  questions: string[];
-  fact_changes: FactChange[];
-  mask_hits: Record<string, number>;
-  model: string | null;
-  created_at: string;
-};
-
-export const getDraft = async (sessionId: number): Promise<Draft | 'none'> => {
-  const found = await json<Draft | { status: 'none' }>(`/sessions/${sessionId}/draft`);
-  return found.status === 'none' ? 'none' : (found as Draft);
-};
-
-export const makeDraft = (sessionId: number) => json<Draft>(`/sessions/${sessionId}/draft`, { method: 'POST' });
-
-export const approveDraft = (
-  sessionId: number,
-  body: { summary?: string; changes?: string[]; tasks?: string[]; questions?: string[] },
-) => json<Draft>(`/sessions/${sessionId}/draft/approve`, { method: 'POST', body: JSON.stringify(body) });
 
 export type AuditKind = '열람' | '기록' | '운영';
 
@@ -876,7 +845,7 @@ export type ApproveBody = {
   source_versions: SourceVersions;
   edits?: { summary?: SessionSummary; tasks?: string[]; questions?: string[] };
 };
-/** 회차 카드의 요약. v6 가 없고 구버전 승인만 있으면 legacy. 2차 파도에서 CaseDetail.sessions[].ai_summary 가 이 타입이 된다. */
+/** 회차 카드의 요약. v6 가 없고 구버전 승인만 있으면 legacy. `CaseDetail.sessions[].ai_summary` 가 이 타입이다. */
 export type SessionAiSummary =
   | { kind: 'v6'; analysis_id: number; summary: SessionSummary; keywords: Keyword[]; override: SummaryOverride | null }
   | { kind: 'legacy'; summary: string };
