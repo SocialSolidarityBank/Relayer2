@@ -1481,7 +1481,8 @@ function ConsentPane() {
               key={r.domain}
               group="consent-copy"
               title={r.label}
-              desc={<Meta parts={[r.body, `판 ${r.version}`, `지문 ${r.hash}`]} />}
+              // 접힌 머리는 당사자 정보의 동의 카드와 같다(2026-09-18 Q): 동의 항목 한 줄 · 판 · 지문. 본문은 펼쳐야 보인다.
+              desc={<Meta parts={[r.items.join(', '), `판 ${r.version}`, `지문 ${r.hash}`]} />}
             >
               <ConsentDetail copy={r} />
               {r.editable && (
