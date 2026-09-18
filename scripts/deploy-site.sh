@@ -16,7 +16,7 @@ site='https://relayer.kr'
 
 run() { ssh -o BatchMode=yes "$host" "cd $remote && $1"; }
 
-echo "[1/4] $host 에서 main 과의 차이를 본다"
+echo "[1/5] $host 에서 main 과의 차이를 본다"
 changed="$(run 'git fetch -q origin main && git diff --name-only HEAD origin/main')"
 if [ -z "$changed" ]; then
   echo "     새 것 없음. 이미 최신이다."
@@ -26,24 +26,39 @@ printf '%s\n' "$changed" | sed 's/^/     /'
 
 needs_restart="$(printf '%s\n' "$changed" | grep -E '^(api|web)/' || true)"
 needs_migrate="$(printf '%s\n' "$changed" | grep -E '^migrations/' || true)"
+# 의존성이 바뀌었으면 받은 뒤에 설치한다. 2026-09-18 에 이것이 없어서 운영이 내려갔다.
+# 다른 레인이 `@azure/identity` 를 더했는데 그 기기에 없어, 앱이 부팅에서 죽고 502 가 났다.
+needs_install="$(printf '%s\n' "$changed" | grep -E '(^|/)(package\.json|pnpm-lock\.yaml)$' || true)"
 
-echo "[2/4] 받는다"
+echo "[2/5] 받는다"
 run 'git pull -q --ff-only'
 run 'git log --oneline -1' | sed 's/^/     /'
 
-if [ -n "$needs_restart" ]; then
-  echo "[3/4] 코드가 바뀌었다. 앱을 다시 띄운다"
-  ssh -o BatchMode=yes "$host" 'launchctl kickstart -k gui/$(id -u)/or.bss.relayer'
-  sleep 4
+if [ -n "$needs_install" ]; then
+  echo "[3/5] 의존성이 바뀌었다. 설치한다"
+  run 'pnpm install --frozen-lockfile' | tail -2 | sed 's/^/     /'
 else
-  echo "[3/4] 파일만 바뀌었다. 앱은 그대로 둔다"
+  echo "[3/5] 의존성은 그대로다"
 fi
 
-echo "[4/4] 확인"
-for path in / /guide-user.html /guide-admin.html /test; do
+if [ -n "$needs_restart" ]; then
+  echo "[4/5] 코드가 바뀌었다. 앱을 다시 띄운다"
+  ssh -o BatchMode=yes "$host" 'launchctl kickstart -k gui/$(id -u)/or.bss.relayer'
+  sleep 6
+else
+  echo "[4/5] 파일만 바뀌었다. 앱은 그대로 둔다"
+fi
+
+echo "[5/5] 확인"
+for path in / /guide-user.html /guide-admin.html /test /health; do
   code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$site$path")"
   printf '     %-20s %s\n' "$path" "$code"
-  [ "$code" = 200 ] || { echo "     실패: $site$path 가 200 이 아니다"; exit 1; }
+  if [ "$code" != 200 ]; then
+    echo "     실패: $site$path 가 $code 다. 앱 로그 마지막 20줄:"
+    run 'tail -20 relayer.err.log' | sed 's/^/       /'
+    echo "     되돌리려면: ssh $host 'cd \$HOME/services/relayer2 && git reset --hard HEAD~1 && launchctl kickstart -k gui/\$(id -u)/or.bss.relayer'"
+    exit 1
+  fi
 done
 
 if [ -n "$needs_migrate" ] && [ -z "$needs_restart" ]; then
