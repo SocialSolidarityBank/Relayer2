@@ -761,12 +761,8 @@ body { margin: 0; }
 
 /* ==== AI-MODULE ==== */
 /* v6 상담기록 분석(2026-09-18 Q). 새 hue 없음 — 기존 토큰만 쓴다.
-   구역 제목은 `data-tone` 으로 갈고 색은 is-* 배지 규칙과 같다(라벤더=AI, 민트=변화,
-   코랄=확인필요, 블루=완료·해결). */
-.seq-section-title[data-tone='ai'] { border-color: var(--badge-lavender); background: var(--badge-lavender); color: var(--on-action); }
-.seq-section-title[data-tone='change'] { border-color: var(--badge-mint); background: var(--badge-mint); color: var(--on-action); }
-.seq-section-title[data-tone='warn'] { border-color: var(--badge-coral); background: var(--badge-coral); color: var(--on-action); }
-.seq-section-title[data-tone='state'] { border-color: var(--badge-blue); background: var(--badge-blue); color: var(--on-action); }
+   구역 제목의 계열색(`data-tone`)은 위 L3 의 14px 컬러 텍스트 규칙 하나다 — 여기서 채운
+   배지 면으로 덮지 않는다(2026-09-18 Q — 채운 면이 회차 카드 줄을 밀었다). */
 
 /* 01 구조화 뷰 — 접힘 없는 목차형. 원문 공백은 pre-wrap 으로 보존한다(무손실). */
 .structured-record { display: grid; gap: var(--space-5); min-width: 0; }

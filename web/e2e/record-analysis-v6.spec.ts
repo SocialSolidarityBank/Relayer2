@@ -6,7 +6,14 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { expect, request as apiRequest, test, type APIRequestContext, type Page } from '@playwright/test';
+import {
+  expect,
+  request as apiRequest,
+  test,
+  type APIRequestContext,
+  type Locator,
+  type Page,
+} from '@playwright/test';
 
 const API = process.env.PLAYWRIGHT_API_PREFIX ?? '/api';
 const STUB_FILE = '/tmp/relayer-ai-module/stub.json';
@@ -139,12 +146,26 @@ const openSummaryTab = async (page: Page, caseId: number) => {
   await page.getByRole('tab', { name: '회차별 요약', exact: true }).click();
 };
 
-/** `N회차` 접힘 카드. hasText 는 부분 일치라 `1회차` 가 `11회차` 에 걸리지 않게 정확히 집는다. */
+/** `N회차` 접힘 카드(회차별 요약). hasText 는 부분 일치라 `1회차` 가 `11회차` 에 걸리지 않게 정확히 집는다. */
 const foldFor = (page: Page, seq: string) =>
-  page.locator('details', { has: page.getByText(seq, { exact: true }) }).first();
+  page.locator('details.seq-card', { has: page.getByText(seq, { exact: true }) }).first();
 
+/** 회차 카드 안 구역 아코디언 하나를 펼친다(핵심 말고는 접힌 채로 뜬다). */
+const openSection = async (fold: Locator, title: string) => {
+  const section = fold.locator('details.seq-section', { hasText: title });
+  if (!(await section.evaluate((el) => (el as HTMLDetailsElement).open))) {
+    await section.locator('summary').click();
+  }
+  return section;
+};
+
+/**
+ * 원본 팝업은 **회차별 원본 탭의 회차 행**이 연다(2026-09-18 Q — 요약 카드의 행동 버튼은 걷었다).
+ * 요약 탭에서 오는 길은 키워드 칩·근거 링크뿐이다.
+ */
 const openOriginal = async (page: Page, seq: string) => {
-  await foldFor(page, seq).getByRole('button', { name: '수기 원본 보기' }).click();
+  await page.getByRole('tab', { name: '회차별 원본', exact: true }).click();
+  await page.getByRole('button', { name: `${seq} 원본 보기` }).click();
   const dialog = page.getByRole('dialog', { name: `${seq} 원본` });
   await expect(dialog).toBeVisible();
   return dialog;
@@ -256,10 +277,8 @@ test.describe('v6 상담기록 분석', () => {
   test('검토 — stub 초안을 만들고 승인한다', async ({ page }) => {
     writeFileSync(STUB_FILE, JSON.stringify({ default: stubBody(transcriptId) }));
     await login(page);
-    await openSummaryTab(page, caseId);
-
-    await foldFor(page, '1회차').getByRole('button', { name: 'AI 정리 검토' }).click();
-    await page.waitForURL(/\/review$/);
+    // 회차 카드에는 행동 버튼이 없다(2026-09-18 Q) — 검토 화면은 자기 주소로 간다.
+    await page.goto(`/#/cases/${caseId}/sessions/${session1}/review`);
     await page.getByRole('button', { name: 'AI로 정리하기' }).click();
 
     // 초안이 서면 요약·구조화 기록·녹음 전사·과제 카드가 선다.
@@ -279,28 +298,45 @@ test.describe('v6 상담기록 분석', () => {
     const fold = foldFor(page, '1회차');
     await fold.locator('.seq-head-no').click();
 
+    // 구역은 아코디언 카드다(2026-09-18 Q) — 핵심만 펼쳐 있고 나머지는 머리의 건수로 말한다.
     const sections = fold.locator('.seq-sections');
-    await expect(sections).toContainText('이번 상담의 핵심');
-    await expect(sections).toContainText('이번 회차에서 확인된 변화');
-    await expect(sections).toContainText('확인필요');
-    await expect(sections).toContainText('완료·해결');
-    // 새로운 가능성이 비었으니 ③ 은 없고, 빈 자리를 채우는 `없음` 문구도 없다(T06·T12).
+    await expect(sections.locator('> details.seq-section .seq-section-title')).toHaveText([
+      '이번 상담의 핵심',
+      '이번 회차에서 확인된 변화',
+      '확인필요',
+      '완료·해결',
+      '기록 상태',
+    ]);
+    const changes = await openSection(fold, '이번 회차에서 확인된 변화');
+    await expect(changes.locator('.fold-title-desc')).toHaveText('2건');
+    await openSection(fold, '확인필요');
+    await openSection(fold, '완료·해결');
+    await expect(sections).toContainText('주민센터 답변은 다음 주에 확인하기로 함');
+    await expect(sections).toContainText('지난주에 전입신고를 접수함');
+    // 새로운 가능성이 비었으니 ③ 은 없고, 빈 자리를 채우는 문구도 없다(T06·T12).
     await expect(sections.locator('.summary-subsection-title')).toHaveText([
       '① 약속 이행 여부',
       '② 상담 중 새로 드러난 것',
     ]);
     await expect(sections).not.toContainText('③');
-    await expect(sections).not.toContainText('없음');
+    await expect(fold).not.toContainText('달라진 사실 없음');
+    await expect(fold).not.toContainText('확인할 것 없음');
+    await expect(fold).not.toContainText('완료된 것 없음');
+    await expect(fold).not.toContainText('AI 정리 없음');
+    // 요약 탭에는 버튼이 없다 — 원본·AI 정리로 가는 행동 넷은 걷었다(2026-09-18 Q).
+    await expect(fold.getByRole('button', { name: '수기 원본 보기' })).toHaveCount(0);
+    await expect(fold.getByRole('button', { name: '녹음 전사 기록 보기' })).toHaveCount(0);
+    await expect(fold.getByRole('button', { name: '수정', exact: true })).toHaveCount(0);
     await expect(fold.locator('.keyword-chip', { hasText: '내역서' })).toBeVisible();
     await fold.screenshot({ path: shot('01-session-card.png') });
   });
 
   test('(b–e) 원본 팝업 — 구조화·전사 행·대조 패널·불일치 모아보기', async ({ page }) => {
     await login(page);
-    await openSummaryTab(page, caseId);
+    await page.goto(`/#/cases/${caseId}/info`);
     const dialog = await openOriginal(page, '1회차');
     const written = dialog.getByRole('region', { name: '수기 기록' });
-    const voice = dialog.getByRole('region', { name: '녹음 전사' });
+    const voice = dialog.getByRole('region', { name: '녹음 전사 기록' });
     const panel = dialog.getByRole('region', { name: '대조' });
 
     // ── (b) 구조화 전환 — 주제·단락 제목, 반복 문장의 서로 다른 span id, 상태 띠 색 ──
@@ -404,61 +440,72 @@ test.describe('v6 상담기록 분석', () => {
     await dialog.getByRole('button', { name: '닫기' }).click();
   });
 
-  test('(g–i) 요약 수정·원본 수정·빈 회차', async ({ page }) => {
+  test('(g–i) 근거 하이라이트·원본 수정·빈 회차', async ({ page }) => {
     await login(page);
     await openSummaryTab(page, caseId);
     const fold1 = foldFor(page, '1회차');
     await fold1.locator('.seq-head-no').click();
 
-    // ── (g) 요약 수정 — 사람이 고친 핵심만 바뀌고 배지가 붙는다 ──
-    await fold1.getByRole('button', { name: '수정', exact: true }).click();
-    await fold1.getByRole('textbox', { name: '이번 상담의 핵심' }).fill('월세 두 달 연체를 확인했다');
-    await fold1.getByRole('button', { name: '저장', exact: true }).click();
-    await expect(fold1).toContainText('사람이 고침');
-    await expect(fold1).toContainText('월세 두 달 연체를 확인했다');
-    if (!(await fold1.evaluate((el) => (el as HTMLDetailsElement).open))) {
-      await fold1.locator('.seq-head-no').click();
-    }
-    await fold1.screenshot({ path: shot('08-override.png') });
+    // ── (g) 근거 — 확인필요 문장을 누르면 `근거` 모달이 원문의 **그 좌표만** 표시한다 ──
+    // 서버가 준 span 좌표로 오린 글자가 표시 범위와 정확히 같아야 한다(구 낱말 겹침 근사 아님).
+    const view = (await (await page.request.get(`${API}/sessions/${session1}/analysis`)).json()) as {
+      documents: Array<{ id: string; label: string; text: string }>;
+      spans: Array<{ id: string; doc: string; start: number; end: number }>;
+    };
+    const span = view.spans.find((s) => s.id === 'w:memo:4');
+    const doc = view.documents.find((d) => d.id === span!.doc);
+    const spanText = doc!.text.slice(span!.start, span!.end);
 
-    // ── (h) 원본 수정 — 메모 리비전 뒤 카드는 재정리 필요로 바뀐다 ──
+    const followUp = await openSection(fold1, '확인필요');
+    await followUp.getByRole('button', { name: '주민센터 답변은 다음 주에 확인하기로 함' }).click();
+    const evidence = page.getByRole('dialog', { name: '근거' });
+    await expect(evidence).toBeVisible();
+    await expect(evidence.locator('.record-doc-label')).toHaveText(doc!.label);
+    await expect(evidence.locator('.evidence-mark')).toHaveText([spanText]);
+    await expect(evidence).toContainText('원문 좌표 그대로 표시');
+    await page.screenshot({ path: shot('08-evidence.png') });
+    await evidence.getByRole('button', { name: '닫기' }).click();
+    await expect(evidence).toBeHidden();
+
+    // ── (h) 원본 수정 — 팝업에 심긴 기록지에서 고치면 팝업이 닫히고 카드가 재정리 필요로 바뀐다 ──
     const dialog = await openOriginal(page, '1회차');
-    const written = dialog.getByRole('region', { name: '수기 기록' });
-    await written.getByRole('button', { name: '수정', exact: true }).click();
     const memoBox = dialog.getByRole('textbox', { name: '오늘 상담 내용' });
+    await expect(memoBox).toHaveValue(MEMO);
     await memoBox.fill(`${MEMO} 추가로 확인한 내용.`);
-    await written.getByRole('button', { name: '저장', exact: true }).click();
-    await expect(written).toContainText('추가로 확인한 내용.');
-    await dialog.getByRole('button', { name: '닫기' }).click();
+    await dialog.getByRole('button', { name: '수정', exact: true }).click();
     await expect(dialog).toBeHidden();
+    await page.getByRole('tab', { name: '회차별 요약', exact: true }).click();
+    await fold1.locator('.seq-head-no').click();
     await expect(fold1).toContainText('원본 수정됨, 재정리 필요');
-    await expect(fold1.getByRole('button', { name: 'AI 정리 다시 하기' })).toBeVisible();
     await fold1.screenshot({ path: shot('09-stale.png') });
 
-    // ── (i) 빈 회차 — 분석 없음은 토글 없이 `AI 정리 없음`, 전사 없음은 `전사문 없음` ──
+    // ── (i) 빈 회차 — 분석 없으면 토글 없이 `AI 정리 없음`, 녹음이 없는 회차는 `올라온 녹음 없음`,
+    //        녹음만 있고 전사가 없으면 `전사문 없음`(없는 자료를 만들어 채우지 않는다) ──
     const fold2 = foldFor(page, '2회차');
     await fold2.locator('.seq-head-no').click();
     await expect(fold2).toContainText('AI 정리 없음');
     const dialog2 = await openOriginal(page, '2회차');
-    await expect(dialog2.getByRole('region', { name: '수기 기록' })).toContainText('메모만 있는 회차.');
+    await expect(dialog2.getByRole('textbox', { name: '오늘 상담 내용' })).toHaveValue('메모만 있는 회차.');
     await expect(dialog2.getByRole('tab', { name: '구조화' })).toHaveCount(0);
-    await expect(dialog2.getByRole('region', { name: '녹음 전사' })).toContainText('전사문 없음');
+    await expect(dialog2.getByRole('region', { name: '녹음 전사 기록' })).toContainText('올라온 녹음 없음');
     await dialog2.getByRole('button', { name: '닫기' }).click();
+    await expect(dialog2).toBeHidden();
 
     const dialog3 = await openOriginal(page, '3회차');
-    await expect(dialog3.getByRole('region', { name: '녹음 전사' })).toContainText('전사문 없음');
+    await expect(dialog3.getByRole('region', { name: '녹음 전사 기록' })).toContainText('전사문 없음');
     await dialog3.getByRole('button', { name: '닫기' }).click();
   });
 
   test('(j) 좁은 화면 — 패널이 열 아래로 내리고 Escape 가 연 버튼으로 돌아간다', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await login(page);
-    await openSummaryTab(page, caseId);
-    const opener = foldFor(page, '1회차').getByRole('button', { name: '수기 원본 보기' });
+    await page.goto(`/#/cases/${caseId}/info`);
+    await page.getByRole('tab', { name: '회차별 원본', exact: true }).click();
+    const opener = page.getByRole('button', { name: '1회차 원본 보기' });
     await opener.click();
     const dialog = page.getByRole('dialog', { name: '1회차 원본' });
     await expect(dialog).toBeVisible();
-    const voice = dialog.getByRole('region', { name: '녹음 전사' });
+    const voice = dialog.getByRole('region', { name: '녹음 전사 기록' });
     const panel = dialog.getByRole('region', { name: '대조' });
     const voiceBox = await voice.boundingBox();
     const panelBox = await panel.boundingBox();

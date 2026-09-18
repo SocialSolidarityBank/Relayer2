@@ -27,13 +27,14 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-6);
-  padding: var(--space-4) var(--space-6);
-  border-top: 1px solid var(--line);
 }
 .original-heads h2 { margin: 0; font-size: var(--text-md); font-weight: 600; color: var(--ink); }
 
-/* 본문 두 열(열 정의·간격은 app.css 의 .original-cols) — 위 가로선과 사방 여백만 더한다. */
-.original-cols { border-top: 1px solid var(--line); padding: var(--space-6); }
+/* 대조 패널이 두 열 옆(≥768)·아래(≤767)에 서므로 가로선과 사방 여백은 `.analysis-split` 이
+   갖는다(열 정의·간격은 app.css 의 .analysis-split·.original-cols). 두 열 머리는 열과 같은 폭
+   안에 있어야 제목이 열 위에 맞는다 — 그래서 패널이 아니라 `.original-body` 안이다. */
+.original-dialog .analysis-split { border-top: 1px solid var(--line); padding: var(--space-6); }
+.original-body { display: grid; gap: var(--space-4); min-width: 0; }
 
 /* 안에 심은 화면(기록·인테이크)의 컨테이너 질의 기준 — 열 폭으로 보면 레일·단계 열이
    자연스럽게 한 열로 풀린다. */

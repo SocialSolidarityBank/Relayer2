@@ -74,8 +74,10 @@
 | `pnpm --dir web exec tsc --noEmit && pnpm --dir web build` | exit 0, build ok |
 | `RELAYER_INTEGRATION=1 node api/src/migrate.ts --check` | (전체 스위트 러너가 0031 적용 확인) |
 | `PLAYWRIGHT_BASE_URL=http://localhost:5177 pnpm --dir web exec playwright test e2e/record-analysis-v6.spec.ts --reporter=line` | 8 passed(직렬 1워커, 장면 a~l, pageerror 0) |
-| 회귀 `e2e/beta-flow.spec.ts e2e/user-feedback.spec.ts` (같은 서버) | 13 + 3 passed — 두 spec 의 낡은 선택자(85e76c1 UI 정리로 사라진 `.schedule-savebar`·인테이크 카드 컨테이너)만 갱신, 제품 버그 아님 |
+| 회귀 `e2e/beta-flow.spec.ts e2e/user-feedback.spec.ts e2e/participant-list.spec.ts` (같은 서버, main 688a331 병합 뒤) | 13 + 3 + 1 passed(main 의 갱신된 spec 그대로) |
 | 회귀 `e2e/voice-start.spec.ts` (자체 스크래치 서버) | 1 passed |
+
+**main 병합(688a331) 뒤 재조립.** 작업 중 main 이 같은 화면을 재작성해(#92·#96·#97·#100: 3탭, 요약 아코디언 카드, 행동 버튼·요약문 편집 삭제, 원본 팝업 = 기록지 embedded + 전사 맥락 덩어리, 근거 하이라이터) 병합 시 9파일이 충돌했다. Q 결정(장부 21): main 화면 우선. 처리 — `ai.ts` 는 main 판(사례 기억) 위에 stub 제공자·lazy `provider()/model()` 재적용, 구 `draftSession`·`latestDraft`·`approveDraft`·`memoryBefore` 삭제(초안은 `record-analysis.ts`), 사례 기억은 초안 입력에서 제거(결정 20, `case-memory` 테스트의 초안 소비 단언 제거); 화면은 main 판 위에 v6 재조립(아코디언 안 4구역, 근거 모달을 span 좌표 `<mark>` 로, 기록지 위 `구조화` 토글, 맥락 덩어리 자리에 문장 행, 대조 패널, 키워드 칩·근거 링크가 팝업 진입점, 승인 후 요약 편집 UI 없음); `FactChanges` 부품 삭제; e2e spec 을 새 DOM 으로 갱신하고 스크린샷 11장 재생성. 병합 뒤 전체 API 스위트 37 files / 183 passed.
 
 라이브 스모크(격리 DB `relayer_ai_module`, API 8797 stub, web 5177): 시드 회차 2에 tailored stub → `POST /sessions/2/draft` draft → approve → `GET /cases/1/detail` `ai_summary.kind=v6` → `GET /cases/1/backlinks?keyword=채무 조정` 1건 → 브라우저에서 회차 카드(핵심 라벤더·확인필요 코랄·키워드 칩·빈 구역 없음)와 팝업 `구조화`(01/02 주제·단락·코랄 띠 `rgb(242,169,156)`) 확인.
 
