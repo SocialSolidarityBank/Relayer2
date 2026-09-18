@@ -723,3 +723,69 @@ body { margin: 0; }
   .task-owner-radios { display: none; }
   .task-owner-select { display: block; }
 }
+
+/* ==== AI-MODULE ==== */
+/* v6 상담기록 분석(2026-09-18 Q). 새 hue 없음 — 기존 토큰만 쓴다.
+   구역 제목은 `data-tone` 으로 갈고 색은 is-* 배지 규칙과 같다(라벤더=AI, 민트=변화,
+   코랄=확인필요, 블루=완료·해결). */
+.seq-section-title[data-tone='ai'] { border-color: var(--badge-lavender); background: var(--badge-lavender); color: var(--on-action); }
+.seq-section-title[data-tone='change'] { border-color: var(--badge-mint); background: var(--badge-mint); color: var(--on-action); }
+.seq-section-title[data-tone='warn'] { border-color: var(--badge-coral); background: var(--badge-coral); color: var(--on-action); }
+.seq-section-title[data-tone='state'] { border-color: var(--badge-blue); background: var(--badge-blue); color: var(--on-action); }
+
+/* 01 구조화 뷰 — 접힘 없는 목차형. 원문 공백은 pre-wrap 으로 보존한다(무손실). */
+.structured-record { display: grid; gap: var(--space-5); min-width: 0; }
+.record-topic { display: grid; gap: var(--space-3); min-width: 0; }
+.record-topic-title { margin: 0; font-size: var(--text-sm); font-weight: 600; color: var(--ink); }
+.record-paragraph { display: grid; gap: var(--space-1); min-width: 0; }
+.record-paragraph-title { margin: 0; font-size: var(--text-sm); font-weight: 600; color: var(--sub); }
+.record-doc-label { margin: 0; font-size: var(--text-detail); color: var(--sub); }
+.record-text { margin: 0; font-size: var(--text-sm); color: var(--ink); white-space: pre-wrap; }
+.record-span { padding-inline-start: var(--space-1); border-radius: 2px; }
+.record-span[data-status='change'] { border-inline-start: 3px solid var(--mint); }
+.record-span[data-status='follow_up'] { border-inline-start: 3px solid var(--badge-coral); }
+.record-span[data-status='completed'] { border-inline-start: 3px solid var(--blue); }
+.record-span[aria-current] { background: var(--blue-tint); }
+.record-span:focus-visible { outline: 2px solid var(--blue-deep); outline-offset: 1px; }
+
+/* 02 요약 하위 항목 — ①②③ 번호는 렌더 시 계산된 텍스트다. */
+.summary-subsection { display: grid; gap: var(--space-1); }
+.summary-subsection-title { margin: 0; font-size: var(--text-sm); font-weight: 600; color: var(--ink); }
+
+/* 키워드 칩 — 결정적은 민트, LLM 추출은 라벤더(Badge data-tone 이 색을 정한다). */
+.keyword-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.keyword-chip { padding: 0; border: 0; background: none; cursor: pointer; }
+
+/* 04 전사 뷰 — 띠는 링크된 수기 상태 상속, 불일치는 배경, 연결은 밑줄 표시. */
+.transcript-view { display: grid; gap: var(--space-2); min-width: 0; }
+.transcript-rows { display: grid; gap: var(--space-1); }
+.transcript-row { display: flex; gap: var(--space-2); align-items: baseline; padding: var(--space-1) var(--space-2); padding-inline-start: var(--space-2); border-radius: var(--radius-control); font-size: var(--text-sm); color: var(--ink); }
+.transcript-row[data-status='change'] { border-inline-start: 3px solid var(--mint); }
+.transcript-row[data-status='follow_up'] { border-inline-start: 3px solid var(--badge-coral); }
+.transcript-row[data-status='completed'] { border-inline-start: 3px solid var(--blue); }
+.transcript-row[data-discrepancy] { background: var(--discrepancy-tint); }
+.transcript-row[data-linked] .transcript-text { text-decoration: underline dotted var(--line); text-underline-offset: 3px; }
+.transcript-row[aria-current] { background: var(--blue-tint); }
+.transcript-row:focus-visible { outline: 2px solid var(--blue-deep); outline-offset: 1px; }
+.transcript-time { flex: none; font-size: var(--text-detail); color: var(--sub); }
+.transcript-text { min-width: 0; }
+
+/* 대조 패널 — ≥768 에서는 우측 열, ≤767 에서는 본문 아래로 내린다(배치는 CSS 몫). */
+.analysis-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 38%); gap: var(--space-4); align-items: start; }
+.analysis-panel { display: grid; gap: var(--space-3); align-content: start; min-width: 0; padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--panel); }
+.contrast-block { display: grid; gap: var(--space-1); }
+.contrast-label { margin: 0; font-size: var(--text-detail); font-weight: 600; color: var(--sub); }
+.contrast-goto { padding: 0; border: 0; background: none; cursor: pointer; text-align: start; font-size: var(--text-sm); color: var(--blue-deep); text-decoration: underline; }
+@media (max-width: 767px) {
+  .analysis-split { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* 인쇄 — 상태 띠·불일치 배경이 빠지면 판정이 사라지므로 색을 강제하고, 패널이 쪽 넘김에 잘리지 않게 한다. */
+@media print {
+  .record-span[data-status],
+  .transcript-row[data-status],
+  .transcript-row[data-discrepancy],
+  .record-span[aria-current],
+  .transcript-row[aria-current] { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .analysis-panel { break-inside: avoid; }
+}

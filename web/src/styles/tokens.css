@@ -75,6 +75,8 @@
 
   /* ── Semantic ── */
   --discrepancy:     #AC5346;                   /* 내용 불일치 전용 코랄 글자. 리스크와 분리 */
+  --discrepancy-tint: color-mix(in srgb, var(--discrepancy) 15%, transparent);
+                                               /* 불일치 문장 배경 — 글자색의 15% 혼합(v6, 새 hue 아님) */
   --risk:            #B52573;                   /* 확인된 리스크 전용 — 유일한 경고색
                                                  * (패널 위 6.04 · 배너 배경 위 5.31 — §9 참조) */
   --risk-tint:       rgba(240, 113, 180, 0.05); /* 리스크 배너 배경 (반투명) */
@@ -333,6 +335,7 @@
   /* 리스크 — H328 자리는 그대로 두고 밝기만 올린다. 라이트의 어두운 핑크 면 위에는
    * 밝은 글자를, 다크의 밝은 핑크 면 위에는 어두운 글자를 얹는다. */
   --discrepancy:     #F2A99C;
+  --discrepancy-tint: color-mix(in srgb, var(--discrepancy) 15%, transparent);
   --risk:            #F58BC4;
   --risk-tint:       rgba(245, 139, 196, 0.10);
   --risk-tint-solid: #331F2A;
