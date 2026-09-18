@@ -11,6 +11,7 @@ import {
 import {
   approveTranscript,
   draftTranscript,
+  importApprovedTranscript,
   latestTranscript,
   listRecordings,
   readRecordingAudio,
@@ -601,6 +602,22 @@ app.get('/sessions/:id/transcript', async (c) => {
 app.post('/recordings/:id/transcript', async (c) => {
   const recordingId = await recordingAccess(c.req.param('id'), c.get('actor').id);
   return c.json(await draftTranscript(recordingId, c.get('actor').id));
+});
+
+/**
+ * 합성 데이터셋 정답 전사문 가져오기. 외부 STT 를 거치지 않는 관리자 전용 초기 적재 경로다.
+ * 일반 사용자에게 열면 승인 게이트를 우회하므로 역할을 먼저 막는다.
+ */
+app.post('/sessions/:id/transcript/import', async (c) => {
+  if (adminOnly(c)) return c.json(DENY, 403);
+  const sessionId = await sessionAccess(c.req.param('id'), c.get('actor').id);
+  const body = z
+    .object({ recording_id: z.number().int().positive(), text: z.string().trim().min(1).max(2_000_000) })
+    .parse(await c.req.json());
+  return c.json(
+    await importApprovedTranscript(sessionId, body.recording_id, c.get('actor').id, body.text),
+    201,
+  );
 });
 
 app.post('/sessions/:id/transcript/approve', async (c) => {
