@@ -24,6 +24,8 @@ RUN pnpm install --frozen-lockfile --prod --filter @relayer/api
 
 COPY api ./api
 COPY migrations ./migrations
+# 공개 쪽(`/`, 404 쪽)은 `./site` 에서 낸다. 빠지면 컨테이너의 루트가 앱 화면으로 떨어진다.
+COPY site ./site
 COPY --from=build /app/web/dist ./web/dist
 
 EXPOSE 8787
