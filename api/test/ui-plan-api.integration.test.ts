@@ -92,9 +92,10 @@ describe.skipIf(!enabled)('ui-plan L5 contract', () => {
     const detail = await json<CaseDetail>(await call(`/cases/${caseId}/detail`, admin));
     expect(detail.sessions.find((s) => s.id === sessionId)?.stale.ai_summary).toBe(true);
 
-    // 요약을 고치면 승인 행이 새로 쌓이고 stale 이 풀린다.
+    // 요약을 고치면 승인 행이 새로 쌓이고 stale 이 풀린다. 구버전(ai_drafts) 요약은 회차 카드에 `구버전 정리`로만 읽힌다(v6).
     expect((await call(`/sessions/${sessionId}/revisions`, admin, 'POST', { kind: 'summary', text: '새 요약' })).status).toBe(201);
-    expect((await json<{ summary: string }>(await call(`/sessions/${sessionId}/draft`, admin))).summary).toBe('새 요약');
+    const revisedDetail = await json<CaseDetail>(await call(`/cases/${caseId}/detail`, admin));
+    expect(revisedDetail.sessions.find((s) => s.id === sessionId)?.ai_summary).toEqual({ kind: 'legacy', summary: '새 요약' });
     expect((await json<SessionRecord>(await call(`/sessions/${sessionId}/detail`, admin))).stale.ai_summary).toBe(false);
 
     const log = await json<Revision[]>(await call(`/sessions/${sessionId}/revisions`, admin));
