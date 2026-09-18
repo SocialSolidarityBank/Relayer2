@@ -1,3 +1,37 @@
+import { CONNECTION_GUIDES } from './connection-guide.js';
+
+// 공개 랜딩의 설정 가이드. 앱 설정 아코디언도 같은 CONNECTION_GUIDES를 묶어 쓴다.
+const guideDialog = document.querySelector('[data-connection-guide-dialog]');
+const guideList = guideDialog?.querySelector('[data-connection-guide-list]');
+if (guideDialog instanceof HTMLDialogElement && guideList) {
+  for (const guide of CONNECTION_GUIDES) {
+    const section = document.createElement('section');
+    section.dataset.guideId = guide.id;
+    const title = document.createElement('h3');
+    title.textContent = guide.title;
+    const steps = document.createElement('ol');
+    steps.className = 'setup-guide-steps';
+    steps.dataset.guideId = guide.id;
+    for (const step of guide.steps) {
+      const item = document.createElement('li');
+      const label = document.createElement('strong');
+      label.textContent = step.label;
+      const body = document.createElement('span');
+      for (const part of step.parts) {
+        const node =
+          part.kind === 'link'
+            ? Object.assign(document.createElement('a'), { href: part.href, textContent: part.text, target: '_blank', rel: 'noreferrer' })
+            : Object.assign(document.createElement(part.kind === 'code' ? 'code' : 'span'), { textContent: part.text });
+        body.append(node);
+      }
+      item.append(label, body);
+      steps.append(item);
+    }
+    section.append(title, steps);
+    guideList.append(section);
+  }
+  document.querySelector('[data-connection-guide-open]')?.addEventListener('click', () => guideDialog.showModal());
+}
 // 이 페이지에 필요한 조작은 두 가지뿐이다. 펼침 목록과 가이드 목차 표시.
 // 조작에 대한 답으로만 움직인다. 스크롤에 맞춰 나타나는 효과는 두지 않는다.
 

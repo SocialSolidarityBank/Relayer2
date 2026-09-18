@@ -607,10 +607,12 @@ export type RequestRow = {
   decided_at: string | null;
   decision: string | null;
 };
+export type ConnectionSource = 'db' | 'env' | null;
 export type Connections = {
-  /** `source` 는 키의 출처다(db=화면에서 넣음, env=서버 환경 변수). 값은 오지 않는다. */
-  ai: { connected: boolean; provider: string; model: string; env: string; source: 'db' | 'env' | null };
-  stt: { connected: boolean; provider: string; region: string | null; env: string };
+  /** `source` 는 비밀이나 토글의 출처다. 원문 값은 오지 않는다. */
+  ai: { connected: boolean; provider: string; model: string; env: string; source: ConnectionSource };
+  stt: { connected: boolean; provider: 'azure'; region: 'koreacentral'; source: ConnectionSource };
+  voice: { enabled: boolean; source: ConnectionSource };
   db: { connected: boolean; checked_at: string; env: string };
 };
 
@@ -654,6 +656,10 @@ export const saveOnboardingStep = (step: number) =>
 /** 키 값은 보내기만 하고 되돌려받지 않는다. `null` 이면 지운다. */
 export const setAiKey = (key: string | null) =>
   json<{ ok: true }>('/settings/ai-key', { method: 'PUT', body: JSON.stringify({ key }) });
+export const setSttKey = (key: string | null) =>
+  json<{ ok: true }>('/settings/stt-key', { method: 'PUT', body: JSON.stringify({ key }) });
+export const setVoiceEnabled = (enabled: boolean) =>
+  json<{ ok: true }>('/settings/voice', { method: 'PUT', body: JSON.stringify({ enabled }) });
 export type WorkerCase = { id: number; pseudonym: string; program_name: string; status: string };
 export const workerCases = (id: number) => json<WorkerCase[]>(`/settings/workers/${id}/cases`);
 /** 배정 화면의 사례 목록. 가명·사업·담당 이름만 오고 임상 내용은 안 온다(관리자도 무권한). */

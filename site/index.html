@@ -316,8 +316,31 @@
           <li>연결 상태와 열람 기록</li>
         </ul>
       </a>
+      <div class="card guide-card setup-guide-card">
+        <div class="guide-card-head">
+          <h3>설정 가이드</h3>
+          <span class="badge" data-tone="lavender">관리자</span>
+        </div>
+        <p>AI 정리, Azure Speech, 상담 녹음, 데이터베이스를 기관에서 준비하는 순서입니다.</p>
+        <ul>
+          <li>Speech 키 한 번 저장</li>
+          <li>녹음 토글 별도 설정</li>
+          <li>데이터베이스 상태 읽기</li>
+        </ul>
+        <button class="btn setup-guide-open" type="button" data-connection-guide-open>
+          <span class="btn-text">외부 서비스 설정 가이드</span>
+        </button>
+      </div>
     </div>
   </section>
+
+  <dialog class="setup-guide-dialog" data-connection-guide-dialog aria-labelledby="setup-guide-title">
+    <h2 id="setup-guide-title">외부 서비스 설정 가이드</h2>
+    <div class="setup-guide-list" data-connection-guide-list></div>
+    <form method="dialog">
+      <button class="btn" type="submit"><span class="btn-text">닫기</span></button>
+    </form>
+  </dialog>
 
 </main>
 
@@ -343,6 +366,6 @@
   </div>
 </footer>
 
-<script src="site.js?v=2"></script>
+<script type="module" src="site.js?v=2"></script>
 </body>
 </html>
