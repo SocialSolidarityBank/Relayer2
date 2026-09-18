@@ -110,9 +110,16 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
 export type Workspace = { name: string; slug: string | null; public_address: string | null };
 /**
  * `workspace` 가 없거나 `onboarded` 가 거짓이면 관리자는 마법사(#/onboarding)에, 실무자는 기관 준비 중(#/setup-pending)에
- * 머문다. 서버 잠금은 없다 — 안내용 리다이렉트다.
+ * 머문다. 서버 잠금은 없다 — 안내용 리다이렉트다. `onboarding_step` 은 마법사가 마지막으로 서 있던 단계(0~4)다 — 재진입 자리.
  */
-export type Me = { id: number; name: string; role: 'worker' | 'admin'; onboarded: boolean; workspace: Workspace | null };
+export type Me = {
+  id: number;
+  name: string;
+  role: 'worker' | 'admin';
+  onboarded: boolean;
+  onboarding_step: number;
+  workspace: Workspace | null;
+};
 
 export const getMe = () => json<Me>('/me');
 export const login = (email: string, password: string) =>
@@ -641,6 +648,9 @@ export const listWorkers = (programId?: number) =>
 export const setWorkerRole = (id: number, role: 'worker' | 'admin') =>
   json<{ ok: true }>(`/settings/workers/${id}/role`, { method: 'PUT', body: JSON.stringify({ role }) });
 export const completeOnboarding = () => json<{ ok: true }>('/settings/onboarding/complete', { method: 'POST' });
+/** 마법사가 단계를 옮길 때 적는다. 실패해도 진행은 막지 않는다 — 재진입 자리가 한 단계 뒤일 뿐이다. */
+export const saveOnboardingStep = (step: number) =>
+  json<{ ok: true }>('/settings/onboarding/step', { method: 'PUT', body: JSON.stringify({ step }) });
 /** 키 값은 보내기만 하고 되돌려받지 않는다. `null` 이면 지운다. */
 export const setAiKey = (key: string | null) =>
   json<{ ok: true }>('/settings/ai-key', { method: 'PUT', body: JSON.stringify({ key }) });

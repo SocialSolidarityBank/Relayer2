@@ -680,3 +680,10 @@ body { margin: 0; }
 
 /* 당사자 등록(H1): 동의 접힘 카드 사이 여백 8. */
 .consent-folds { display: grid; gap: var(--space-2); }
+
+/* ==== N2 설정·온보딩 (2026-09-18 2차 배치, 온보딩 후속) ==== */
+/* 초대 QR: 링크 카드 아래 128px. 늘 검정 위 흰색(테마 무관) — 카메라가 읽는 조건이다. 기관 배포에 QR 인쇄가 흔하다. */
+.invite-qr { display: block; width: 128px; height: 128px; margin-top: var(--space-3); border: 1px solid var(--line-control); border-radius: var(--radius-control); }
+/* 설정 가이드 팝업: 본문은 순서 목록 하나. 링크·코드가 길어도 팝업 폭 안에서 줄바꿈한다. */
+.connection-guide-dialog .connection-guide { margin-bottom: 0; overflow-wrap: anywhere; }
+.connection-guide-row { display: flex; }

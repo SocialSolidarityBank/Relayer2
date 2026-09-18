@@ -89,6 +89,17 @@ describe.skipIf(!enabled)('first signup gate', () => {
       workspace: { name: '연대은행 상담센터', slug: 'yeondae', public_address: 'yeondae' },
     });
 
+    // 마법사 재진입(QA P2 #9): 단계를 적어 두면 /me 가 그 자리를 말한다. 범위 밖(5)은 400.
+    const put = (step: unknown) =>
+      fetch(`${base}/settings/onboarding/step`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json', cookie },
+        body: JSON.stringify({ step }),
+      });
+    expect((await put(3)).status).toBe(200);
+    expect((await (await fetch(`${base}/me`, { headers: { cookie } })).json()).onboarding_step).toBe(3);
+    expect((await put(5)).status).toBe(400);
+
     // 마법사 완료.
     expect((await post('/settings/onboarding/complete', {}, cookie)).status).toBe(200);
     expect((await (await fetch(`${base}/me`, { headers: { cookie } })).json()).onboarded).toBe(true);
