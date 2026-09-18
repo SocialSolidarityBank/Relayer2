@@ -1,0 +1,97 @@
+/* 외부 서비스 연결(설정·온보딩 5단계). 공용 규칙은 app.css 에 있고 여기는 이 화면의 배치만 둔다
+   — app.css 는 디자인 레인이 같은 시각에 고치는 파일이라 이 레인은 건드리지 않는다(2026-09-18). */
+
+/* 라벨 | 정보 한 행. 읽는 값(.wire-data-row)과 입력칸(.wire-form-field)의 라벨 열 폭을 같은
+   값으로 잡아 `지역` 과 `Azure Speech 키` 가 세로로 한 줄에 선다. */
+.connection-list .wire-form-field {
+  grid-template-columns: minmax(160px, 260px) minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: center;
+}
+.connection-list .wire-form-field > .wire-form-hint { grid-column: 2; margin: 0; }
+.connection-list .wire-data-row { align-items: center; }
+@media (max-width: 767px) {
+  .connection-list .wire-form-field { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
+  .connection-list .wire-form-field > .wire-form-hint { grid-column: 1; }
+}
+
+/* 설정 가이드 팝업. 번호·화살표·색은 전부 여기서 그린다 — 글자는 랜딩 팝업과 같아야 한다. */
+.connection-guide-dialog { width: min(640px, calc(100vw - 32px)); }
+.connection-guide-dialog .connection-guide {
+  padding: 0;
+  gap: 0;
+  list-style: none;
+  counter-reset: guide-step;
+}
+.connection-guide-dialog .connection-guide > li {
+  grid-template-columns: 28px minmax(0, 1fr);
+  column-gap: var(--space-3);
+  row-gap: var(--space-1);
+  padding: var(--space-4) 0;
+  counter-increment: guide-step;
+}
+.connection-guide-dialog .connection-guide > li + li { border-top: 1px solid var(--line); }
+.connection-guide-dialog .connection-guide > li::before {
+  content: counter(guide-step);
+  grid-row: 1 / span 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-pill);
+  /* 옆 상태 배지와 같은 배지 계약(--badge-mint / --on-badge) — tint 위 deep 은 라이트에서 묻힌다. */
+  background: var(--badge-mint);
+  color: var(--on-badge);
+  font-size: var(--text-badge);
+  font-weight: 600;
+  line-height: var(--leading-none);
+}
+.connection-guide-dialog .connection-guide > li > strong {
+  grid-column: 2;
+  align-self: center;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--ink);
+  line-height: var(--leading-normal);
+}
+.connection-guide-dialog .connection-guide > li > span {
+  grid-column: 2;
+  font-size: var(--text-sm);
+  color: var(--sub);
+  line-height: var(--leading-body);
+}
+/* 인라인 링크 어휘(.wire-item-action>a)와 같은 14/600 blue-deep 밑줄. 새 탭 표시는 CSS 다. */
+.connection-guide-dialog .connection-guide a {
+  color: var(--blue-deep);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.connection-guide-dialog .connection-guide a[target='_blank']::after { content: ' ↗'; font-weight: 400; }
+.connection-guide-dialog .connection-guide code {
+  padding: 1px var(--space-1-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--muted);
+  color: var(--ink);
+}
+/* `AI가 돕는 범위` 는 절차가 아니라 역할 메모 — 번호 대신 라벤더 칸(DESIGN.md §6 AI 톤). */
+.connection-guide-dialog .connection-guide > li[data-tone='ai'] {
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  border-radius: var(--radius-card);
+  background: var(--lavender-tint);
+  counter-increment: none;
+}
+.connection-guide-dialog .connection-guide > li[data-tone='ai']::before {
+  content: 'AI';
+  background: var(--badge-lavender);
+  color: var(--on-badge);
+}
+.connection-guide-dialog .connection-guide > li[data-tone='ai'] > strong { color: var(--lavender-deep); }
+.connection-guide-dialog .connection-guide > li[data-tone='ai'] > span { color: var(--ink); }
