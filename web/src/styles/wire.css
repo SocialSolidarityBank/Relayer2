@@ -635,8 +635,8 @@ summary:has(.wire-disclosure-chevron)::-webkit-details-marker{display:none}
 .wire-item[data-tone]{padding:var(--space-3) var(--space-4);border-radius:var(--radius-control)}
 .wire-item[data-tone="mint"]{background:var(--mint-tint)}
 .wire-item[data-tone="lavender"]{background:var(--lavender-tint)}
-.wire-item-title{margin:0;font-size:var(--text-md);font-weight:600;color:var(--ink)}
-.wire-item-desc{margin:0;font-size:var(--text-sm);color:var(--sub)}
+.wire-item-title{margin:0;font-size:var(--text-sm);font-weight:400;color:var(--ink)}
+.wire-item-desc{margin:0;font-size:var(--text-caption);color:var(--sub)}
 /* 구획(WireCardSection) 안에 WireItem 없이 바로 오는 읽는 값(§2-2 위계 4단 ③ 16/400
    --ink). 구획은 자식 규칙을 갖지 않으므로(위 §2-2 안내 참고) 화면이 이 클래스로 직접
    계약을 받는다 — 전역 p 규칙(margin 위 8 + --sub, layout.tsx)을 그대로 쓰면 라벨과의
@@ -710,7 +710,7 @@ summary:has(.wire-disclosure-chevron)::-webkit-details-marker{display:none}
 /* 제목 글자 뒤에 배지가 붙는 묶음도 같은 22 예약을 쓴다. */
 .wire-title-with-badge{display:inline-flex;align-items:center;gap:var(--space-2);min-height:var(--badge-height)}
 .wire-input-box{display:flex;align-items:center;line-height:normal;gap:var(--space-2);width:100%;min-width:0;min-height:var(--control-height);padding:0 var(--control-pad);background:var(--panel);border:1px solid var(--line-control);border-radius:var(--radius-control)}
-.wire-input-box>input,.wire-input-box>select,.wire-input-box>textarea{width:100%;min-width:0;border:0;background:transparent;color:var(--ink);outline:0;font:inherit;font-size:var(--text-sm);font-weight:400;-webkit-appearance:none;appearance:none}
+.wire-input-box>input,.wire-input-box>select,.wire-input-box>textarea{width:100%;min-width:0;border:0;background:transparent;color:var(--ink);outline:0;font:inherit;font-size:var(--text-detail);font-weight:400;-webkit-appearance:none;appearance:none}
 /* 단일행 컨트롤만 행간 normal(2026-08-06 Q) — textarea 는 다중행 본문이라 --leading-relaxed 를 유지한다. */
 .wire-input-box>input,.wire-input-box>select{line-height:normal}
 /* select 는 네이티브 화살표를 끄고 꺽쇠를 직접 그린다(검색칸과 같은 이유). */
@@ -733,7 +733,7 @@ summary:has(.wire-disclosure-chevron)::-webkit-details-marker{display:none}
    입력값(14/400)과 같은 계단에 서면 세 층이 한 덩어리로 읽혔다. 하한 14 의 예외 자리가
    레일·배지에 이어 셋째로 늘어난다(DESIGN-RULES §5). 아래 a 규칙은 §9 의 'deep 색은
    14 이상·600' 을 지켜야 하므로 자기 크기 14 를 그대로 선언한다. */
-.wire-form-hint{font-size:var(--text-detail);font-weight:400;color:var(--sub)}
+.wire-form-hint{font-size:var(--text-caption);font-weight:400;color:var(--sub)}
 .wire-form-hint a{font-size:var(--text-sm);color:var(--blue-deep);font-weight:600;text-decoration:underline}
 /* 폼을 담은 카드는 본문 간격을 한 단 넓힌다 — 입력칸은 라벨·도움말을 달고 있어
    정보 카드(12)의 간격으로는 항목 경계가 안 읽힌다. */

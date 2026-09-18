@@ -684,7 +684,7 @@ export function RecordScreen({
  */
 function OpenList({ title, count, children }: { title: string; count: number; children: ReactNode }) {
   return count >= 4 ? (
-    <Fold title={`${title} ${count}`} open>
+    <Fold title={<>{title}<span className="fold-count">{count}</span></>} open>
       {children}
     </Fold>
   ) : (

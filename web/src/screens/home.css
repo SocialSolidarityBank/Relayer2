@@ -50,10 +50,10 @@
 .sc-time-grid tr > :last-child { border-right: 0; }
 .sc-time-grid th { color: var(--sub); font-size: var(--text-detail); font-weight: 500; }
 .sc-time-grid thead th { position: sticky; top: 0; z-index: 2; background: var(--panel); height: 56px; }
-.sc-time-grid th:first-child { width: 76px; }
+.sc-time-grid th:first-child { width: 152px; }
 .sc-time-grid thead th:first-child { left: 0; z-index: 3; }
-.sc-time-grid thead button { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--space-1); width: 100%; min-height: 44px; padding: var(--space-2); border: 0; background: transparent; color: var(--ink); font: inherit; font-size: var(--text-sm); cursor: pointer; }
-.sc-time-grid tbody th { position: sticky; left: 0; z-index: 1; vertical-align: middle; padding: var(--space-2); background: var(--panel); white-space: nowrap; }
+.sc-time-grid thead button { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: var(--space-1); width: 100%; min-height: 44px; padding: var(--space-2); border: 0; background: transparent; color: var(--ink); font: inherit; font-size: var(--text-sm); cursor: pointer; }
+.sc-time-grid tbody th { position: sticky; left: 0; z-index: 1; vertical-align: middle; padding: var(--space-2); background: var(--muted); text-align: left; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .sc-time-grid tbody td { height: 64px; vertical-align: middle; padding: var(--space-1); }
 /* 시간표는 칸 전체가 호버·클릭 대상이다. 줄 자체에는 호버 면을 두지 않는다. */
 .sc-time-grid tbody td[data-has-events] { cursor: pointer; }
@@ -127,6 +127,6 @@
   .sc-details .fold-title-desc,
   .sc-details .wire-card-details[open] > .wire-card-summary .fold-title-desc { flex-basis: 100%; white-space: normal; }
   .sc-details .wire-card-summary-right { margin-left: auto; }
-  .sc-time-grid th:first-child { width: 64px; }
+  .sc-time-grid th:first-child { width: 128px; }
   .sc-time-grid[data-view="day"] .sc-time-heading { gap: var(--space-1); padding-inline: var(--space-1); }
 }

@@ -3,7 +3,7 @@
 // CCC-new `apps/web/app/components/wire/shell-icons.tsx` 에서 **현재 릴레이어 화면이 쓰는
 // 글리프만** 가져왔다(2026-09-17 Q "지난 CCC-new 레포에서 채용"). path 값은 그대로다 —
 // 아이콘을 새로 그리면 같은 뜻의 글리프가 제품마다 갈린다.
-// 아직 안 쓰는 CCC 글리프(`calendar`·`close`·`sidebar`·`updown`·`share`)는 그 파일에 있다.
+// 아직 안 쓰는 CCC 글리프(`calendar`·`close`·`updown`·`share`)는 그 파일에 있다.
 // 필요해지면 새로 그리지 말고 거기서 가져온다.
 
 export type ShellIconName =
@@ -17,7 +17,8 @@ export type ShellIconName =
   | 'settings'
   | 'logout'
   | 'theme-dark'
-  | 'theme-light';
+  | 'theme-light'
+  | 'sidebar';
 
 export function NavIcon({ name }: { name: ShellIconName }) {
   const common = {
@@ -64,5 +65,9 @@ export function NavIcon({ name }: { name: ShellIconName }) {
       return <svg {...common}><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z" /></svg>;
     case 'theme-light':
       return <svg {...common}><circle cx="8" cy="8" r="3" /><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M12.95 3.05l-1.06 1.06M4.11 11.89l-1.06 1.06" /></svg>;
+    // 사이드바 패널(CCC 2026-08-05 Q 2차 — 모바일 바 우측 원형 메뉴 버튼. 햄버거 대체:
+    // "원형 버튼 안에 사이드바 아이콘". Infisical 의 panel-left 글리프와 같은 어휘).
+    case 'sidebar':
+      return <svg {...common}><rect x="2" y="2.5" width="12" height="11" rx="2" /><path d="M6.2 2.5v11" /></svg>;
   }
 }

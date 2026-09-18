@@ -15,7 +15,9 @@
    접힌다. 종결은 세지 않는다. */
 .participant-stats { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-6); }
 .participant-stat { display: grid; gap: 2px; min-width: 0; }
-.participant-stat-label { font-size: var(--text-badge); color: var(--sub); }
+/* §6: 라벨 기본 민트 deep. 주목·경고(배정 필요)는 코랄 하나. AI 집계가 없어 라벤더는 안 쓴다. */
+.participant-stat-label { font-size: var(--text-badge); color: var(--mint-deep); }
+.participant-stat-label[data-tone='warn'] { color: var(--discrepancy); }
 .participant-stat-value { font-size: var(--text-lg); font-weight: 600; color: var(--ink); line-height: var(--leading-tight); }
 
 /* 목록은 **1열**이다(2026-09-18 Q A4). 카드가 접힘 카드가 되면서 한 줄에 요약이 다 서고,

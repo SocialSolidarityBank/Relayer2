@@ -316,7 +316,7 @@ export function IntakeScreen({ caseId, readOnly = false }: { caseId: number; rea
   };
 
   const body = (
-    <>
+    <div className="intake-form">
       {/* 1. 실제로 진행한 상담의 일시·방식·장소. 장소는 대면일 때만 나온다(요청 2). */}
       <Card title="상담 일시와 상담 방식">
         <DateTimeInput idPrefix="held-at" value={heldAt} onChange={setHeldAt} disabled={saving || readOnly} required={false} />
@@ -399,7 +399,7 @@ export function IntakeScreen({ caseId, readOnly = false }: { caseId: number; rea
           />
         </Card>
       </div>
-    </>
+    </div>
   );
 
   if (readOnly) {

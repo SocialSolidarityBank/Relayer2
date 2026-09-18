@@ -8,26 +8,26 @@
    (`wire.css` 가 22px 를 늘 예약한다). 다른 화면의 배지는 그 화면 차례에 함께 정리한다. */
 .schedule-inputs .wire-required-marker { display: none; }
 .schedule-inputs .wire-input-box { min-height: 44px; }
-.schedule-inputs .wire-input-box :is(input, select, textarea) { font-size: var(--text-md); }
+.schedule-inputs .wire-input-box :is(input, select, textarea) { font-size: var(--text-detail); }
 .schedule-inputs .wire-choice-group { flex-wrap: wrap; }
 .schedule-inputs .wire-choice { min-height: 44px; }
-/* 첫 행(C3): 왼쪽은 날짜·오전오후·시·분·종료 시각, 오른쪽은 상담 방식 라디오다.
-   **세로 가운데**로 맞춘다 — 라벨 있는 입력칸과 라벨 없는 라디오 묶음의 높이가 달라
-   위쪽 정렬이면 라디오가 날짜칸 라벨 줄에 붙었다(§3 AC-C3 가 실측한다). */
-.schedule-when-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, auto); gap: var(--space-4) var(--space-6); align-items: center; min-width: 0; }
+/* 상담 내용은 세 행이다(2026-09-18 Q). 폭이 줄면 각 행이 세로로 접혀 최소 폭을 지킨다 —
+   컨테이너는 입력 묶음(.schedule-inputs) 자신의 폭이라 창 크기와 무관하게 폼 폭으로 접는다. */
+.schedule-inputs { container-type: inline-size; }
+/* 1행: 날짜·시작 시각(DateTimeInput 내부) + 종료 시각. */
 .schedule-when-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 150px); gap: var(--space-4) var(--space-5); align-items: end; min-width: 0; }
-/* 그 아래: 왼쪽 장소·종결 체크, 오른쪽 메모. 두 칸은 위쪽 정렬이다(메모가 더 길다). */
-.schedule-detail-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4) var(--space-6); align-items: start; min-width: 0; }
-.schedule-detail-left { display: grid; gap: var(--space-5); align-content: start; min-width: 0; }
-.schedule-savebar { position: sticky; bottom: var(--space-4); z-index: 3; display: flex; justify-content: space-between; align-items: center; gap: var(--space-6); padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--panel); }
-.schedule-save-summary { min-width: 0; }
-.schedule-save-summary .wire-meta-row { color: var(--sub); font-size: var(--text-sm); }
-.schedule-savebar .wire-button { flex-shrink: 0; min-height: 44px; padding-inline: var(--space-6); }
+/* 2행: 상담 방식 + 상담 장소. */
+.schedule-method-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4) var(--space-6); align-items: start; min-width: 0; }
+@container (max-width: 640px) {
+  .schedule-when-fields,
+  .schedule-method-row { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
+}
+/* 저장 바 카드는 걷었다(2026-09-18 Q). 종결 체크와 저장 버튼은 제목 줄 오른쪽에 함께 서고,
+   안내·오류는 카드 안 마지막 줄이다. */
+.schedule-title-actions { display: flex; align-items: center; gap: var(--space-4); }
+.schedule-save-note { margin: 0; color: var(--sub); font-size: var(--text-sm); }
+.schedule-save-note .wire-meta-row { color: var(--sub); }
 .schedule-form :is(button, a, input, select, textarea) { scroll-margin-block: calc(var(--header-height) + var(--space-6)) 160px; }
 @media (max-width: 767px) {
-  .schedule-when-row,
-  .schedule-when-fields,
-  .schedule-detail-row { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
-  .schedule-savebar { flex-direction: column; align-items: stretch; gap: var(--space-3); padding: var(--space-4); }
-  .schedule-savebar .wire-button { width: 100%; }
+  .schedule-title-actions { flex-wrap: wrap; gap: var(--space-2) var(--space-3); }
 }

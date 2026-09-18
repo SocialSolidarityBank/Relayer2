@@ -403,25 +403,9 @@ export function RecordingPanel({
   if (!status?.enabled) return null;
 
   return (
-    <Card title="상담 녹음">
-      {error && <ErrorText>{error}</ErrorText>}
-
-      {/* 안내 세 줄 + 버튼 한 행(2026-09-18 Q D1 — 구 카드 도움말 한 줄 대체). */}
-      <div className="recording-head">
-        <dl className="recording-note">
-          <div>
-            <dt>파일 형식</dt>
-            <dd>{status.formats.join(', ') || '오디오'}</dd>
-          </div>
-          <div>
-            <dt>파일 크기</dt>
-            <dd>{fmtBytes(status.max_bytes)} 이내</dd>
-          </div>
-          <div>
-            <dt>주의</dt>
-            <dd>{LOCK_NOTE}</dd>
-          </div>
-        </dl>
+    <Card
+      title="상담 녹음"
+      action={
         <div className="recording-actions">
           {recording ? (
             <Button variant="primary" onClick={stopRecording}>
@@ -432,14 +416,28 @@ export function RecordingPanel({
               {busy === 'record' ? '시작 중…' : '녹음 시작'}
             </Button>
           )}
-          <Button
-            disabled={busy !== null || recording}
-            onClick={() => fileRef.current?.click()}
-          >
+          <Button disabled={busy !== null || recording} onClick={() => fileRef.current?.click()}>
             파일 업로드
           </Button>
         </div>
-      </div>
+      }
+    >
+      {error && <ErrorText>{error}</ErrorText>}
+      {/* 안내 세 줄은 라벨·값 2열이다(2026-09-18 Q). 버튼은 제목 줄 오른쪽으로 올렸다. */}
+      <dl className="recording-note">
+        <div>
+          <dt>파일 형식</dt>
+          <dd>{status.formats.join(', ') || '오디오'}</dd>
+        </div>
+        <div>
+          <dt>파일 크기</dt>
+          <dd>{fmtBytes(status.max_bytes)} 이내</dd>
+        </div>
+        <div>
+          <dt>주의</dt>
+          <dd>{LOCK_NOTE}</dd>
+        </div>
+      </dl>
       {recording && <p className="panel-meta">녹음 중 {fmtMs(elapsed)}</p>}
       <input
         ref={fileRef}

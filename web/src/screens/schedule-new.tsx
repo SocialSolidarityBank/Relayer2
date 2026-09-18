@@ -162,56 +162,48 @@ export function ScheduleNewScreen({ caseId, thenRecord = false }: { caseId: numb
     ) : (
     <form className="wire-container schedule-form" onSubmit={e => { e.preventDefault(); void save(); }}>
       <fieldset className="schedule-inputs" disabled={saving} aria-label="상담 일정 입력">
-        {/* 카드 하나다(2026-09-18 Q C3 — 구 `상담 일시`·`상담 내용` 두 카드 합침).
-            첫 행은 일시·종료 시각과 상담 방식이 세로 가운데로 서고, 그 아래 왼쪽은 장소·종결,
-            오른쪽은 메모다. */}
-        <Card title="상담 내용">
-          <div className="schedule-when-row">
-            <div className="schedule-when-fields">
-              <DateTimeInput idPrefix="schedule" value={at} onChange={setAt} disabled={saving} />
-              {/* 종료 시각(Q 결정 D4). 네이티브 시각 입력이라 24시간제 표기·키보드 입력을 그대로 쓴다. */}
-              <Field label="종료 시각" htmlFor="end-time">
-                <input id="end-time" type="time" value={endTime} onChange={e => setEndTime(e.target.value)} />
-              </Field>
+        {/* 카드 하나다(2026-09-18 Q). 세 행: ①날짜·시작·종료 ②상담 방식·장소 ③메모.
+            제목 줄 오른쪽에 종결 상담 체크와 저장 버튼이 함께 선다(2026-09-18 Q — 구 하단 저장 바 삭제). */}
+        <Card
+          title="상담 정보"
+          action={
+            <div className="schedule-title-actions">
+              <Choice type="checkbox" label="종결 상담" checked={isClosing} onChange={() => setIsClosing(v => !v)} />
+              {passThrough ? (
+                <Button variant="primary" onClick={() => (window.location.hash = `#/cases/${caseId}/record`)}>상담 기록하기</Button>
+              ) : (
+                <Button type="submit" variant="primary" disabled={!scheduledAt || saving}>{saving ? '저장 중…' : '일정 저장'}</Button>
+              )}
             </div>
+          }
+        >
+          <div className="schedule-when-fields">
+            <DateTimeInput idPrefix="schedule" value={at} onChange={setAt} disabled={saving} />
+            {/* 종료 시각(Q 결정 D4). 네이티브 시각 입력이라 24시간제 표기·키보드 입력을 그대로 쓴다. */}
+            <Field label="종료 시각" htmlFor="end-time">
+              <input id="end-time" type="time" value={endTime} onChange={e => setEndTime(e.target.value)} />
+            </Field>
+          </div>
+          <div className="schedule-method-row">
             <ChoiceGroup legend="상담 방식">
               {METHODS.map(m => <Choice key={m.key} type="radio" name="method" label={m.label}
                 checked={method === m.key} onChange={() => setMethod(m.key)} />)}
             </ChoiceGroup>
-          </div>
-          <div className="schedule-detail-row">
-            <div className="schedule-detail-left">
-              {/* 장소는 상시 노출이다(C3). 대면이 아니면 서버가 거절하므로 보내지 않는다. */}
-              <Field label="상담 장소" htmlFor="place">
-                <input id="place" type="text" value={place} onChange={e => setPlace(e.target.value)} placeholder="예: 상담실 1" />
-              </Field>
-              <Choice type="checkbox" label="종결 상담" checked={isClosing} onChange={() => setIsClosing(v => !v)} />
-            </div>
-            <Field label="메모" htmlFor="memo" control="textarea">
-              <textarea id="memo" rows={5} value={memo} onChange={e => setMemo(e.target.value)} />
+            {/* 장소는 상시 노출이다(C3). 대면이 아니면 서버가 거절하므로 보내지 않는다. */}
+            <Field label="상담 장소" htmlFor="place">
+              <input id="place" type="text" value={place} onChange={e => setPlace(e.target.value)} placeholder="예: 상담실 1" />
             </Field>
           </div>
+          <Field label="메모" htmlFor="memo" control="textarea">
+            <textarea id="memo" rows={5} value={memo} onChange={e => setMemo(e.target.value)} />
+          </Field>
+          {/* 안내·오류는 카드 안 마지막 줄이다(구 하단 저장 바 대체, 2026-09-18 Q). */}
+          <p className="schedule-save-note" aria-live="polite">
+            <Meta parts={[scheduledAt ? scheduleFormatter.format(new Date(scheduledAt)) : '날짜와 시간 선택 필요', saving ? '일정 저장 중' : null]} />
+          </p>
+          {error && <ErrorText>{error}</ErrorText>}
         </Card>
       </fieldset>
-      {/* 안내는 작은 Meta 한 줄이고 버튼과 거리를 둔 왼편에 선다(2026-09-18 Q C4). */}
-      <footer className="schedule-savebar" aria-busy={saving}>
-        <div className="schedule-save-summary" aria-live="polite">
-          <Meta
-            parts={[
-              scheduledAt ? scheduleFormatter.format(new Date(scheduledAt)) : '날짜와 시간 선택 필요',
-              saving ? '일정 저장 중' : null,
-            ]}
-          />
-          {error && <ErrorText>{error}</ErrorText>}
-        </div>
-        {passThrough ? (
-          <Button variant="primary" onClick={() => (window.location.hash = `#/cases/${caseId}/record`)}>
-            상담 기록하기
-          </Button>
-        ) : (
-          <Button type="submit" variant="primary" disabled={!scheduledAt || saving}>{saving ? '저장 중…' : '일정 저장'}</Button>
-        )}
-      </footer>
       {/* 일시 확인 안내(D1·C5). 부르는 쪽이 여닫는 `Dialog` — 닫기가 확인이다. */}
       <Dialog id="schedule-notice" title="일시 확인 필요" open={notice} onClose={() => setNotice(false)}>
         <p className="panel-meta">예정 회차 없음, 지금 일시를 기본값으로 둠</p>
