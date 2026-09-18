@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>사용자 가이드 | 릴레이어</title>
+<meta name="description" content="상담을 맡은 실무자가 릴레이어에서 하루를 어떻게 쓰는지 화면 순서대로 봅니다." />
+<link rel="stylesheet" href="site.css" />
+<!-- 글은 이 파일 안에 그대로 있습니다. 구획을 늘리려면 <section> 하나를 복사하고 목차에 한 줄을 더합니다.
+     화면 사진은 site/shots 폴더에 있습니다. 다시 찍는 방법은 README.md 에 있습니다. -->
+</head>
+<body>
+<a class="skip" href="#main">본문으로 건너뛰기</a>
+
+<header class="top">
+  <div class="wrap top-row">
+    <a class="mark" href="index.html">Relayer</a>
+    <nav class="top-nav" aria-label="주요 메뉴">
+      <a href="guide-user.html" aria-current="page">사용자 가이드</a>
+      <a href="guide-admin.html">관리자 가이드</a>
+      <a class="btn btn-quiet btn-small" href="/#/login">로그인</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="wrap doc">
+
+  <nav class="doc-toc" data-toc aria-label="이 문서의 목차">
+    <p>사용자 가이드</p>
+    <ol>
+      <li><a href="#start">들어오기</a></li>
+      <li><a href="#schedule">상담 일정 보기</a></li>
+      <li><a href="#people">당사자 찾기</a></li>
+      <li><a href="#record">상담 기록하기</a></li>
+      <li><a href="#history">지난 상담 보기</a></li>
+      <li><a href="#close">상담 종결하기</a></li>
+      <li><a href="#help">막힐 때</a></li>
+    </ol>
+  </nav>
+
+  <div class="doc-body">
+    <div class="doc-head">
+      <h1>사용자 가이드</h1>
+      <p>
+        상담을 맡은 실무자를 위한 안내입니다. 화면에 적힌 말을 그대로 따라 읽으면 하루가 끝납니다.
+        읽는 데 10분쯤 걸립니다.
+      </p>
+    </div>
+
+    <section id="start">
+      <h2>들어오기</h2>
+      <p>
+        기관에서 받은 아이디와 비밀번호로 <a href="/#/login">로그인</a>합니다. 계정은 기관 관리자가
+        만듭니다. 아직 없다면 관리자에게 초대 링크를 요청하세요. 링크는 만든 뒤 7일 동안만 열립니다.
+      </p>
+      <p>
+        메뉴의 묶음은 <span class="ui">일정</span>, <span class="ui">당사자</span>,
+        <span class="ui">설정</span> 셋입니다. 넓은 화면에서는 왼쪽에, 좁은 화면에서는 본문 위에
+        섭니다. 메뉴 끝의 둥근 버튼 세 개는 설정, 화면 밝기, 로그아웃입니다.
+      </p>
+      <div class="callout">
+        <b>내 이름과 연락처를 고치려면</b>
+        <p><span class="ui">설정</span>에서 <span class="ui">내 정보</span>를 열고 고친 뒤 저장합니다.</p>
+      </div>
+    </section>
+
+    <section id="schedule">
+      <h2>상담 일정 보기</h2>
+      <p>
+        로그인하면 이 화면이 먼저 열립니다. 왼쪽 위에서 월간, 주간, 일간을 고르고,
+        <span class="ui">오늘</span>을 누르면 오늘로 돌아옵니다.
+      </p>
+      <figure class="shot">
+        <img src="shots/schedule.png" width="2880" height="1800"
+             alt="릴레이어 상담 일정 화면. 위쪽에 월간 선택과 오늘 버튼이 있고 9월 달력에 상담 한 건이 있다." />
+        <figcaption>상담 일정 화면. 달력 아래에 다가오는 일정이 따로 모입니다.</figcaption>
+      </figure>
+      <p>
+        달력 아래 <span class="ui">다가오는 일정</span>에는 앞으로 할 상담이 모입니다. 각 줄에서 바로
+        두 곳으로 갈 수 있습니다.
+      </p>
+      <ul>
+        <li><span class="ui">당사자 정보</span>를 누르면 그 사람의 지난 상담과 목표를 봅니다.</li>
+        <li><span class="ui">상담 기록하기</span>를 누르면 그 회차의 기록 화면이 열립니다.</li>
+      </ul>
+      <p>
+        새 상담을 잡을 때는 <span class="ui">상담 일정 등록</span>을 씁니다. 날짜와 시간, 상담 방법을
+        정하고, 만나서 하는 상담이면 장소도 적습니다.
+      </p>
+    </section>
+
+    <section id="people">
+      <h2>당사자 찾기</h2>
+      <p>
+        <span class="ui">당사자 목록</span>에는 내가 맡은 사람이 보입니다. 이름, 가명, 사업 이름,
+        실무자 이름으로 찾을 수 있고, 상태와 사업으로 좁힐 수 있습니다.
+      </p>
+      <figure class="shot">
+        <img src="shots/participants.png" loading="lazy" width="2880" height="1800"
+             alt="릴레이어 당사자 목록 화면. 검색창과 상태, 사업, 실무자 선택이 있고 아래에 당사자 카드가 있다." />
+        <figcaption>당사자 목록 화면. 카드 첫 줄이 이름이고, 그 옆이 가명 ID와 사업입니다.</figcaption>
+      </figure>
+      <p>
+        새 사람을 받았다면 <span class="ui">당사자 등록</span>에서 시작합니다. 이름과 연락처를 넣고
+        개인 정보 및 민감 정보 처리 동의를 받습니다. 동의를 받지 않으면 다음으로 넘어가지 않습니다.
+      </p>
+      <div class="callout">
+        <b>가명 ID가 왜 있나요</b>
+        <p>
+          바깥으로 나가는 자료에는 이름 대신 <span class="ui">otter-001</span> 같은 가명을 씁니다.
+          화면 안에서는 이름이 먼저 보입니다.
+        </p>
+      </div>
+    </section>
+
+    <section id="record">
+      <h2>상담 기록하기</h2>
+      <p>
+        상담 기록 화면은 한 회차를 담는 자리입니다. 맨 위에 당사자 이름과 회차가 서고, 그 아래로
+        녹음, 과제, 목표가 놓입니다.
+      </p>
+      <figure class="shot">
+        <img src="shots/record.png" loading="lazy" width="2880" height="1800"
+             alt="릴레이어 상담 기록 화면. 상담 녹음 카드에 녹음 시작과 파일 업로드 버튼이 있고 아래에 확인할 과제와 목표가 있다." />
+        <figcaption>상담 기록 화면. 손으로 적기와 녹음 올리기를 함께 쓸 수 있습니다.</figcaption>
+      </figure>
+      <h3>녹음</h3>
+      <p>
+        <span class="ui">녹음 시작</span>을 누르면 그 자리에서 녹음합니다. 이미 녹음한 파일이 있으면
+        <span class="ui">파일 업로드</span>로 올립니다. wav, mp3, m4a, flac, ogg, webm 형식을 받고
+        한 개에 200MB까지입니다.
+      </p>
+      <div class="callout">
+        <b>휴대전화로 녹음할 때</b>
+        <p>
+          iPhone과 iPad는 화면이 잠기면 녹음이 멈춥니다. 화면을 켜 둔 채로 두거나, 다른 앱으로 녹음한
+          파일을 상담이 끝난 뒤에 올리세요.
+        </p>
+      </div>
+      <h3>다음에 할 일</h3>
+      <p>
+        상담에서 다음에 하기로 한 일을 적으면 다음 회차 화면에 다시 뜹니다. 그때까지 확인하지 못한
+        것은 <span class="ui">확인할 과제</span>로 남습니다. 목록에서 지워도 적어 둔 기록은 그대로
+        남습니다.
+      </p>
+      <h3>목표</h3>
+      <p>
+        목표는 두 층입니다. 상담 전체를 통해 이루려는 것과 오늘 상담에서 하려는 것입니다. 오늘 목표는
+        지난 회차에서 이어받고, 바꾸면 언제 무엇이 바뀌었는지 남습니다.
+      </p>
+    </section>
+
+    <section id="history">
+      <h2>지난 상담 보기</h2>
+      <p>
+        당사자 정보 화면은 탭 네 개로 나뉩니다. 사람에 대한 정보, 회차마다의 요약, 회차마다의 원본,
+        그리고 목표입니다.
+      </p>
+      <figure class="shot">
+        <img src="shots/participant-info.png" loading="lazy" width="2880" height="1800"
+             alt="릴레이어 당사자 정보 화면. 당사자 정보, 회차별 요약, 회차별 원본 보기, 목표 탭이 있다." />
+        <figcaption>당사자 정보 화면. 맨 위 줄에 회차와 다음 상담 날짜가 함께 있습니다.</figcaption>
+      </figure>
+      <ul>
+        <li><span class="ui">회차별 요약</span>은 그 회차에서 무엇이 있었는지 짧게 봅니다.</li>
+        <li><span class="ui">회차별 원본 보기</span>는 손으로 적은 기록과 녹음 전사문을 그대로 봅니다.</li>
+        <li><span class="ui">목표</span>는 목표가 언제 어떻게 바뀌었는지 차례로 봅니다.</li>
+      </ul>
+      <p>
+        동의 문안은 <span class="ui">개인 정보 및 민감 정보 처리 동의</span>에서 펼쳐 볼 수 있습니다.
+        받은 그때의 문안이 그대로 남습니다.
+      </p>
+    </section>
+
+    <section id="close">
+      <h2>상담 종결하기</h2>
+      <p>
+        마지막 상담이라면 기록 화면에서 <span class="ui">마지막 상담</span>에 표시합니다. 저장하면
+        종결 화면으로 넘어갑니다.
+      </p>
+      <p>
+        종결 화면에서는 끝내는 이유와 남은 과제를 어떻게 할지 적습니다. 종결은 상담 회차로 세지
+        않으므로 회차 수는 늘지 않습니다.
+      </p>
+    </section>
+
+    <section id="help">
+      <h2>막힐 때</h2>
+      <div class="faq">
+        <details>
+          <summary>당사자 목록에 사람이 안 보입니다</summary>
+          <p>
+            내가 맡은 사람만 보입니다. <span class="ui">설정</span>의
+            <span class="ui">담당 배정 요청</span>에서 요청을 올리고 관리자 승인을 기다리세요.
+          </p>
+        </details>
+        <details>
+          <summary>녹음이 중간에 끊겼습니다</summary>
+          <p>
+            iPhone과 iPad는 화면이 잠기면 녹음이 멈춥니다. 남은 부분은 다른 앱으로 녹음해
+            <span class="ui">파일 업로드</span>로 올리세요.
+          </p>
+        </details>
+        <details>
+          <summary>상담 장소를 꼭 적어야 하나요</summary>
+          <p>만나서 하는 상담만 장소가 필요합니다. 전화나 화상으로 한 상담은 장소를 비워 둡니다.</p>
+        </details>
+        <details>
+          <summary>화면이 눈에 부십니다</summary>
+          <p>메뉴 끝의 둥근 버튼 가운데 것에서 밝게, 어둡게, 기기 설정을 고를 수 있습니다.</p>
+        </details>
+      </div>
+
+      <div class="doc-next">
+        <p>기관을 열고 실무자를 붙이는 일은 관리자가 합니다.</p>
+        <a class="btn btn-quiet btn-small" href="guide-admin.html">관리자 가이드 보기</a>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <div class="foot-row">
+      <p><b>사회연대은행 릴레이어</b></p>
+      <nav aria-label="바닥 메뉴">
+        <a href="index.html">소개</a>
+        <a href="guide-admin.html">관리자 가이드</a>
+        <a href="/#/login">로그인</a>
+      </nav>
+    </div>
+  </div>
+</footer>
+
+<script src="site.js"></script>
+</body>
+</html>

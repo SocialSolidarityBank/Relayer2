@@ -1,0 +1,573 @@
+/* 릴레이어 소개와 가이드 페이지 전용 스타일.
+ *
+ * 색과 형태 값은 앱 토큰(web/src/styles/tokens.css)에서 가져왔다. 그 파일이 정본이고 이 파일은 사본이다.
+ * 앱 색을 바꾸려면 tokens.css 를 고친 뒤 아래 값을 맞춘다. 이 파일만 고치면 앱과 어긋난다.
+ *
+ * 앱에 없고 이 페이지에만 있는 값은 세 가지다. 이유를 적어 둔다.
+ *   1. 큰 제목 세 단(--d1 ~ --d3): 앱 제목은 28px 이 위다. 소개 페이지 첫 화면은 그보다 커야 한다.
+ *   2. 본문 17px: 앱 본문은 16px 이고, 읽기만 하는 페이지라 한 단 올렸다.
+ *   3. 화면 사진 모서리 16px: 카드 12px 보다 큰 면이라 같은 값이면 각져 보인다.
+ * 모서리 규칙은 셋뿐이다. 버튼과 입력 6px, 카드 12px, 화면 사진 16px.
+ */
+
+/* Chillax 는 워드마크 Relayer 한 곳에만 쓴다. 글과 제목은 앱과 같은 서체 스택이다.
+ * 출처: Fontshare(Indian Type Foundry), 무료 상업 사용 허용. 파일은 site/fonts 에 같이 둔다. */
+@font-face {
+  font-family: 'Chillax';
+  src: url('fonts/Chillax-Semibold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --canvas: #FAFAF9;
+  --panel: #FFFFFF;
+  --muted: #F5F5F4;
+  --ink: #3D3445;
+  --sub: #534E57;
+  --line: #D7D3CE;
+  --mint-deep: #56CC99;
+  --lavender-deep: #7D4E9B;
+  --gradient-frame: linear-gradient(90deg, #93C1F5 0%, #8ED9B8 50%, #CBA8E2 100%);
+  --gradient-brand: linear-gradient(90deg, #8ED9B8 0%, #CBA8E2 100%);
+  --gradient-action: linear-gradient(135deg, #A8E3C6 0%, #D1B3E3 100%);
+  --on-action: #3D3445;
+  --line-on-action: rgba(61, 52, 69, 0.5);
+  --shadow-soft: -2px 2px 8px rgba(86, 204, 153, 0.15), 2px 2px 8px rgba(200, 144, 240, 0.15);
+
+  --radius-control: 6px;
+  --radius-card: 12px;
+  --radius-shot: 16px;
+
+  --font-sans: 'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif;
+  --font-mark: 'Chillax', var(--font-sans);
+  --d1: clamp(2.25rem, 5vw, 3.5rem);
+  --d2: clamp(1.625rem, 2.8vw, 2.25rem);
+  --d3: 1.25rem;
+  --body: 1.0625rem;
+  --small: 0.9375rem;
+
+  --page-max: 1200px;
+  --page-pad-x: 32px;
+  --measure: 38rem;
+  --section-gap: 112px;
+
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (max-width: 767px) {
+  :root { --page-pad-x: 20px; --section-gap: 72px; }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { scrollbar-gutter: stable; scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: var(--body);
+  font-weight: 400;
+  line-height: 1.7;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: inherit; }
+
+img { display: block; max-width: 100%; height: auto; }
+
+:focus-visible {
+  outline: 2px solid var(--lavender-deep);
+  outline-offset: 2px;
+}
+
+/* 건너뛰기 링크. 키보드로 들어온 사람이 머리줄 링크를 세 번 지나지 않게 한다. */
+.skip {
+  position: absolute;
+  left: -9999px;
+  top: 8px;
+  padding: 8px 14px;
+  background: var(--panel);
+  border-radius: var(--radius-control);
+  z-index: 40;
+}
+.skip:focus { left: 16px; }
+
+.wrap {
+  width: 100%;
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding-inline: var(--page-pad-x);
+}
+
+/* ───────── 머리줄 ───────── */
+
+.top {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: rgba(250, 250, 249, 0.92);
+  backdrop-filter: blur(8px);
+}
+/* 앱 머리줄과 같은 장치다. 3색 축(블루, 민트, 라벤더) 1px 선 하나로 아래를 가른다. */
+.top::after {
+  content: '';
+  display: block;
+  height: 1px;
+  background: var(--gradient-frame);
+}
+.top-row {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.mark {
+  font-family: var(--font-mark);
+  font-weight: 600;
+  font-size: 1.375rem;
+  letter-spacing: -0.005em;
+  text-decoration: none;
+  margin-right: auto;
+}
+.top-nav {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  font-size: var(--small);
+}
+.top-nav a {
+  text-decoration: none;
+  color: var(--sub);
+  padding: 6px 0;
+}
+.top-nav a:hover { color: var(--ink); }
+.top-nav a[aria-current='page'] {
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--mint-deep);
+}
+/* 좁은 화면에서 머리줄은 한 줄로 남는다. 글자가 두 줄로 접히면 높이가 흔들린다. */
+@media (max-width: 599px) {
+  .top-row { gap: 12px; }
+  .top-nav { gap: 12px; font-size: 0.8125rem; }
+  .top-nav a { white-space: nowrap; }
+  .top-nav a[data-optional] { display: none; }
+  .mark { font-size: 1.125rem; }
+  .top-nav .btn-small { min-height: 36px; padding: 0 12px; }
+}
+
+/* ───────── 버튼 ───────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 20px;
+  border-radius: var(--radius-control);
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: var(--small);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform var(--motion-fast) var(--ease);
+}
+.btn:active { transform: translateY(1px); }
+
+.btn-primary {
+  background: var(--gradient-action);
+  border-color: var(--line-on-action);
+  color: var(--on-action);
+}
+/* 세컨더리 테두리는 앱과 같은 방식이다. 면은 흰색, 테두리만 브랜드 그라데이션이다. */
+.btn-quiet {
+  background:
+    linear-gradient(var(--panel), var(--panel)) padding-box,
+    var(--gradient-brand) border-box;
+  color: var(--ink);
+}
+.btn-small { min-height: 40px; padding: 0 16px; }
+
+/* ───────── 첫 화면 ───────── */
+
+.hero { padding-top: 88px; }
+.hero-title {
+  margin: 0;
+  font-size: var(--d1);
+  font-weight: 600;
+  line-height: 1.18;
+  letter-spacing: -0.025em;
+}
+.hero-lead {
+  margin: 20px 0 0;
+  max-width: var(--measure);
+  font-size: 1.1875rem;
+  color: var(--sub);
+}
+.hero-actions {
+  margin-top: 32px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+/* 누른 뒤 무엇이 열리는지 버튼 바로 아래에서 말한다. 이 줄이 이 페이지의 본래 목적이다. */
+.hero-note {
+  margin: 16px 0 0;
+  max-width: var(--measure);
+  font-size: var(--small);
+  color: var(--sub);
+}
+
+/* ───────── 화면 사진 ───────── */
+
+.shot {
+  margin: 0;
+  border-radius: var(--radius-shot);
+  background:
+    linear-gradient(var(--panel), var(--panel)) padding-box,
+    var(--gradient-brand) border-box;
+  border: 1px solid transparent;
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+}
+.shot img {
+  width: 100%;
+  border-bottom: 1px solid var(--line);
+}
+.shot figcaption {
+  padding: 12px 16px;
+  font-size: var(--small);
+  color: var(--sub);
+}
+.hero-shot { margin-top: 56px; }
+
+/* ───────── 구획 ───────── */
+
+.section { margin-top: var(--section-gap); }
+.section-title {
+  margin: 0 0 12px;
+  font-size: var(--d2);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+.section-lead {
+  margin: 0;
+  max-width: var(--measure);
+  color: var(--sub);
+}
+
+/* ───────── 펼침 목록 ───────── */
+
+.unfold {
+  margin-top: 40px;
+  display: grid;
+  grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
+  gap: 40px;
+  align-items: start;
+}
+.unfold-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+.unfold-item { border-bottom: 1px solid var(--line); }
+.unfold-head {
+  position: relative;
+  width: 100%;
+  display: block;
+  padding: 20px 28px 20px 0;
+  background: none;
+  border: 0;
+  font: inherit;
+  font-size: var(--d3);
+  font-weight: 600;
+  color: var(--sub);
+  text-align: left;
+  cursor: pointer;
+  transition: color var(--motion-fast) var(--ease);
+}
+.unfold-head:hover { color: var(--ink); }
+.unfold-item[data-open='true'] .unfold-head { color: var(--ink); }
+/* 열렸는지 닫혔는지 알리는 표시다. 장식이 아니라 상태다. 자주 묻는 것 목록과 같은 문법을 쓴다. */
+.unfold-head::after {
+  content: '+';
+  position: absolute;
+  right: 0;
+  top: 20px;
+  font-weight: 400;
+  color: var(--sub);
+}
+.unfold-item[data-open='true'] .unfold-head::after { content: '\2212'; }
+/* 0fr 에서 1fr 로 늘어난다. 높이를 숫자로 고정하지 않으니 글이 길어져도 잘리지 않는다. */
+.unfold-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--motion-base) var(--ease);
+}
+.unfold-item[data-open='true'] .unfold-body { grid-template-rows: 1fr; }
+.unfold-body > div { overflow: hidden; }
+.unfold-body p {
+  margin: 0 0 20px;
+  max-width: 30rem;
+  color: var(--sub);
+}
+.unfold-body .shot { display: none; margin-bottom: 24px; }
+.unfold-media { position: sticky; top: 96px; }
+
+@media (max-width: 899px) {
+  .unfold { grid-template-columns: 1fr; gap: 0; }
+  .unfold-media { display: none; }
+  .unfold-body .shot { display: block; }
+}
+
+/* ───────── 순서 ───────── */
+
+.steps {
+  margin: 40px 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+  display: grid;
+  gap: 1px;
+  background: var(--line);
+  border-block: 1px solid var(--line);
+}
+.steps li {
+  counter-increment: step;
+  background: var(--canvas);
+  padding: 24px 0;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 16px;
+}
+/* 번호를 쓰는 이유는 순서가 실제로 있기 때문이다. 세 단계를 건너뛰면 다음이 열리지 않는다. */
+.steps li::before {
+  content: counter(step);
+  font-size: var(--d3);
+  font-weight: 600;
+  color: var(--mint-deep);
+}
+/* 번호가 1열, 글이 2열이다. 두 줄 모두 2열에 두지 않으면 설명이 번호 칸으로 내려간다. */
+.steps b { grid-column: 2; font-weight: 600; }
+.steps span { grid-column: 2; color: var(--sub); }
+
+/* ───────── 문 안내 ───────── */
+
+.doors {
+  margin-top: 40px;
+  display: grid;
+  gap: 16px;
+}
+.door {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  padding: 24px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px;
+  align-items: center;
+}
+.door h3 {
+  margin: 0 0 6px;
+  font-size: var(--d3);
+  font-weight: 600;
+}
+.door p { margin: 0; color: var(--sub); }
+@media (max-width: 599px) {
+  .door { grid-template-columns: 1fr; }
+}
+
+/* ───────── 가이드 두 장 ───────── */
+
+.guides {
+  margin-top: 40px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 20px;
+}
+.guide-card {
+  display: block;
+  padding: 28px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  text-decoration: none;
+  transition: box-shadow var(--motion-base) var(--ease);
+}
+.guide-card:hover { box-shadow: var(--shadow-soft); }
+.guide-card h3 { margin: 0 0 8px; font-size: var(--d3); font-weight: 600; }
+.guide-card p { margin: 0 0 16px; color: var(--sub); }
+.guide-card ul { margin: 0; padding-left: 18px; color: var(--sub); font-size: var(--small); }
+
+/* ───────── 꼬리줄 ───────── */
+
+.foot {
+  margin-top: var(--section-gap);
+  border-top: 1px solid var(--line);
+  padding: 40px 0 64px;
+  font-size: var(--small);
+  color: var(--sub);
+}
+.foot-row { display: flex; flex-wrap: wrap; gap: 24px; align-items: baseline; }
+.foot-row nav { display: flex; flex-wrap: wrap; gap: 16px; margin-left: auto; }
+.foot p { margin: 0; max-width: var(--measure); }
+.foot-note { margin-top: 16px !important; }
+
+/* ───────── 가이드 본문 ───────── */
+
+.doc {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 56px;
+  padding-top: 56px;
+  align-items: start;
+}
+.doc-toc {
+  position: sticky;
+  top: 96px;
+  font-size: var(--small);
+}
+.doc-toc p {
+  margin: 0 0 12px;
+  font-weight: 600;
+}
+.doc-toc ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-left: 1px solid var(--line);
+}
+.doc-toc a {
+  display: block;
+  padding: 7px 0 7px 14px;
+  margin-left: -1px;
+  color: var(--sub);
+  text-decoration: none;
+  border-left: 2px solid transparent;
+}
+.doc-toc a:hover { color: var(--ink); }
+.doc-toc a[aria-current='true'] {
+  color: var(--ink);
+  font-weight: 600;
+  border-left-color: var(--mint-deep);
+}
+/* 좁은 화면에서 목차는 글 위에 얹힌 작은 카드다. 세로로 길게 세우면 본문이 한 화면 밖으로 밀린다. */
+@media (max-width: 899px) {
+  .doc { grid-template-columns: 1fr; gap: 28px; }
+  .doc-toc {
+    position: static;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    padding: 16px 20px;
+  }
+  .doc-toc ol { border-left: 0; columns: 2; column-gap: 20px; }
+  .doc-toc a,
+  .doc-toc a[aria-current='true'] { padding: 5px 0; margin-left: 0; border-left: 0; }
+}
+
+.doc-head { max-width: var(--measure); }
+.doc-head h1 {
+  margin: 0;
+  font-size: var(--d2);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+.doc-head p { margin: 16px 0 0; color: var(--sub); }
+
+.doc-body > section {
+  padding-top: 72px;
+  scroll-margin-top: 88px;
+}
+.doc-body h2 {
+  margin: 0 0 16px;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.doc-body h3 {
+  margin: 32px 0 8px;
+  font-size: var(--d3);
+  font-weight: 600;
+}
+.doc-body p, .doc-body li { max-width: var(--measure); }
+/* 순서 목록은 자기 폭을 쓴다. 읽기 폭 제한을 그대로 받으면 칸 배경이 오른쪽에 남는다. */
+.doc-body .steps { max-width: none; padding-left: 0; margin: 32px 0 16px; }
+.doc-body .steps li { max-width: none; margin-bottom: 0; }
+.doc-body p { margin: 0 0 16px; }
+.doc-body ul, .doc-body ol { margin: 0 0 16px; padding-left: 20px; }
+.doc-body li { margin-bottom: 8px; }
+.doc-body .shot { margin: 24px 0 32px; }
+
+/* 화면에 실제로 적힌 말. 가이드의 안내와 화면의 글자가 같은 것을 가리키게 한다. */
+.ui {
+  font-weight: 600;
+  color: var(--lavender-deep);
+  white-space: nowrap;
+}
+
+.callout {
+  margin: 0 0 16px;
+  padding: 20px 24px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  max-width: var(--measure);
+}
+.callout b { display: block; margin-bottom: 4px; }
+.callout p { margin: 0; color: var(--sub); }
+
+.faq {
+  margin-top: 16px;
+  max-width: var(--measure);
+  border-top: 1px solid var(--line);
+}
+.faq details { border-bottom: 1px solid var(--line); }
+.faq summary {
+  padding: 18px 0;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after {
+  content: '+';
+  float: right;
+  color: var(--sub);
+  font-weight: 400;
+}
+.faq details[open] summary::after { content: '\2212'; }
+.faq p { margin: 0 0 18px; color: var(--sub); }
+
+.doc-next {
+  margin-top: 72px;
+  padding: 24px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+}
+.doc-next p { margin: 0; flex: 1 1 260px; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .unfold-body { transition: none; }
+  .btn { transition: none; }
+}
