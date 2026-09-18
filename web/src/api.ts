@@ -193,7 +193,7 @@ export type CaseDetail = {
     line: string;
     memo: string | null;
     today_goal_text: string | null;
-    ai_summary: { summary: string; changes: string[]; fact_changes: FactChange[] } | null;
+    ai_summary: { summary: string; changes: string[]; fact_changes: FactChange[]; evidence: AiEvidence[] } | null;
     /** 수기가 있는가. 녹음만 하고 아직 안 적은 회차는 false — 화면이 '수기 미작성'을 그린다. */
     written: boolean;
     /** 녹음·전사 상태. 여러 녹음이면 가장 최근 녹음 기준. */
@@ -322,6 +322,23 @@ export type FactChange = {
   note: string;
 };
 
+export type EvidenceGrade = '완전' | '부분' | '정황' | '과잉' | '모순' | '없음';
+/**
+ * 정리 항목 하나의 근거(2026-09-18 Q). 모델이 항목을 만든 **같은 호출**에서 낸 원문 문장들과 앞뒤 맥락.
+ * 인용은 서버가 자료와 대조한 것만 남는다. 2026-09-18 이전 승인분은 빈 배열이다.
+ */
+export type AiEvidence = {
+  item: string;
+  source: string;
+  quotes: string[];
+  context: string;
+  grade: EvidenceGrade;
+  transforms: string[];
+  note: string;
+};
+/** 역방향 점검 — 어떤 항목에도 안 쓰인 자료 구간(상·중). */
+export type AiOmission = { source: string; quote: string; importance: '상' | '중'; summary: string };
+
 export type Draft = {
   id: number;
   session_id: number;
@@ -331,6 +348,9 @@ export type Draft = {
   tasks: string[];
   questions: string[];
   fact_changes: FactChange[];
+  evidence: AiEvidence[];
+  omissions: AiOmission[];
+  omitted_minor_count: number;
   mask_hits: Record<string, number>;
   model: string | null;
   created_at: string;

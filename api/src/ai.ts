@@ -13,7 +13,15 @@ import { sql } from './db.ts';
 import { maskAll, type MaskSubject } from './domain/masking.ts';
 
 import { decryptPii, decryptText, encryptText } from './pii.ts';
-import type { Card, FactChange, Session } from './domain/types.ts';
+import {
+  EVIDENCE_GRADES,
+  EVIDENCE_TRANSFORMS,
+  type AiEvidence,
+  type AiOmission,
+  type Card,
+  type FactChange,
+  type Session,
+} from './domain/types.ts';
 
 /**
  * 제공자는 기관이 고른다. 바꾸면 동의 문안 해시가 달라져 기존 동의가 `확인 필요`로 떨어진다 —
@@ -33,6 +41,12 @@ export type Draft = {
   tasks: string[];
   questions: string[];
   fact_changes: FactChange[];
+  /** 항목별 근거(2026-09-18 Q). 2026-09-18 이전 행은 빈 배열이다. 인용은 서버가 자료와 대조한 것만 남는다. */
+  evidence: AiEvidence[];
+  /** 역방향 점검 — 어떤 항목에도 안 쓰인 자료 구간(상·중). 2026-09-18 이전 행은 빈 배열. */
+  omissions: AiOmission[];
+  /** 놓친 구간 중 `하`(인사·잡담·반복) 건수. 낱개로 나열하지 않는다. */
+  omitted_minor_count: number;
   mask_hits: Record<string, number>;
   model: string | null;
   created_by: number | null;
@@ -73,16 +87,43 @@ const SYSTEM = [
   '말한 것이 **서로 어긋나는 사실**만 찾는다(건수·금액·기간·관계·상태). 새로 알게 된 것은 아니다.',
   '양쪽 원문을 한 문장씩 **자료에 적힌 그대로** 옮긴다. 고쳐 쓰거나 줄이지 않는다. before.seq 는 기억에 적힌 회차 번호다.',
   '어느 쪽이 맞는지 판정하지 않는다 — 앞뒤 맥락만 한두 문장으로 적는다. 사례 기억이 없으면 빈 배열.',
+  '',
+  '근거(evidence): changes·tasks·questions 의 **항목마다 하나**. 방향은 늘 항목 → 자료다 — 항목을 하나씩 순회하며',
+  '그 항목을 쓰게 만든 자료 구간을 찾는다. 표현 유사도로 판단하지 않는다: 항목은 결론이고 자료는 사건이라 단어가 하나도 안 겹쳐도 대응한다.',
+  'item 은 항목 문장을 글자 그대로. source 는 그 자료의 대괄호 라벨(상담 내용·전사문 등). quotes 는 항목을 만들게 한 원문 문장들을',
+  '**자료에 적힌 그대로**(줄임·다듬기·맞춤법 교정 금지) — 여기저기 흩어져 있으면 끝까지 훑어 전부 모은다. 한 구간이 여러 항목의 근거여도 된다.',
+  'context 는 quotes 를 품은 앞뒤 문장 발췌(보통 2~5문장), 자료 그대로. context 만 읽어도 왜 그 항목이 나왔는지 읽혀야 한다.',
+  'grade: 완전(명시적 근거, 정확히 반영) · 부분(근거는 있으나 일부만) · 정황(명시적 진술 없이 어조·맥락·반복에서 추론) ·',
+  '과잉(근거보다 세게·넓게 단정) · 모순(자료와 어긋남) · 없음(대응 구간 못 찾음). 애매하면 늘 낮은 등급. 억지로 붙이는 것이 가장 나쁘다.',
+  'transforms: 자료 → 항목에 일어난 변환(일반화·감정 라벨링·집계·경향화·해석·판단·압축·화자 전환), 해당하는 것 전부.',
+  '대응시키지 않는 경우: 같은 단어지만 맥락이 다름, 시점이 다름(현재 vs 과거 회상), 화자가 다름(제3자의 말), 부정·가정·전문(傳聞) 맥락,',
+  '질문자가 유도한 뒤의 단순 동의("응", "네")만으로 뒷받침되는 경우. 배제했으면 note 에 왜 배제했는지 적는다.',
+  'note: 왜 근거인지 한두 문장. 추론이 개입했으면 어디서인지.',
+  '',
+  '놓친 구간(omissions): 자료를 다 본 뒤, 어떤 항목에도 대응되지 않은 구간을 뽑는다. importance 상 = 정리의 결론을 바꿀 수 있는 내용',
+  '또는 정리와 반대 방향의 신호, 중 = 정리에 있으면 좋았을 구체 정보(금액·날짜·관계). 각각 quote(자료 그대로)와 summary 한 줄.',
+  '하(인사·잡담·반복)는 나열하지 않고 omitted_minor_count 에 건수만 적는다.',
+  '',
+  '출력 전 확인: 모든 인용이 자료에 그 문자열 그대로 있는가. 완전을 준 항목에 정말 명시적 근거가 있는가(의심되면 정황). 항목 수와 evidence 수가 같은가.',
 ].join('\n');
 
 // 칸은 **사람이 쓰는 칸과 같다**(GLOSSARY §6-2). 그래야 승인하면 그대로 카드가 된다.
 // 한 덩어리로 받으면 무엇을 버릴지 모델이 제멋대로 고른다.
-type Shape = { summary: string; changes: string[]; tasks: string[]; questions: string[]; fact_changes: FactChange[] };
+type Shape = {
+  summary: string;
+  changes: string[];
+  tasks: string[];
+  questions: string[];
+  fact_changes: FactChange[];
+  evidence: AiEvidence[];
+  omissions: AiOmission[];
+  omitted_minor_count: number;
+};
 
 const SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['summary', 'changes', 'tasks', 'questions', 'fact_changes'],
+  required: ['summary', 'changes', 'tasks', 'questions', 'fact_changes', 'evidence', 'omissions', 'omitted_minor_count'],
   properties: {
     summary: {
       type: 'string',
@@ -128,6 +169,40 @@ const SCHEMA = {
         },
       },
     },
+    evidence: {
+      type: 'array',
+      description: 'changes·tasks·questions 항목마다 하나. 항목을 낳은 원문 문장들과 앞뒤 맥락을 자료 그대로.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['item', 'source', 'quotes', 'context', 'grade', 'transforms', 'note'],
+        properties: {
+          item: { type: 'string', description: '항목 문장 그대로' },
+          source: { type: 'string', description: '자료의 대괄호 라벨 그대로(상담 내용·전사문 등)' },
+          quotes: { type: 'array', items: { type: 'string' }, description: '항목을 만들게 한 원문 문장들, 자료 그대로. 없음이면 빈 배열' },
+          context: { type: 'string', description: 'quotes 를 품은 앞뒤 문장 발췌, 자료 그대로. 없음이면 빈 문자열' },
+          grade: { type: 'string', enum: EVIDENCE_GRADES, description: '완전·부분·정황·과잉·모순·없음, 애매하면 낮게' },
+          transforms: { type: 'array', items: { type: 'string', enum: EVIDENCE_TRANSFORMS }, description: '자료 → 항목 변환 유형, 해당하는 것 전부' },
+          note: { type: 'string', description: '왜 근거인지 한두 문장. 추론·배제 사유' },
+        },
+      },
+    },
+    omissions: {
+      type: 'array',
+      description: '어떤 항목에도 대응되지 않은 자료 구간, 상·중만. 하는 건수로.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['source', 'quote', 'importance', 'summary'],
+        properties: {
+          source: { type: 'string', description: '자료의 대괄호 라벨 그대로' },
+          quote: { type: 'string', description: '자료 그대로' },
+          importance: { type: 'string', enum: ['상', '중'] },
+          summary: { type: 'string', description: '내용 한 줄' },
+        },
+      },
+    },
+    omitted_minor_count: { type: 'integer', description: '놓친 구간 중 하(인사·잡담·반복) 건수' },
   },
 } as const;
 
@@ -249,11 +324,21 @@ async function subjectFor(caseId: number): Promise<MaskSubject> {
   };
 }
 
-/** 회차 하나의 자료 조각(상담 내용 + 카드). 마스킹 전 평문이다. */
+/**
+ * 회차 하나의 자료 조각(상담 내용 + 확인된 전사문 + 카드). 마스킹 전 평문이다.
+ * 전사문은 **확인(승인)된 것만** 넣는다(2026-09-18 Q — 근거를 수기 혹은 녹음 전사에서 찾는다).
+ * 초안은 기록의 후보고 승인은 사람이 한다는 규칙은 그대로다.
+ */
 async function sessionParts(session: Session): Promise<Array<{ label: string; text: string }>> {
   const cards = await sql<Card[]>`select * from cards where source_session_id = ${session.id} order by id`;
+  const [tr] = await sql<Array<{ text: string }>>`
+    select t.text from transcripts t
+    join recordings r on r.id = t.recording_id
+    where t.session_id = ${session.id} and t.status = 'approved' and r.deleted_at is null
+    order by t.id desc limit 1`;
   return [
     { label: '상담 내용', text: decryptText(session.memo) ?? '' },
+    { label: '전사문', text: tr ? decryptText(tr.text) ?? '' : '' },
     ...cards.map((c) => ({ label: SECTION_LABEL[c.source_section] ?? c.source_section, text: decryptText(c.text) ?? '' })),
   ].filter((p) => p.text.trim());
 }
@@ -285,12 +370,14 @@ export async function draftSession(sessionId: number, actorId: number): Promise<
     ...(memory ? ['', MEMORY_HEADER, memory] : []),
   ].join('\n');
 
-  const shape = await callModel<Shape>({ system: SYSTEM, prompt, schema: SCHEMA, name: 'session_draft' });
+  const raw = await callModel<Shape>({ system: SYSTEM, prompt, schema: SCHEMA, name: 'session_draft' });
+  const shape = verifyEvidence(raw, masked);
 
   const [row] = await sql<Array<{ id: number; created_at: string }>>`
-    insert into ai_drafts (session_id, status, summary, changes, tasks, questions, fact_changes, mask_hits, model, created_by)
+    insert into ai_drafts (session_id, status, summary, changes, tasks, questions, fact_changes, evidence, omissions, omitted_minor_count, mask_hits, model, created_by)
     values (${sessionId}, 'draft', ${shape.summary}, ${sql.json(shape.changes)}, ${sql.json(shape.tasks)},
-            ${sql.json(shape.questions)}, ${sql.json(shape.fact_changes)}, ${sql.json(hits)}, ${MODEL}, ${actorId})
+            ${sql.json(shape.questions)}, ${sql.json(shape.fact_changes)}, ${sql.json(shape.evidence)}, ${sql.json(shape.omissions)},
+            ${shape.omitted_minor_count}, ${sql.json(hits)}, ${MODEL}, ${actorId})
     returning id, created_at`;
 
   // 무엇을 몇 건 마스킹해 **어디로** 보냈는지 남긴다. 보낸 원문은 남기지 않는다.
@@ -311,10 +398,47 @@ export async function draftSession(sessionId: number, actorId: number): Promise<
     tasks: shape.tasks,
     questions: shape.questions,
     fact_changes: shape.fact_changes,
+    evidence: shape.evidence,
+    omissions: shape.omissions,
+    omitted_minor_count: shape.omitted_minor_count,
     mask_hits: hits,
     model: MODEL,
     created_by: actorId,
     created_at: row.created_at,
+  };
+}
+
+/**
+ * 인용 검증(2026-09-18 Q — 받은 문안의 "출력 전 자기검증"을 서버가 한다). 모델이 준 인용이 보낸 자료에
+ * **문자열 그대로** 없으면 버린다. 인용이 다 떨어진 근거는 `없음`으로 내린다 — 지어낸 인용은 화면에 못 오른다.
+ * 대조는 공백만 접어서 한다(줄바꿈 차이는 인용이 아니다). 놓친 구간의 인용도 같은 규칙이다.
+ * 라벨이 맞는 자료를 먼저 보고, 없으면 어느 자료든 본다 — 라벨을 틀리게 붙인 인용을 통째로 버리지 않기 위해.
+ */
+export function verifyEvidence(shape: Shape, parts: Array<{ label: string; text: string }>): Shape {
+  const squash = (s: string) => s.replace(/\s+/g, ' ').trim();
+  const texts = parts.map((p) => ({ label: p.label, text: squash(p.text) }));
+  const found = (label: string, quote: string): boolean => {
+    const q = squash(quote);
+    if (!q) return false;
+    const own = texts.find((t) => t.label === label);
+    return (own?.text.includes(q) ?? false) || texts.some((t) => t.text.includes(q));
+  };
+  const isGrade = (g: string): g is AiEvidence['grade'] => (EVIDENCE_GRADES as readonly string[]).includes(g);
+  return {
+    ...shape,
+    evidence: (shape.evidence ?? []).map((e) => {
+      const quotes = (e.quotes ?? []).filter((q) => found(e.source, q));
+      const grade = quotes.length === 0 ? '없음' : isGrade(e.grade) ? e.grade : '정황';
+      return {
+        ...e,
+        quotes,
+        context: quotes.length === 0 ? '' : e.context,
+        grade,
+        transforms: (e.transforms ?? []).filter((t) => (EVIDENCE_TRANSFORMS as readonly string[]).includes(t)),
+      };
+    }),
+    omissions: (shape.omissions ?? []).filter((o) => found(o.source, o.quote)),
+    omitted_minor_count: Math.max(0, Math.trunc(Number(shape.omitted_minor_count) || 0)),
   };
 }
 
@@ -520,7 +644,7 @@ async function memoryBefore(session: Session, actorId: number): Promise<string |
 /** 회차의 현재 초안. 마지막 행이 현재 상태다. */
 export async function latestDraft(sessionId: number): Promise<Draft | null> {
   const [row] = await sql<Draft[]>`
-    select id, session_id, status, summary, changes, tasks, questions, fact_changes, mask_hits, model, created_by, created_at
+    select id, session_id, status, summary, changes, tasks, questions, fact_changes, evidence, omissions, omitted_minor_count, mask_hits, model, created_by, created_at
     from ai_drafts where session_id = ${sessionId} order by id desc limit 1`;
   return row ?? null;
 }
@@ -550,9 +674,10 @@ export async function approveDraft(
 
   const row = await sql.begin(async (tx) => {
     const [inserted] = await tx<Array<{ id: number; created_at: string }>>`
-      insert into ai_drafts (session_id, status, summary, changes, tasks, questions, fact_changes, mask_hits, model, created_by, approved_by)
+      insert into ai_drafts (session_id, status, summary, changes, tasks, questions, fact_changes, evidence, omissions, omitted_minor_count, mask_hits, model, created_by, approved_by)
       values (${sessionId}, 'approved', ${summary}, ${sql.json(changes)}, ${sql.json(tasks)}, ${sql.json(questions)},
-              ${sql.json(current.fact_changes)}, ${sql.json(current.mask_hits)}, ${current.model}, ${current.created_by ?? actorId}, ${actorId})
+              ${sql.json(current.fact_changes)}, ${sql.json(current.evidence)}, ${sql.json(current.omissions)}, ${current.omitted_minor_count},
+              ${sql.json(current.mask_hits)}, ${current.model}, ${current.created_by ?? actorId}, ${actorId})
       returning id, created_at`;
     await replaceAiCards(tx as unknown as typeof sql, session.case_id, sessionId, [
       ...tasks.map((text) => ({ kind: 'promise' as const, text, section: 'promise' as const })),

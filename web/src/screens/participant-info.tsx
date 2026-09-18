@@ -2,7 +2,7 @@
 // (2026-09-18 Q): 기본 정보 · 회차별 요약 · 회차별 원본. 상담 목표 기록은 기본 정보 안 아코디언이다.
 // 원본은 큰 팝업 두 열(수기 · 녹음 전사)로 열린다(2026-09-18 Q E2 — 드로어 폐지).
 // 15초 다시보기는 폐지했다(2026-09-17 Q) — 화면·탭·버튼 어디에도 두지 않는다.
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   appUrl,
   documentHref,
@@ -17,6 +17,7 @@ import {
   revokeAccess,
   uploadDocument,
   type AccessState,
+  type AiEvidence,
   type Briefing,
   type CaseDetail,
   type ConsentCopy,
@@ -44,6 +45,8 @@ import { ConsentLinkCard } from '../consent-link.tsx';
 import { SessionOriginalDialog } from '../session-original.tsx';
 import { Dialog } from '../dialog.tsx';
 import { dateLabel, timeLabel } from '../date-time.ts';
+import { getTranscript, recordingAudioHref, type Transcript, type TranscriptSegment } from '../speech-api.ts';
+import { fmtMs } from './session-audio.tsx';
 
 const TABS = ['기본 정보', '회차별 요약', '회차별 원본'] as const;
 type Tab = (typeof TABS)[number];
@@ -85,24 +88,33 @@ const Lines = ({ text }: { text: string }) => {
 type SeqTone = 'ai' | 'change' | 'warn' | 'state' | 'risk' | 'done';
 
 /**
- * 근거 하이라이터(2026-09-18 Q). 요약의 문장 하나(변화·확인필요·완료·위험)를 누르면 그 문장이
- * 나온 회차의 **수기 기록**을 띄우고 문장과 겹치는 말을 표시한다. 문장 전체가 그대로 있으면
- * 그 자리를, 없으면 문장의 낱말(2자 이상)마다 표시한다 — AI 가 접은 문장은 원문과 글자가 다르다.
- * ponytail: 낱말 겹침은 근사치다. 문장별 원문 좌표(`refs`)가 서버에 생기면 그것으로 바꾼다.
+ * 근거 모달(2026-09-18 Q). 요약의 문장 하나(변화·확인필요·완료·위험)를 누르면 그 문장의 **근거**를 띄운다.
+ * 근거는 AI 가 문장을 만든 같은 호출에서 낸 것이다(`ai_summary.evidence` — 원문 인용·앞뒤 맥락·등급·변환).
+ * 화면은 낱말 겹침으로 추측하지 않는다 — 항목은 결론이고 자료는 사건이라 단어가 겹치지 않아도 대응한다.
+ * 위는 프런트매터(항목 · 출처 · 자료 · 등급 · 변환), 아래는 맥락 카드(인용 표시)다. 전사문이 출처면 시각을 붙여 그 자리부터 튼다.
  */
-type Evidence = { sentence: string; seq: number; heldAt: string | null; memo: string | null };
+type Evidence = {
+  sentence: string;
+  seq: number;
+  sessionId: number | null;
+  heldAt: string | null;
+  /** 짝이 맞는 근거. 2026-09-18 이전 승인분은 없다. */
+  found: AiEvidence | null;
+};
 
-const norm = (s: string) => s.replace(/\s+/g, ' ').trim();
+const squash = (s: string) => s.replace(/\s+/g, ' ').trim();
 
-function Highlighted({ text, sentence }: { text: string; sentence: string }) {
-  const whole = norm(sentence);
-  const idx = whole ? text.indexOf(whole) : -1;
-  const words =
-    idx >= 0
-      ? [whole]
-      : [...new Set(whole.split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 2))].sort((a, b) => b.length - a.length);
-  if (words.length === 0) return <>{text}</>;
-  const re = new RegExp(words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'g');
+/** 등급 색: 완전 민트 · 부분·정황 중립 · 과잉·모순 코랄 · 없음 중립. 채운 면은 없다(§6). */
+const GRADE_TONE: Record<string, string> = { 완전: 'mint', 부분: 'sub', 정황: 'sub', 과잉: 'warn', 모순: 'warn', 없음: 'sub' };
+/** 주관이 들어간 변환은 눈에 띄게(코랄) — 받은 문안의 (다)·(라). */
+const SUBJECTIVE = new Set(['집계·경향화', '해석·판단']);
+
+/** 맥락 글 안의 인용을 표시한다. 인용이 여럿이면 전부. 공백 차이는 무시한다. */
+function Marked({ text, quotes }: { text: string; quotes: string[] }) {
+  const needles = quotes.map(squash).filter(Boolean).sort((a, b) => b.length - a.length);
+  if (needles.length === 0) return <>{text}</>;
+  // 인용은 공백을 접은 꼴이라 원문의 줄바꿈·겹공백을 `\s+` 로 맞춘다.
+  const re = new RegExp(needles.map((q) => q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s+')).join('|'), 'g');
   const out: ReactNode[] = [];
   let last = 0;
   for (const m of text.matchAll(re)) {
@@ -114,21 +126,92 @@ function Highlighted({ text, sentence }: { text: string; sentence: string }) {
   return <>{out}</>;
 }
 
-/** 머리(`근거` + 닫기)와 본문뿐인 모달(2026-09-18 Q). 본문 = 누른 문장 → 출처 회차 라벨 → 표시된 수기 기록. */
+/**
+ * 전사문 출처의 시각 버튼. 인용이 든 전사 조각을 찾아 `0:14` 로 붙이고, 누르면 그 자리부터 튼다.
+ * 전사문은 회차 단위(`GET /sessions/:id/transcript`)이고 녹음 동의가 없으면 서버가 막는다 — 그때는 시각 없이 글만.
+ */
+function TranscriptSeek({ sessionId, quotes }: { sessionId: number; quotes: string[] }) {
+  const [tr, setTr] = useState<Transcript | null>(null);
+  const audio = useRef<HTMLAudioElement>(null);
+  useEffect(() => {
+    let alive = true;
+    void getTranscript(sessionId)
+      .then((t) => alive && 'id' in t && setTr(t))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [sessionId]);
+  if (!tr?.segments?.length) return null;
+  const hits = quotes
+    .map((q) => tr.segments!.find((s) => squash(s.text).includes(squash(q)) || squash(q).includes(squash(s.text))))
+    .filter((s): s is TranscriptSegment => !!s);
+  if (hits.length === 0) return null;
+  return (
+    <div className="evidence-seek">
+      {hits.map((s) => (
+        <Button
+          key={s.offset_ms}
+          variant="ghost"
+          onClick={() => {
+            const el = audio.current;
+            if (!el) return;
+            el.currentTime = s.offset_ms / 1000;
+            void el.play().catch(() => {});
+          }}
+        >
+          {fmtMs(s.offset_ms)}
+        </Button>
+      ))}
+      <audio ref={audio} controls preload="none" src={recordingAudioHref(tr.recording_id)} style={{ width: '100%' }} />
+    </div>
+  );
+}
+
 function EvidenceDialog({ evidence, onClose }: { evidence: Evidence; onClose: () => void }) {
+  const e = evidence.found;
+  const grounded = e !== null && e.quotes.length > 0 && e.grade !== '없음';
+  const paragraphs = grounded ? (e.context || e.quotes.join('\n')).split('\n').map((p) => p.trim()).filter(Boolean) : [];
   return (
     <Dialog id="evidence" title="근거" headClose open onClose={onClose} className="evidence-dialog">
       <div className="evidence-body">
-        <p className="evidence-sentence">{evidence.sentence}</p>
-        <p className="seq-section-title">
-          <Meta parts={[`${evidence.seq}회차`, dateLabel(evidence.heldAt), '수기 기록']} />
-        </p>
-        {evidence.memo ? (
-          <p className="evidence-text"><Highlighted text={evidence.memo} sentence={evidence.sentence} /></p>
+        {/* 프런트매터 — 구분에 필요한 정보만 라벨·값으로. 아래 본문에서 되풀이하지 않는다. */}
+        <dl className="evidence-front">
+          <div><dt>항목</dt><dd>{evidence.sentence}</dd></div>
+          <div><dt>출처</dt><dd><Meta parts={[`${evidence.seq}회차`, dateLabel(evidence.heldAt)]} /></dd></div>
+          <div><dt>자료</dt><dd>{grounded ? e.source : '-'}</dd></div>
+          <div>
+            <dt>등급</dt>
+            <dd><span className="evidence-grade" data-tone={GRADE_TONE[e?.grade ?? '없음']}>{e?.grade ?? '없음'}</span></dd>
+          </div>
+          <div>
+            <dt>변환</dt>
+            <dd>
+              {e && e.transforms.length > 0 ? (
+                <span className="evidence-tags">
+                  {e.transforms.map((t) => (
+                    <span key={t} className="evidence-tag" data-tone={SUBJECTIVE.has(t) ? 'warn' : undefined}>{t}</span>
+                  ))}
+                </span>
+              ) : (
+                '-'
+              )}
+            </dd>
+          </div>
+        </dl>
+        {grounded ? (
+          <section className="evidence-card">
+            {paragraphs.map((p, i) => (
+              <p className="evidence-text" key={i}><Marked text={p} quotes={e.quotes} /></p>
+            ))}
+            {e.source === '전사문' && evidence.sessionId !== null && (
+              <TranscriptSeek sessionId={evidence.sessionId} quotes={e.quotes} />
+            )}
+          </section>
         ) : (
-          <Empty>수기 기록 없음</Empty>
+          <Empty>{e === null ? '근거 없음, AI 정리 다시 하면 생성' : '근거 없음'}</Empty>
         )}
-        <p className="seq-section-note">문장과 겹치는 말을 표시, AI 정리 문장은 원문과 글자가 다를 수 있음</p>
+        {e?.note && <p className="seq-section-note">{e.note}</p>}
       </div>
     </Dialog>
   );
@@ -181,14 +264,15 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
     void getBriefing(caseId).then(setBrief);
   }, [caseId]);
   const risk = brief?.risk_signals ?? null;
-  /** 문장 하나를 근거 모달로 여는 텍스트 링크. 출처 회차는 문장이 난 회차다. */
+  /** 문장 하나를 근거 모달로 여는 텍스트 링크. 출처 회차는 문장이 난 회차이고, 근거는 그 회차 승인본의 `evidence` 에서 같은 글자로 찾는다. */
   const link = (sentence: string, seq: number) => {
     const src = detail.sessions.find((x) => x.seq === seq);
+    const found = src?.ai_summary?.evidence.find((ev) => squash(ev.item) === squash(sentence)) ?? null;
     return (
       <button
         type="button"
         className="seq-link"
-        onClick={() => setEvidence({ sentence, seq, heldAt: src?.held_at ?? null, memo: src?.memo ?? null })}
+        onClick={() => setEvidence({ sentence, seq, sessionId: src?.id ?? null, heldAt: src?.held_at ?? null, found })}
       >
         {sentence}
       </button>
