@@ -1,0 +1,230 @@
+{
+  "record": {
+    "topics": [
+      {
+        "id": "01",
+        "title": "병원 진료와 약",
+        "paragraph_ids": [
+          "1-1",
+          "1-2"
+        ]
+      },
+      {
+        "id": "02",
+        "title": "가족과 학교",
+        "paragraph_ids": [
+          "1-3",
+          "1-4"
+        ]
+      }
+    ],
+    "paragraphs": [
+      {
+        "id": "1-1",
+        "title": "진단 결과",
+        "spans": [
+          "w:memo:1",
+          "w:memo:2",
+          "w:memo:3",
+          "w:memo:4"
+        ]
+      },
+      {
+        "id": "1-2",
+        "title": "약 시작과 부작용",
+        "spans": [
+          "w:memo:5",
+          "w:memo:6",
+          "w:memo:7",
+          "w:memo:8",
+          "w:memo:9"
+        ]
+      },
+      {
+        "id": "1-3",
+        "title": "남편 반응과 모의 결정",
+        "spans": [
+          "w:memo:10",
+          "w:memo:11",
+          "w:memo:12",
+          "w:memo:13"
+        ]
+      },
+      {
+        "id": "1-4",
+        "title": "학교 공유와 다음 진료",
+        "spans": [
+          "w:memo:14",
+          "w:memo:15",
+          "w:memo:16",
+          "w:memo:17"
+        ]
+      }
+    ],
+    "annotations": [
+      {
+        "span": "w:memo:2",
+        "status": "completed"
+      },
+      {
+        "span": "w:memo:12",
+        "status": "change",
+        "before": [
+          "w:memo:11"
+        ],
+        "after": [
+          "w:memo:12"
+        ]
+      },
+      {
+        "span": "w:memo:14",
+        "status": "follow_up"
+      }
+    ]
+  },
+  "summary": {
+    "core": [
+      {
+        "text": "ADHD 복합형 진단(주의력결핍+충동성)",
+        "spans": [
+          "w:memo:3"
+        ],
+        "goal": "overall"
+      },
+      {
+        "text": "약 시작: 메틸페니데이트 27mg 아침 1알(서방형)",
+        "spans": [
+          "w:memo:5",
+          "w:memo:6"
+        ],
+        "goal": "session"
+      }
+    ],
+    "changes": {
+      "promise_result": [
+        {
+          "promise": "5/19 병원 진료",
+          "result": "5/19 세연아동병원 진료 완료",
+          "promise_spans": [
+            "w:memo:2"
+          ],
+          "result_spans": [
+            "w:memo:2",
+            "w:memo:3"
+          ],
+          "changes": [],
+          "goal": "overall"
+        }
+      ],
+      "newly_revealed": [
+        {
+          "mode": "confirmed",
+          "lines": [
+            "확인된 내용: 진단서 보고 말없어졌으나 약은 여전히 반대 → 냉전"
+          ],
+          "spans": [
+            "w:memo:11"
+          ],
+          "summary_only_exception": true,
+          "goal": null
+        }
+      ],
+      "new_possibility": [
+        {
+          "lines": [
+            "모가 이번엔 밀고 감"
+          ],
+          "change_spans": [
+            "w:memo:12"
+          ],
+          "plan_spans": [
+            "w:memo:14"
+          ],
+          "goal": null
+        }
+      ]
+    },
+    "follow_up": [
+      {
+        "text": "학교 공유: 내가 오 선생님께 전화하기로(모 요청, 울까 봐)",
+        "spans": [
+          "w:memo:14"
+        ],
+        "goal": "session"
+      },
+      {
+        "text": "다음 진료 6/16 용량 조정",
+        "spans": [
+          "w:memo:15"
+        ],
+        "goal": null
+      }
+    ],
+    "completed": [
+      {
+        "text": "5/19 세연아동병원 진료 완료",
+        "spans": [
+          "w:memo:2"
+        ],
+        "goal": "overall"
+      }
+    ]
+  },
+  "links": [
+    {
+      "transcript_span": "t:1:5",
+      "written_spans": [
+        "w:memo:2"
+      ],
+      "match": "match"
+    },
+    {
+      "transcript_span": "t:1:33",
+      "written_spans": [
+        "w:memo:6"
+      ],
+      "match": "match"
+    }
+  ],
+  "discrepancies": [
+    {
+      "transcript_span": "t:1:22",
+      "written_spans": [
+        "w:memo:5"
+      ],
+      "paragraph_id": "1-2",
+      "difference": "수기는 메틸페니데이트 27mg, 전사는 18mg짜리",
+      "conditions": {
+        "same_subject": true,
+        "same_attribute": true,
+        "same_time": true,
+        "incompatible": true
+      }
+    }
+  ],
+  "keywords": [
+    {
+      "text": "메틸페니데이트",
+      "spans": [
+        "w:memo:5"
+      ]
+    },
+    {
+      "text": "ADHD",
+      "spans": [
+        "w:memo:3"
+      ]
+    },
+    {
+      "text": "세연아동병원",
+      "spans": [
+        "w:memo:2"
+      ]
+    }
+  ],
+  "tasks": [
+    "학교 공유: 오 선생님께 전화",
+    "6/10 아동 동석, 약 반응 아이 말로 듣기"
+  ],
+  "questions": []
+}

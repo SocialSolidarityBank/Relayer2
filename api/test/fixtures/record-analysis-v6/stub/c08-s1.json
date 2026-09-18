@@ -1,0 +1,244 @@
+{
+  "record": {
+    "topics": [
+      {
+        "id": "01",
+        "title": "보이스피싱 피해",
+        "paragraph_ids": [
+          "1-1"
+        ]
+      },
+      {
+        "id": "02",
+        "title": "가족과 생활",
+        "paragraph_ids": [
+          "1-2",
+          "1-3"
+        ]
+      },
+      {
+        "id": "03",
+        "title": "정서와 다음 계획",
+        "paragraph_ids": [
+          "1-4"
+        ]
+      }
+    ],
+    "paragraphs": [
+      {
+        "id": "1-1",
+        "title": "피해 경위",
+        "spans": [
+          "w:memo:4",
+          "w:memo:5",
+          "w:memo:6",
+          "w:memo:7",
+          "w:memo:8",
+          "w:memo:9",
+          "w:intake:application_reason_detail:0",
+          "w:intake:application_reason_detail:1"
+        ]
+      },
+      {
+        "id": "1-2",
+        "title": "가족 관계",
+        "spans": [
+          "w:memo:10",
+          "w:memo:11",
+          "w:memo:12",
+          "w:intake:strength_detail:0",
+          "w:intake:strength_detail:1"
+        ]
+      },
+      {
+        "id": "1-3",
+        "title": "수급과 건강",
+        "spans": [
+          "w:memo:13",
+          "w:memo:14",
+          "w:memo:15",
+          "w:memo:16",
+          "w:memo:17",
+          "w:intake:welfare_other:0",
+          "w:intake:contact_caution:0",
+          "w:intake:contact_caution:1",
+          "w:intake:contact_caution:2",
+          "w:intake:strength_detail:2"
+        ]
+      },
+      {
+        "id": "1-4",
+        "title": "정서와 약속",
+        "spans": [
+          "w:memo:18",
+          "w:memo:19",
+          "w:memo:20",
+          "w:memo:21",
+          "w:memo:22",
+          "w:card:1:0",
+          "w:card:2:0",
+          "w:card:3:0"
+        ]
+      }
+    ],
+    "annotations": [
+      {
+        "span": "w:memo:9",
+        "status": "follow_up"
+      },
+      {
+        "span": "w:card:2:0",
+        "status": "follow_up"
+      }
+    ]
+  },
+  "summary": {
+    "core": [
+      {
+        "text": "2025년 12월 검찰 사칭 보이스피싱으로 통장 잔액 620만 원 전액 피해",
+        "spans": [
+          "w:intake:application_reason_detail:0",
+          "w:memo:4"
+        ],
+        "goal": "overall"
+      },
+      {
+        "text": "인지 저하 정황 관찰됨",
+        "spans": [
+          "w:memo:9"
+        ],
+        "goal": "overall"
+      }
+    ],
+    "changes": {
+      "promise_result": [],
+      "newly_revealed": [
+        {
+          "mode": "confirmed",
+          "lines": [
+            "확인된 내용: 아들(55)과 연락 두절 3년"
+          ],
+          "spans": [
+            "w:memo:10",
+            "w:memo:11"
+          ],
+          "summary_only_exception": true,
+          "goal": null
+        }
+      ],
+      "new_possibility": [
+        {
+          "lines": [
+            "은행 동행하여 통장 재발급"
+          ],
+          "change_spans": [
+            "w:memo:4"
+          ],
+          "plan_spans": [
+            "w:card:2:0",
+            "w:memo:21"
+          ],
+          "goal": "overall"
+        }
+      ]
+    },
+    "follow_up": [
+      {
+        "text": "은행 동행 일정 잡기(통장 재발급), 주거환경개선 신청 여부 확인",
+        "spans": [
+          "w:memo:21"
+        ],
+        "goal": "session"
+      },
+      {
+        "text": "아들 연락처, 손녀 연락 빈도, 약 복용 순응도",
+        "spans": [
+          "w:memo:22"
+        ],
+        "goal": null
+      }
+    ],
+    "completed": [
+      {
+        "text": "경찰 신고 완료, 환급은 어려울 것으로 보임",
+        "spans": [
+          "w:memo:6"
+        ],
+        "goal": null
+      }
+    ]
+  },
+  "links": [
+    {
+      "transcript_span": "t:1:29",
+      "written_spans": [
+        "w:memo:4",
+        "w:intake:application_reason_detail:0"
+      ],
+      "match": "match"
+    },
+    {
+      "transcript_span": "t:1:54",
+      "written_spans": [
+        "w:memo:10"
+      ],
+      "match": "match"
+    },
+    {
+      "transcript_span": "t:1:97",
+      "written_spans": [
+        "w:card:2:0"
+      ],
+      "match": "match"
+    }
+  ],
+  "discrepancies": [
+    {
+      "transcript_span": "t:1:140",
+      "written_spans": [
+        "w:memo:5",
+        "w:intake:application_reason_detail:0"
+      ],
+      "paragraph_id": "1-1",
+      "difference": "수기는 620만 원으로 정정, 전사는 650만 원이었는데",
+      "conditions": {
+        "same_subject": true,
+        "same_attribute": true,
+        "same_time": true,
+        "incompatible": true
+      }
+    }
+  ],
+  "keywords": [
+    {
+      "text": "보이스피싱",
+      "spans": [
+        "w:memo:4",
+        "w:intake:application_reason_detail:0"
+      ]
+    },
+    {
+      "text": "기초연금",
+      "spans": [
+        "w:memo:13",
+        "w:intake:welfare_other:0"
+      ]
+    },
+    {
+      "text": "통장 재발급",
+      "spans": [
+        "w:card:2:0",
+        "w:memo:21"
+      ]
+    }
+  ],
+  "tasks": [
+    "은행 동행 일정 잡기(통장 재발급)",
+    "주거환경개선 신청 여부 확인"
+  ],
+  "questions": [
+    "아들 연락처",
+    "손녀 연락 빈도",
+    "약 복용 순응도"
+  ]
+}

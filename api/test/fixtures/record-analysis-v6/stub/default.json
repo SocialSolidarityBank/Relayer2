@@ -1,0 +1,34 @@
+{
+  "record": {
+    "topics": [
+      { "id": "01", "title": "월세와 내역서", "paragraph_ids": ["1-1"] }
+    ],
+    "paragraphs": [
+      { "id": "1-1", "title": "월세 체납과 내역서", "spans": ["w:memo:0", "w:memo:1", "w:memo:2"] }
+    ],
+    "annotations": [
+      { "span": "w:memo:2", "status": "follow_up" }
+    ]
+  },
+  "summary": {
+    "core": [
+      { "text": "월세 두 달 밀림", "spans": ["w:memo:0"], "goal": null }
+    ],
+    "changes": {
+      "promise_result": [],
+      "newly_revealed": [],
+      "new_possibility": []
+    },
+    "follow_up": [
+      { "text": "다음 주까지 내역서를 떼기로 함", "spans": ["w:memo:2"], "goal": null }
+    ],
+    "completed": []
+  },
+  "links": [],
+  "discrepancies": [],
+  "keywords": [
+    { "text": "내역서", "spans": ["w:memo:1", "w:memo:2"] }
+  ],
+  "tasks": ["내역서 떼기"],
+  "questions": []
+}

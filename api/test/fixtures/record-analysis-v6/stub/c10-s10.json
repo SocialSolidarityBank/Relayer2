@@ -1,0 +1,252 @@
+{
+  "record": {
+    "topics": [
+      {
+        "id": "01",
+        "title": "통장과 안전",
+        "paragraph_ids": [
+          "1-1"
+        ]
+      },
+      {
+        "id": "02",
+        "title": "시험과 취업",
+        "paragraph_ids": [
+          "1-2",
+          "1-3"
+        ]
+      },
+      {
+        "id": "03",
+        "title": "남편 대응과 종결",
+        "paragraph_ids": [
+          "1-4"
+        ]
+      }
+    ],
+    "paragraphs": [
+      {
+        "id": "1-1",
+        "title": "새 통장과 언니의 지지",
+        "spans": [
+          "w:memo:1",
+          "w:memo:2",
+          "w:memo:3",
+          "w:memo:4",
+          "w:memo:5",
+          "w:memo:6",
+          "w:memo:7",
+          "w:memo:8"
+        ]
+      },
+      {
+        "id": "1-2",
+        "title": "필기시험 준비",
+        "spans": [
+          "w:memo:9",
+          "w:memo:10",
+          "w:memo:11",
+          "w:memo:12",
+          "w:memo:13",
+          "w:memo:14"
+        ]
+      },
+      {
+        "id": "1-3",
+        "title": "취업처와 월급",
+        "spans": [
+          "w:memo:15",
+          "w:memo:16"
+        ]
+      },
+      {
+        "id": "1-4",
+        "title": "남편에게 알리기와 종결",
+        "spans": [
+          "w:memo:17",
+          "w:memo:18",
+          "w:memo:19",
+          "w:memo:20",
+          "w:memo:21",
+          "w:memo:22",
+          "w:memo:23",
+          "w:memo:24",
+          "w:memo:25"
+        ]
+      }
+    ],
+    "annotations": [
+      {
+        "span": "w:memo:4",
+        "status": "completed"
+      },
+      {
+        "span": "w:memo:18",
+        "status": "follow_up"
+      }
+    ]
+  },
+  "summary": {
+    "core": [
+      {
+        "text": "새 통장 개설 완료, 미용실 언니 가게에 보관",
+        "spans": [
+          "w:memo:4",
+          "w:memo:5"
+        ],
+        "goal": "overall"
+      },
+      {
+        "text": "모의점수 40 → 65점까지 상승",
+        "spans": [
+          "w:memo:10"
+        ],
+        "goal": "session"
+      }
+    ],
+    "changes": {
+      "promise_result": [
+        {
+          "promise": "새 통장 개설과 보관처 마련",
+          "result": "새 통장 개설 완료, 미용실 언니 가게에 보관",
+          "promise_spans": [
+            "w:memo:4"
+          ],
+          "result_spans": [
+            "w:memo:4",
+            "w:memo:5"
+          ],
+          "changes": [
+            {
+              "before": "남편과는 말 없이 지내는 상태(냉전)",
+              "after": "새 통장 개설 완료, 미용실 언니 가게에 보관",
+              "meaning": "본인 명의 통장 확보"
+            }
+          ],
+          "conclusion": "∴ 인테이크 목표였던 본인 명의 통장 확보가 이번 회차에 확인됨",
+          "goal": "overall"
+        }
+      ],
+      "newly_revealed": [
+        {
+          "mode": "confirmed",
+          "lines": [
+            "확인된 내용: 베트남 언니(한국 12년차)가 정서적 지지 역할 큼"
+          ],
+          "spans": [
+            "w:memo:6",
+            "w:memo:7"
+          ],
+          "summary_only_exception": true,
+          "goal": null
+        }
+      ],
+      "new_possibility": [
+        {
+          "lines": [
+            "언니 연결로 중앙동 네일숍, 자격증 취득 후 면접 가능"
+          ],
+          "change_spans": [
+            "w:memo:15"
+          ],
+          "plan_spans": [
+            "w:memo:17"
+          ],
+          "goal": "overall"
+        }
+      ]
+    },
+    "follow_up": [
+      {
+        "text": "돈 벌면 함부로 못 할 것이라는 기대 — 기대와 현실의 괴리 가능성, 다음에 짚어줘야 함",
+        "spans": [
+          "w:memo:18"
+        ],
+        "goal": null
+      },
+      {
+        "text": "시험 결과, 네일숍 면접 진행 여부",
+        "spans": [
+          "w:memo:25"
+        ],
+        "goal": "session"
+      }
+    ],
+    "completed": [
+      {
+        "text": "새 통장 개설 완료, 미용실 언니 가게에 보관",
+        "spans": [
+          "w:memo:4"
+        ],
+        "goal": "overall"
+      }
+    ]
+  },
+  "links": [
+    {
+      "transcript_span": "t:1:21",
+      "written_spans": [
+        "w:memo:4"
+      ],
+      "match": "match"
+    },
+    {
+      "transcript_span": "t:1:53",
+      "written_spans": [
+        "w:memo:10"
+      ],
+      "match": "match"
+    },
+    {
+      "transcript_span": "t:1:76",
+      "written_spans": [
+        "w:memo:16"
+      ],
+      "match": "uncertain"
+    }
+  ],
+  "discrepancies": [
+    {
+      "transcript_span": "t:1:44",
+      "written_spans": [
+        "w:memo:9"
+      ],
+      "paragraph_id": "1-2",
+      "difference": "수기는 필기시험 7월 18일(토), 전사는 7월 25일 토요일",
+      "conditions": {
+        "same_subject": true,
+        "same_attribute": true,
+        "same_time": true,
+        "incompatible": true
+      }
+    }
+  ],
+  "keywords": [
+    {
+      "text": "새 통장",
+      "spans": [
+        "w:memo:4"
+      ]
+    },
+    {
+      "text": "네일숍",
+      "spans": [
+        "w:memo:15"
+      ]
+    },
+    {
+      "text": "필기시험",
+      "spans": [
+        "w:memo:9"
+      ]
+    }
+  ],
+  "tasks": [
+    "시험 응시",
+    "종결 회차 준비(미완료 과제·이관 계획 정리)"
+  ],
+  "questions": [
+    "시험 결과",
+    "네일숍 면접 진행 여부"
+  ]
+}

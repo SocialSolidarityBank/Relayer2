@@ -1,0 +1,801 @@
+{
+  "default": {
+    "record": {
+      "topics": [
+        {
+          "id": "01",
+          "title": "월세와 내역서",
+          "paragraph_ids": [
+            "1-1"
+          ]
+        }
+      ],
+      "paragraphs": [
+        {
+          "id": "1-1",
+          "title": "월세 체납과 내역서",
+          "spans": [
+            "w:memo:0",
+            "w:memo:1",
+            "w:memo:2"
+          ]
+        }
+      ],
+      "annotations": [
+        {
+          "span": "w:memo:2",
+          "status": "follow_up"
+        }
+      ]
+    },
+    "summary": {
+      "core": [
+        {
+          "text": "월세 두 달 밀림",
+          "spans": [
+            "w:memo:0"
+          ],
+          "goal": null
+        }
+      ],
+      "changes": {
+        "promise_result": [],
+        "newly_revealed": [],
+        "new_possibility": []
+      },
+      "follow_up": [
+        {
+          "text": "다음 주까지 내역서를 떼기로 함",
+          "spans": [
+            "w:memo:2"
+          ],
+          "goal": null
+        }
+      ],
+      "completed": []
+    },
+    "links": [],
+    "discrepancies": [],
+    "keywords": [
+      {
+        "text": "내역서",
+        "spans": [
+          "w:memo:1",
+          "w:memo:2"
+        ]
+      }
+    ],
+    "tasks": [
+      "내역서 떼기"
+    ],
+    "questions": []
+  },
+  "by_seq": {
+    "1": {
+      "record": {
+        "topics": [
+          {
+            "id": "01",
+            "title": "보이스피싱 피해",
+            "paragraph_ids": [
+              "1-1"
+            ]
+          },
+          {
+            "id": "02",
+            "title": "가족과 생활",
+            "paragraph_ids": [
+              "1-2",
+              "1-3"
+            ]
+          },
+          {
+            "id": "03",
+            "title": "정서와 다음 계획",
+            "paragraph_ids": [
+              "1-4"
+            ]
+          }
+        ],
+        "paragraphs": [
+          {
+            "id": "1-1",
+            "title": "피해 경위",
+            "spans": [
+              "w:memo:4",
+              "w:memo:5",
+              "w:memo:6",
+              "w:memo:7",
+              "w:memo:8",
+              "w:memo:9",
+              "w:intake:application_reason_detail:0",
+              "w:intake:application_reason_detail:1"
+            ]
+          },
+          {
+            "id": "1-2",
+            "title": "가족 관계",
+            "spans": [
+              "w:memo:10",
+              "w:memo:11",
+              "w:memo:12",
+              "w:intake:strength_detail:0",
+              "w:intake:strength_detail:1"
+            ]
+          },
+          {
+            "id": "1-3",
+            "title": "수급과 건강",
+            "spans": [
+              "w:memo:13",
+              "w:memo:14",
+              "w:memo:15",
+              "w:memo:16",
+              "w:memo:17",
+              "w:intake:welfare_other:0",
+              "w:intake:contact_caution:0",
+              "w:intake:contact_caution:1",
+              "w:intake:contact_caution:2",
+              "w:intake:strength_detail:2"
+            ]
+          },
+          {
+            "id": "1-4",
+            "title": "정서와 약속",
+            "spans": [
+              "w:memo:18",
+              "w:memo:19",
+              "w:memo:20",
+              "w:memo:21",
+              "w:memo:22",
+              "w:card:1:0",
+              "w:card:2:0",
+              "w:card:3:0"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "span": "w:memo:9",
+            "status": "follow_up"
+          },
+          {
+            "span": "w:card:2:0",
+            "status": "follow_up"
+          }
+        ]
+      },
+      "summary": {
+        "core": [
+          {
+            "text": "2025년 12월 검찰 사칭 보이스피싱으로 통장 잔액 620만 원 전액 피해",
+            "spans": [
+              "w:intake:application_reason_detail:0",
+              "w:memo:4"
+            ],
+            "goal": "overall"
+          },
+          {
+            "text": "인지 저하 정황 관찰됨",
+            "spans": [
+              "w:memo:9"
+            ],
+            "goal": "overall"
+          }
+        ],
+        "changes": {
+          "promise_result": [],
+          "newly_revealed": [
+            {
+              "mode": "confirmed",
+              "lines": [
+                "확인된 내용: 아들(55)과 연락 두절 3년"
+              ],
+              "spans": [
+                "w:memo:10",
+                "w:memo:11"
+              ],
+              "summary_only_exception": true,
+              "goal": null
+            }
+          ],
+          "new_possibility": [
+            {
+              "lines": [
+                "은행 동행하여 통장 재발급"
+              ],
+              "change_spans": [
+                "w:memo:4"
+              ],
+              "plan_spans": [
+                "w:card:2:0",
+                "w:memo:21"
+              ],
+              "goal": "overall"
+            }
+          ]
+        },
+        "follow_up": [
+          {
+            "text": "은행 동행 일정 잡기(통장 재발급), 주거환경개선 신청 여부 확인",
+            "spans": [
+              "w:memo:21"
+            ],
+            "goal": "session"
+          },
+          {
+            "text": "아들 연락처, 손녀 연락 빈도, 약 복용 순응도",
+            "spans": [
+              "w:memo:22"
+            ],
+            "goal": null
+          }
+        ],
+        "completed": [
+          {
+            "text": "경찰 신고 완료, 환급은 어려울 것으로 보임",
+            "spans": [
+              "w:memo:6"
+            ],
+            "goal": null
+          }
+        ]
+      },
+      "links": [
+        {
+          "transcript_span": "t:1:29",
+          "written_spans": [
+            "w:memo:4",
+            "w:intake:application_reason_detail:0"
+          ],
+          "match": "match"
+        },
+        {
+          "transcript_span": "t:1:54",
+          "written_spans": [
+            "w:memo:10"
+          ],
+          "match": "match"
+        },
+        {
+          "transcript_span": "t:1:97",
+          "written_spans": [
+            "w:card:2:0"
+          ],
+          "match": "match"
+        }
+      ],
+      "discrepancies": [
+        {
+          "transcript_span": "t:1:140",
+          "written_spans": [
+            "w:memo:5",
+            "w:intake:application_reason_detail:0"
+          ],
+          "paragraph_id": "1-1",
+          "difference": "수기는 620만 원으로 정정, 전사는 650만 원이었는데",
+          "conditions": {
+            "same_subject": true,
+            "same_attribute": true,
+            "same_time": true,
+            "incompatible": true
+          }
+        }
+      ],
+      "keywords": [
+        {
+          "text": "보이스피싱",
+          "spans": [
+            "w:memo:4",
+            "w:intake:application_reason_detail:0"
+          ]
+        },
+        {
+          "text": "기초연금",
+          "spans": [
+            "w:memo:13",
+            "w:intake:welfare_other:0"
+          ]
+        },
+        {
+          "text": "통장 재발급",
+          "spans": [
+            "w:card:2:0",
+            "w:memo:21"
+          ]
+        }
+      ],
+      "tasks": [
+        "은행 동행 일정 잡기(통장 재발급)",
+        "주거환경개선 신청 여부 확인"
+      ],
+      "questions": [
+        "아들 연락처",
+        "손녀 연락 빈도",
+        "약 복용 순응도"
+      ]
+    },
+    "8": {
+      "record": {
+        "topics": [
+          {
+            "id": "01",
+            "title": "병원 진료와 약",
+            "paragraph_ids": [
+              "1-1",
+              "1-2"
+            ]
+          },
+          {
+            "id": "02",
+            "title": "가족과 학교",
+            "paragraph_ids": [
+              "1-3",
+              "1-4"
+            ]
+          }
+        ],
+        "paragraphs": [
+          {
+            "id": "1-1",
+            "title": "진단 결과",
+            "spans": [
+              "w:memo:1",
+              "w:memo:2",
+              "w:memo:3",
+              "w:memo:4"
+            ]
+          },
+          {
+            "id": "1-2",
+            "title": "약 시작과 부작용",
+            "spans": [
+              "w:memo:5",
+              "w:memo:6",
+              "w:memo:7",
+              "w:memo:8",
+              "w:memo:9"
+            ]
+          },
+          {
+            "id": "1-3",
+            "title": "남편 반응과 모의 결정",
+            "spans": [
+              "w:memo:10",
+              "w:memo:11",
+              "w:memo:12",
+              "w:memo:13"
+            ]
+          },
+          {
+            "id": "1-4",
+            "title": "학교 공유와 다음 진료",
+            "spans": [
+              "w:memo:14",
+              "w:memo:15",
+              "w:memo:16",
+              "w:memo:17"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "span": "w:memo:2",
+            "status": "completed"
+          },
+          {
+            "span": "w:memo:12",
+            "status": "change",
+            "before": [
+              "w:memo:11"
+            ],
+            "after": [
+              "w:memo:12"
+            ]
+          },
+          {
+            "span": "w:memo:14",
+            "status": "follow_up"
+          }
+        ]
+      },
+      "summary": {
+        "core": [
+          {
+            "text": "ADHD 복합형 진단(주의력결핍+충동성)",
+            "spans": [
+              "w:memo:3"
+            ],
+            "goal": "overall"
+          },
+          {
+            "text": "약 시작: 메틸페니데이트 27mg 아침 1알(서방형)",
+            "spans": [
+              "w:memo:5",
+              "w:memo:6"
+            ],
+            "goal": "session"
+          }
+        ],
+        "changes": {
+          "promise_result": [
+            {
+              "promise": "5/19 병원 진료",
+              "result": "5/19 세연아동병원 진료 완료",
+              "promise_spans": [
+                "w:memo:2"
+              ],
+              "result_spans": [
+                "w:memo:2",
+                "w:memo:3"
+              ],
+              "changes": [],
+              "goal": "overall"
+            }
+          ],
+          "newly_revealed": [
+            {
+              "mode": "confirmed",
+              "lines": [
+                "확인된 내용: 진단서 보고 말없어졌으나 약은 여전히 반대 → 냉전"
+              ],
+              "spans": [
+                "w:memo:11"
+              ],
+              "summary_only_exception": true,
+              "goal": null
+            }
+          ],
+          "new_possibility": [
+            {
+              "lines": [
+                "모가 이번엔 밀고 감"
+              ],
+              "change_spans": [
+                "w:memo:12"
+              ],
+              "plan_spans": [
+                "w:memo:14"
+              ],
+              "goal": null
+            }
+          ]
+        },
+        "follow_up": [
+          {
+            "text": "학교 공유: 내가 오 선생님께 전화하기로(모 요청, 울까 봐)",
+            "spans": [
+              "w:memo:14"
+            ],
+            "goal": "session"
+          },
+          {
+            "text": "다음 진료 6/16 용량 조정",
+            "spans": [
+              "w:memo:15"
+            ],
+            "goal": null
+          }
+        ],
+        "completed": [
+          {
+            "text": "5/19 세연아동병원 진료 완료",
+            "spans": [
+              "w:memo:2"
+            ],
+            "goal": "overall"
+          }
+        ]
+      },
+      "links": [
+        {
+          "transcript_span": "t:1:5",
+          "written_spans": [
+            "w:memo:2"
+          ],
+          "match": "match"
+        },
+        {
+          "transcript_span": "t:1:33",
+          "written_spans": [
+            "w:memo:6"
+          ],
+          "match": "match"
+        }
+      ],
+      "discrepancies": [
+        {
+          "transcript_span": "t:1:22",
+          "written_spans": [
+            "w:memo:5"
+          ],
+          "paragraph_id": "1-2",
+          "difference": "수기는 메틸페니데이트 27mg, 전사는 18mg짜리",
+          "conditions": {
+            "same_subject": true,
+            "same_attribute": true,
+            "same_time": true,
+            "incompatible": true
+          }
+        }
+      ],
+      "keywords": [
+        {
+          "text": "메틸페니데이트",
+          "spans": [
+            "w:memo:5"
+          ]
+        },
+        {
+          "text": "ADHD",
+          "spans": [
+            "w:memo:3"
+          ]
+        },
+        {
+          "text": "세연아동병원",
+          "spans": [
+            "w:memo:2"
+          ]
+        }
+      ],
+      "tasks": [
+        "학교 공유: 오 선생님께 전화",
+        "6/10 아동 동석, 약 반응 아이 말로 듣기"
+      ],
+      "questions": []
+    },
+    "10": {
+      "record": {
+        "topics": [
+          {
+            "id": "01",
+            "title": "통장과 안전",
+            "paragraph_ids": [
+              "1-1"
+            ]
+          },
+          {
+            "id": "02",
+            "title": "시험과 취업",
+            "paragraph_ids": [
+              "1-2",
+              "1-3"
+            ]
+          },
+          {
+            "id": "03",
+            "title": "남편 대응과 종결",
+            "paragraph_ids": [
+              "1-4"
+            ]
+          }
+        ],
+        "paragraphs": [
+          {
+            "id": "1-1",
+            "title": "새 통장과 언니의 지지",
+            "spans": [
+              "w:memo:1",
+              "w:memo:2",
+              "w:memo:3",
+              "w:memo:4",
+              "w:memo:5",
+              "w:memo:6",
+              "w:memo:7",
+              "w:memo:8"
+            ]
+          },
+          {
+            "id": "1-2",
+            "title": "필기시험 준비",
+            "spans": [
+              "w:memo:9",
+              "w:memo:10",
+              "w:memo:11",
+              "w:memo:12",
+              "w:memo:13",
+              "w:memo:14"
+            ]
+          },
+          {
+            "id": "1-3",
+            "title": "취업처와 월급",
+            "spans": [
+              "w:memo:15",
+              "w:memo:16"
+            ]
+          },
+          {
+            "id": "1-4",
+            "title": "남편에게 알리기와 종결",
+            "spans": [
+              "w:memo:17",
+              "w:memo:18",
+              "w:memo:19",
+              "w:memo:20",
+              "w:memo:21",
+              "w:memo:22",
+              "w:memo:23",
+              "w:memo:24",
+              "w:memo:25"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "span": "w:memo:4",
+            "status": "completed"
+          },
+          {
+            "span": "w:memo:18",
+            "status": "follow_up"
+          }
+        ]
+      },
+      "summary": {
+        "core": [
+          {
+            "text": "새 통장 개설 완료, 미용실 언니 가게에 보관",
+            "spans": [
+              "w:memo:4",
+              "w:memo:5"
+            ],
+            "goal": "overall"
+          },
+          {
+            "text": "모의점수 40 → 65점까지 상승",
+            "spans": [
+              "w:memo:10"
+            ],
+            "goal": "session"
+          }
+        ],
+        "changes": {
+          "promise_result": [
+            {
+              "promise": "새 통장 개설과 보관처 마련",
+              "result": "새 통장 개설 완료, 미용실 언니 가게에 보관",
+              "promise_spans": [
+                "w:memo:4"
+              ],
+              "result_spans": [
+                "w:memo:4",
+                "w:memo:5"
+              ],
+              "changes": [
+                {
+                  "before": "남편과는 말 없이 지내는 상태(냉전)",
+                  "after": "새 통장 개설 완료, 미용실 언니 가게에 보관",
+                  "meaning": "본인 명의 통장 확보"
+                }
+              ],
+              "conclusion": "∴ 인테이크 목표였던 본인 명의 통장 확보가 이번 회차에 확인됨",
+              "goal": "overall"
+            }
+          ],
+          "newly_revealed": [
+            {
+              "mode": "confirmed",
+              "lines": [
+                "확인된 내용: 베트남 언니(한국 12년차)가 정서적 지지 역할 큼"
+              ],
+              "spans": [
+                "w:memo:6",
+                "w:memo:7"
+              ],
+              "summary_only_exception": true,
+              "goal": null
+            }
+          ],
+          "new_possibility": [
+            {
+              "lines": [
+                "언니 연결로 중앙동 네일숍, 자격증 취득 후 면접 가능"
+              ],
+              "change_spans": [
+                "w:memo:15"
+              ],
+              "plan_spans": [
+                "w:memo:17"
+              ],
+              "goal": "overall"
+            }
+          ]
+        },
+        "follow_up": [
+          {
+            "text": "돈 벌면 함부로 못 할 것이라는 기대 — 기대와 현실의 괴리 가능성, 다음에 짚어줘야 함",
+            "spans": [
+              "w:memo:18"
+            ],
+            "goal": null
+          },
+          {
+            "text": "시험 결과, 네일숍 면접 진행 여부",
+            "spans": [
+              "w:memo:25"
+            ],
+            "goal": "session"
+          }
+        ],
+        "completed": [
+          {
+            "text": "새 통장 개설 완료, 미용실 언니 가게에 보관",
+            "spans": [
+              "w:memo:4"
+            ],
+            "goal": "overall"
+          }
+        ]
+      },
+      "links": [
+        {
+          "transcript_span": "t:1:21",
+          "written_spans": [
+            "w:memo:4"
+          ],
+          "match": "match"
+        },
+        {
+          "transcript_span": "t:1:53",
+          "written_spans": [
+            "w:memo:10"
+          ],
+          "match": "match"
+        },
+        {
+          "transcript_span": "t:1:76",
+          "written_spans": [
+            "w:memo:16"
+          ],
+          "match": "uncertain"
+        }
+      ],
+      "discrepancies": [
+        {
+          "transcript_span": "t:1:44",
+          "written_spans": [
+            "w:memo:9"
+          ],
+          "paragraph_id": "1-2",
+          "difference": "수기는 필기시험 7월 18일(토), 전사는 7월 25일 토요일",
+          "conditions": {
+            "same_subject": true,
+            "same_attribute": true,
+            "same_time": true,
+            "incompatible": true
+          }
+        }
+      ],
+      "keywords": [
+        {
+          "text": "새 통장",
+          "spans": [
+            "w:memo:4"
+          ]
+        },
+        {
+          "text": "네일숍",
+          "spans": [
+            "w:memo:15"
+          ]
+        },
+        {
+          "text": "필기시험",
+          "spans": [
+            "w:memo:9"
+          ]
+        }
+      ],
+      "tasks": [
+        "시험 응시",
+        "종결 회차 준비(미완료 과제·이관 계획 정리)"
+      ],
+      "questions": [
+        "시험 결과",
+        "네일숍 면접 진행 여부"
+      ]
+    }
+  }
+}
