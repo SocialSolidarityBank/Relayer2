@@ -40,7 +40,7 @@ try {
   const env = { ...process.env, DATABASE_URL: url.toString(), PGSCHEMA: '',
     SESSION_SECRET: 'disposable-regression-only', PII_ENC_KEY: Buffer.alloc(32).toString('base64'),
     RELAYER_INTEGRATION: '1', VOICE_ENABLED: '1', VOICE_ROOT: join(storage, 'voice'),
-    DOCUMENT_ROOT: join(storage, 'documents'), AZURE_SPEECH_KEY: '', AZURE_SPEECH_REGION: '', AZURE_SPEECH_ENDPOINT: '' };
+    DOC_ROOT: join(storage, 'documents'), AZURE_SPEECH_KEY: '', AZURE_SPEECH_REGION: '', AZURE_SPEECH_ENDPOINT: '' };
   const run = (command, args) => {
     const result = spawnSync(command, args, { cwd: root, env, stdio: 'inherit' });
     assert.equal(result.status, 0, `${command} failed`);
