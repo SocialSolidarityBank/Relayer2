@@ -65,7 +65,7 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
   // STT 키가 없는 서버라 자동 전사는 건너뛴다.
   await expect(page.getByText('전사 건너뜀')).toBeVisible();
 
-  // ── 회차별 요약 — 수기 미작성·녹음 1·전사 상태 ──────────────
+  // ── 회차별 요약 — 수기 미작성·녹음 1건·전사 상태 ────────────
   // 당사자 정보는 당사자 카드(HERO) + 탭 4개다(2026-09-17 Q). 기본 탭은 `당사자 정보`.
   await page.goto(`/#/cases/${caseId}/info`);
   await expect(page.getByRole('heading', { name: NAME })).toBeVisible();
@@ -75,7 +75,8 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
   // 머리 가운데는 행동 버튼 넷이 차지한다(2026-09-18 Q F4) — 제목 글자를 눌러 펼친다.
   await fold.locator('.seq-head-no').click();
   await expect(fold).toContainText('수기 미작성');
-  await expect(fold).toContainText('녹음 1');
+  // 수를 단위 없이 두지 않는다(2026-09-18 Q 결정 D14 — 녹음·전사는 `건`).
+  await expect(fold).toContainText('녹음 1건');
   await expect(fold).toContainText('전사 건너뜀');
 
   // ── 원본 팝업 — 큰 모달 두 열, 왼쪽 수기·오른쪽 녹음 전사(2026-09-18 Q E2) ──

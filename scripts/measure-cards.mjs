@@ -35,6 +35,8 @@ const ROUTES = [
   '#/schedule',
   '#/participants',
   '#/participants/new',
+  // 인테이크는 가장 긴 화면이고 2026-09-18 D13 으로 마지막 구획(`참고 메모`)이 붙었다.
+  `#/cases/${caseId}/intake`,
   `#/cases/${caseId}/info`,
   `#/cases/${caseId}/info/goals`,
   `#/cases/${caseId}/record`,

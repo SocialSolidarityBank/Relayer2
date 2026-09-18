@@ -151,6 +151,13 @@ test('등록부터 회차 기록·이어받기까지 한 바퀴', async ({ page 
   await expect(page).toHaveURL(/#\/schedule$/);
   await expect(page.getByRole('heading', { name: '상담 일정', level: 1, exact: true })).toBeVisible();
 
+  // ── 당사자 정보 탭: 회차 정보 접힌 머리의 단위(2026-09-18 Q 결정 D14) ──
+  // 회차·기록은 `회`, 문서·녹음·전사는 `건`. 수만 있고 단위가 없으면 무엇을 센 것인지 읽히지 않는다.
+  await openInfo(page, '당사자 정보', caseId);
+  const seqInfo = page.locator('details', { has: page.getByText('회차 정보') }).first();
+  await expect(seqInfo.locator('.fold-title-desc')).toHaveText(/수기 기록 \d+회/);
+  await expect(seqInfo.locator('.fold-title-desc')).toHaveText(/전사 승인 \d+건/);
+
   // ── 회차별 요약 탭: 한 회차가 한 접힘 카드다(2026-09-17 Q — 상단 위험 신호 배너 폐지) ──
   await openInfo(page, '회차별 요약', caseId);
   // 배너는 더 이상 없다. 위험 신호는 그 신호가 나온 회차 카드가 말한다.

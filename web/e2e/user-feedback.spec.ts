@@ -29,6 +29,8 @@ test('피드백 인테이크의 조건부 입력과 실제 상담정보가 생�
     .toHaveText([
       '상담 일시와 상담 방식', /공적급여.*수급자 여부/, '상담 운영정보', '상담 신청 사유 및 필요 자원 연계',
       '이전에 받은 지원', '강점과 도와줄 사람', '전체 상담 목표', '수행할 과제', '다음에 물어볼 것',
+      // 마지막 구획은 `참고 메모` 다(2026-09-18 Q 결정 D13) — 자유 글 한 칸, 선택.
+      '참고 메모',
     ]);
   const actual = page.getByRole('group', { name: '상담 방식', exact: true });
   await actual.getByRole('radio', { name: '대면', exact: true }).check();
@@ -66,6 +68,8 @@ test('피드백 인테이크의 조건부 입력과 실제 상담정보가 생�
     await field.fill(longText);
     await expect.poll(() => field.evaluate(el => el.tagName === 'TEXTAREA' && el.clientHeight >= el.scrollHeight - 2)).toBe(true);
   }
+  // 참고 메모는 앞 구획 어디에도 안 들어가는 말을 받는 마지막 칸이다(D13).
+  await page.getByLabel('참고 메모', { exact: true }).fill('가족에게 상담 사실 비공개 요청함');
   await page.getByRole('button', { name: '저장하고 상담 일정 잡기' }).click();
   await expect(page).toHaveURL(/\/schedule$/);
   const saved = await (await page.request.get(`${api}/cases/${caseId}/intake`)).json();
@@ -75,6 +79,7 @@ test('피드백 인테이크의 조건부 입력과 실제 상담정보가 생�
   expect(saved.detail.welfare_benefit_type).toEqual(expect.arrayContaining(['생계급여', '주거급여']));
   expect(saved.detail.application_reason).toEqual(expect.arrayContaining(['부채', '주거']));
   expect(saved.detail.resource_link).toEqual(expect.arrayContaining(['법률·행정', '가족']));
+  expect(saved.detail.reference_memo).toBe('가족에게 상담 사실 비공개 요청함');
 
   // Retired answers are not rendered, but editing the new form must not erase them.
   expect((await page.request.put(`${api}/cases/${caseId}/intake`, { data: {
@@ -94,6 +99,16 @@ test('피드백 인테이크의 조건부 입력과 실제 상담정보가 생�
   expect(edited.place).toBeNull();
   expect(new Date(edited.held_at).toISOString()).toBe('2026-09-16T01:30:00.000Z');
   expect(edited.detail.need_economy_detail).toBe('보존할 과거 응답');
+
+  // 원본 팝업의 **수기 열**이 인테이크 화면을 잠근 채 그리므로 참고 메모도 그 자리에 선다(D13).
+  await page.getByRole('tab', { name: '회차별 원본 보기' }).click();
+  await page
+    .locator('.wire-repeat-card', { hasText: '1회차' })
+    .getByRole('button', { name: '원본 보기' })
+    .click();
+  const original = page.getByRole('dialog', { name: '1회차 원본' });
+  await expect(original.getByRole('region', { name: '수기 기록' }).getByLabel('참고 메모', { exact: true }))
+    .toHaveValue('가족에게 상담 사실 비공개 요청함');
 });
 
 test('상담 기록은 다섯 구획이고 인테이크의 전체 목표를 덮어쓰지 않는다', async ({ page }) => {
