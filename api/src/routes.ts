@@ -24,7 +24,16 @@ import {
   SttUnavailable,
   withdrawCaseRecordings,
 } from './stt.ts';
-import { AiUnavailable, approveDraft, draftSession, latestDraft, openAiKey } from './ai.ts';
+import { AiUnavailable, openAiKey } from './ai.ts';
+import {
+  AnalysisConflict,
+  AnalysisInvalid,
+  analysisView,
+  approveAnalysis,
+  backlinks,
+  draftAnalysis,
+  latestAnalysis,
+} from './record-analysis.ts';
 import { audit, auditCsv, auditSummary, listAudit, AUDIT_KIND_LIST } from './audit.ts';
 import { accessState, issueAccess, openAccess, revokeAccess } from './participant-access.ts';
 import {
@@ -97,7 +106,8 @@ app.onError((err, c) => {
     err instanceof ProgramRetired ||
     err instanceof service.SessionAlreadyStarted ||
     err instanceof service.GoalLocked ||
-    err instanceof NothingToRevise
+    err instanceof NothingToRevise ||
+    err instanceof AnalysisConflict
   ) {
     return c.json({ error: err.message }, 409);
   }
@@ -105,8 +115,8 @@ app.onError((err, c) => {
   if (err instanceof AiUnavailable || err instanceof SttUnavailable) {
     return c.json({ error: err.message }, 503);
   }
-  // 받지 않는 파일은 **보낸 쪽 잘못**이다. 서버 고장이 아니다.
-  if (err instanceof DocumentRejected || err instanceof RecordingRejected) {
+  // 받지 않는 파일·검증을 못 넘은 승인 편집은 **보낸 쪽 잘못**이다. 서버 고장이 아니다.
+  if (err instanceof DocumentRejected || err instanceof RecordingRejected || err instanceof AnalysisInvalid) {
     return c.json({ error: err.message }, 400);
   }
   // 입력이 스키마에 안 맞으면 **보낸 쪽 잘못**이다. 500 으로 답하면 서버가 고장난 줄 안다.
@@ -570,31 +580,62 @@ app.delete('/cases/:id/access', async (c) => {
   await revokeAccess(caseId, c.get('actor').id);
   return c.json({ ok: true });
 });
-
 app.get('/sessions/:id/draft', async (c) => {
   const sessionId = await sessionAccess(c.req.param('id'), c.get('actor').id);
-  const found = await latestDraft(sessionId);
+  const found = await latestAnalysis(sessionId);
   return c.json(found ?? { status: 'none' });
 });
 
 app.post('/sessions/:id/draft', async (c) => {
   const sessionId = await sessionAccess(c.req.param('id'), c.get('actor').id);
-  return c.json(await draftSession(sessionId, c.get('actor').id));
+  return c.json(await draftAnalysis(sessionId, c.get('actor').id));
+});
+
+// 승인은 화면이 본 초안(draft_id)과 원본 묶음(source_versions)이 지금과 같을 때만 된다(T28).
+const approveInput = z.object({
+  draft_id: z.number().int(),
+  source_versions: z.object({
+    memo_hash: z.string().nullable(),
+    cards: z.array(z.object({ id: z.number().int(), hash: z.string() })),
+    intake_hash: z.string().nullable(),
+    transcript_id: z.number().int().nullable(),
+  }),
+  edits: z
+    .object({
+      summary: z.unknown().optional(),
+      tasks: z.array(z.string()).optional(),
+      questions: z.array(z.string()).optional(),
+    })
+    .optional(),
 });
 
 app.post('/sessions/:id/draft/approve', async (c) => {
   const sessionId = await sessionAccess(c.req.param('id'), c.get('actor').id);
-  const body = z
-    .object({
-      summary: z.string().optional(),
-      // `changes` 가 빠져 있었다(2026-09-16 검수). zod 가 조용히 버려서, 사람이 고친
-      // `달라진 것` 이 사라지고 AI 가 쓴 옛 문장이 승인됐다 — 고친 줄 알고 넘어간 기록이다.
-      changes: z.array(z.string()).optional(),
-      tasks: z.array(z.string()).optional(),
-      questions: z.array(z.string()).optional(),
-    })
-    .parse(await c.req.json().catch(() => ({})));
-  return c.json(await approveDraft(sessionId, c.get('actor').id, body));
+  const body = approveInput.parse(await c.req.json());
+  return c.json(await approveAnalysis(sessionId, c.get('actor').id, body));
+});
+
+/** 승인 분석 + 현재 원문 문서·span·전사·stale. 원문 팝업·검토 화면의 재료다. */
+app.get('/sessions/:id/analysis', async (c) => {
+  const sessionId = await sessionAccess(c.req.param('id'), c.get('actor').id);
+  return c.json(await analysisView(sessionId));
+});
+
+/** 키워드 백링크(Q 5·11). 같은 사례의 승인 분석에서 그 키워드의 문장을 회차 순으로 모은다. */
+app.get('/cases/:id/backlinks', async (c) => {
+  const caseId = await caseAccess(c.req.param('id'), c.get('actor').id);
+  const keyword = c.req.query('keyword') ?? '';
+  const [supportCase] = await sql<Array<{ participant_id: number }>>`
+    select participant_id from support_cases where id = ${caseId}`;
+  // 원문 문장이 실려 나가므로 당사자 정보 조회와 같은 감사를 남긴다.
+  await audit({
+    actorId: c.get('actor').id,
+    action: 'case.detail',
+    participantId: supportCase?.participant_id ?? null,
+    caseId,
+    fields: ['backlinks'],
+  });
+  return c.json(await backlinks(caseId, keyword));
 });
 
 app.get('/speech/status', async (c) => c.json(await speechStatus()));

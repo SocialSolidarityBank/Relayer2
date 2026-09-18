@@ -29,6 +29,8 @@ import { openCards, resolveOutcomes, type OutcomeSubmission } from './domain/car
 import { carryOverOnRecord } from './domain/goals.ts';
 import { buildSessionLine } from './domain/session-line.ts';
 import type { Assignee, Card, CardOutcome, FactChange, Session, SupportCase } from './domain/types.ts';
+import type { SessionAiSummary } from './domain/record-analysis.ts';
+import { sessionAiSummaries, v6StaleFlags } from './record-analysis.ts';
 import { assertCaseOpen, assertProgramActive, NotFound, ProgramRetired } from './access.ts';
 
 const ANIMALS = [
@@ -663,7 +665,7 @@ export async function replaceAiCards(
 export type ApprovedSummary = { summary: string; changes: string[]; fact_changes: FactChange[] };
 
 /** 회차별 승인된 요약. 마지막 행이 새 초안이면 이전 승인본으로 조용히 되돌아가지 않는다(불일치 화면과 같은 규칙). */
-async function approvedSummaries(sessionIds: number[]): Promise<Record<number, ApprovedSummary>> {
+export async function approvedSummaries(sessionIds: number[]): Promise<Record<number, ApprovedSummary>> {
   if (sessionIds.length === 0) return {};
   const rows = await sql<Array<{ session_id: number; status: 'draft' | 'approved' } & ApprovedSummary>>`
     select distinct on (session_id) session_id, status, summary, changes, fact_changes
@@ -807,8 +809,8 @@ export type CaseDetail = {
     /** 원본 수정 뒤 재확인이 필요한 파생물(D3). 화면이 `원본 수정됨 · 재정리 필요` 배지를 붙인다. */
     stale: Stale;
     today_goal_text: string | null;
-    /** 승인된 AI 정리. 없거나 마지막 행이 초안이면 null. */
-    ai_summary: ApprovedSummary | null;
+    /** 승인된 AI 정리. v6 분석이 있으면 그것, 없고 구버전 승인만 있으면 legacy. 둘 다 없으면 null. */
+    ai_summary: SessionAiSummary | null;
   }>;
   goal_revisions: Array<{ text: string | null; created_at: string }>;
   /**
@@ -860,7 +862,8 @@ export async function getCaseDetail(caseId: number): Promise<CaseDetail | null> 
   const loaded = await loadCase(caseId);
   if (!loaded) return null;
   const { supportCase, pseudonym, sessions, cards, outcomes } = loaded;
-  const approved = await approvedSummaries(sessions.map((s) => s.id));
+  const aiSummaries = await sessionAiSummaries(sessions.map((s) => s.id));
+  const v6Stale = await v6StaleFlags(sessions.map((s) => s.id));
   const voice = await voiceStates(sessions.map((s) => s.id));
   const stale = await staleFlags(sessions.map((s) => s.id));
 
@@ -900,8 +903,12 @@ export async function getCaseDetail(caseId: number): Promise<CaseDetail | null> 
         written: Boolean(memo?.trim()),
         voice: voice[s.id] ?? { recordings: 0, transcript: 'none' as const },
         today_goal_text: decryptText(s.today_goal_text),
-        ai_summary: approved[s.id] ?? null,
-        stale: stale[s.id] ?? { ai_summary: false, mismatch: false },
+        ai_summary: aiSummaries[s.id] ?? null,
+        // v6 승인 분석이 있으면 stale 은 원본 버전 묶음 비교로 판정한다(T16·T28). 없으면 구버전 규칙.
+        stale: {
+          ai_summary: v6Stale[s.id] ?? stale[s.id]?.ai_summary ?? false,
+          mismatch: stale[s.id]?.mismatch ?? false,
+        },
       };
     }),
     goal_revisions: revisions,

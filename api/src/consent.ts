@@ -60,6 +60,8 @@ export const copyVersion = (): string => live.version;
 export const AI_PROVIDERS = {
   openai: { id: 'openai', legalRecipient: 'OpenAI, L.L.C.', country: 'US' },
   gemini: { id: 'gemini', legalRecipient: 'Google LLC', country: 'US' },
+  // 테스트 전용 단락(AI_PROVIDER=stub). 외부로 나가지 않으므로 수신자·국가는 자리표다.
+  stub: { id: 'stub', legalRecipient: 'stub', country: 'local' },
 } as const;
 export type AiProviderId = keyof typeof AI_PROVIDERS;
 

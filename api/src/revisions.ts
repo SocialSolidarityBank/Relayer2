@@ -7,12 +7,14 @@
  * 세 종류의 "현재 본문"은 서로 다른 표에 있다.
  * - memo       → `sessions.memo` 를 덮는다(암호문).
  * - transcript → `transcripts` 에 승인 행을 쌓는다(append-only 라 덮지 않는다). 타임스탬프는 붙이지 않는다.
- * - summary    → `ai_drafts` 에 승인 행을 쌓는다. 과제·질문 카드는 손대지 않는다(요약문만 고친다).
+ * - summary    → v6 승인 분석이 있으면 `record_analyses` 에 summary_override 를 담은 새 승인 행을 쌓고,
+ *                없으면 `ai_drafts` 에 승인 행을 쌓는다. 과제·질문 카드는 손대지 않는다(요약문만 고친다).
  */
 import { audit } from './audit.ts';
 import { NotFound, caseIdOfSession } from './access.ts';
 import { sql } from './db.ts';
 import { decryptText, encryptText } from './pii.ts';
+import type { AnalysisBody } from './domain/record-analysis.ts';
 
 export const REVISION_KINDS = ['memo', 'transcript', 'summary'] as const;
 export type RevisionKind = (typeof REVISION_KINDS)[number];
@@ -52,12 +54,31 @@ export async function reviseSession(
         returning id`;
       if (!inserted) throw new NothingToRevise('전사문 없음');
     } else {
-      const [inserted] = await tx<Array<{ id: number }>>`
-        insert into ai_drafts (session_id, status, summary, changes, tasks, questions, fact_changes, mask_hits, model, created_by, approved_by)
-        select session_id, 'approved', ${text}, changes, tasks, questions, fact_changes, mask_hits, model, created_by, ${actorId}
-        from ai_drafts where session_id = ${sessionId} and status = 'approved' order by id desc limit 1
-        returning id`;
-      if (!inserted) throw new NothingToRevise('승인된 AI 정리 없음');
+      // v6 승인 분석이 있으면 요약 편집은 summary_override 로 새 승인 행에 담는다(Q 17) —
+      // 01 구조·상태·전사 연결·키워드는 그대로 복사한다. ai_drafts 는 건드리지 않는다.
+      const [analysis] = await tx<Array<{ id: number; status: string; body: string | null }>>`
+        select id, status, body from record_analyses
+        where session_id = ${sessionId} order by id desc limit 1`;
+      if (analysis?.status === 'approved' && analysis.body) {
+        const body = JSON.parse(decryptText(analysis.body) ?? 'null') as AnalysisBody;
+        const overridden: AnalysisBody = {
+          ...body,
+          summary_override: { text, actor_id: actorId, at: new Date().toISOString() },
+        };
+        await tx`
+          insert into record_analyses
+            (session_id, status, schema_version, rule_version, source_versions, model, mask_hits, body, created_by, approved_by)
+          select session_id, 'approved', schema_version, rule_version, source_versions, model, mask_hits,
+                 ${encryptText(JSON.stringify(overridden))}, created_by, ${actorId}
+          from record_analyses where id = ${analysis.id}`;
+      } else {
+        const [inserted] = await tx<Array<{ id: number }>>`
+          insert into ai_drafts (session_id, status, summary, changes, tasks, questions, fact_changes, mask_hits, model, created_by, approved_by)
+          select session_id, 'approved', ${text}, changes, tasks, questions, fact_changes, mask_hits, model, created_by, ${actorId}
+          from ai_drafts where session_id = ${sessionId} and status = 'approved' order by id desc limit 1
+          returning id`;
+        if (!inserted) throw new NothingToRevise('승인된 AI 정리 없음');
+      }
     }
 
     const [row] = await tx<Array<{ id: number; created_at: string }>>`

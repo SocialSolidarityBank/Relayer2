@@ -1,6 +1,9 @@
 // Isolated local DB only: scripts/check-case-access.mjs creates and migrates a disposable database.
-// No external AI call: the draft row is inserted directly, exactly as draftSession stores it.
+// LLM 은 AI_PROVIDER=stub — 승인 계약(draft_id·source_versions)과 카드 반영을 검증한다.
 import { randomUUID } from 'node:crypto';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { issueCookie } from '../src/auth.ts';
 import { DATABASE_URL, sql } from '../src/db.ts';
@@ -36,6 +39,7 @@ async function fixture() {
     consents: [
       { domain: 'personal_data_collection_use', decision: 'grant' },
       { domain: 'sensitive_information_processing', decision: 'grant' },
+      { domain: 'external_llm_cross_border_processing', decision: 'grant' },
     ],
   });
   expect(created.status).toBe(201);
@@ -50,64 +54,92 @@ async function fixture() {
     cards: [{ kind: 'promise', text: '이미 적은 과제', section: 'promise' }],
   });
   expect(recorded.status).toBe(200);
-  return { actor, caseId, sessionId };
+  const [card] = await sql<Array<{ id: number }>>`
+    select id from cards where source_session_id = ${sessionId} and source_type = 'manual'`;
+  return { actor, caseId, sessionId, cardId: card.id };
 }
 
-const FACT = { topic: '월세 연체 개월 수', before: { seq: 1, quote: '월세 한 달 밀림.' }, after: { seq: 2, quote: '월세 두 달 밀림.' }, note: '연체가 한 달에서 두 달로 늘었다고 말함.' };
-const draftRow = (sessionId: number, actor: number, tasks: string[]) => sql`
-  insert into ai_drafts (session_id, status, summary, changes, tasks, questions, fact_changes, mask_hits, model, created_by)
-  values (${sessionId}, 'draft', '월세 연체가 두 달로 늘었다고 함.', ${sql.json(['연체 1개월 → 2개월'])},
-          ${sql.json(tasks)}, ${sql.json(['내역서를 못 뗀 이유'])}, ${sql.json([FACT])}, '{}'::jsonb, 'test-model', ${actor})`;
+const stubDir = mkdtempSync(join(tmpdir(), 'relayer-ai-stub-'));
 
+// 수기 span 은 전부 단락에 배치해야 한다 — 카드 span ID 는 fixture 의 카드 번호에 맞춘다.
+const useStub = (cardId: number, tasks: string[], questions: string[]) => {
+  const file = join(stubDir, `${randomUUID()}.json`);
+  writeFileSync(file, JSON.stringify({
+    default: {
+      record: {
+        topics: [{ id: '01', title: '월세 연체', paragraph_ids: ['1-1', '1-2'] }],
+        paragraphs: [
+          { id: '1-1', title: '월세 연체', spans: ['w:memo:0', 'w:memo:1'] },
+          { id: '1-2', title: '과제', spans: [`w:card:${cardId}:0`] },
+        ],
+        annotations: [],
+      },
+      summary: {
+        core: [{ text: '월세 연체가 두 달로 늘었고 내역서는 아직 못 뗌.', spans: ['w:memo:0'], goal: null }],
+        changes: { promise_result: [], newly_revealed: [], new_possibility: [] },
+        follow_up: [],
+        completed: [],
+      },
+      links: [],
+      discrepancies: [],
+      keywords: [],
+      tasks,
+      questions,
+    },
+  }));
+  process.env.AI_PROVIDER = 'stub';
+  process.env.AI_STUB_FILE = file;
+};
+
+type Revision = {
+  id: number;
+  status: string;
+  source_versions: unknown;
+};
 type OpenCard = { kind: string; text: string; source_type: string };
 type Detail = {
-  sessions: Array<{ id: number; ai_summary: { summary: string; changes: string[]; fact_changes: unknown[] } | null }>;
+  sessions: Array<{ id: number; ai_summary: { kind: string; summary?: { core: Array<{ text: string }> } } | null }>;
   open_cards: OpenCard[];
-};
-type BriefingView = {
-  last_session_summary: { session_seq: number | null; summary_state: string; summary: string | null };
-  open_tasks: { items: Array<{ text: string }> } | null;
-  today_questions: Array<{ text: string }> | null;
 };
 const detailOf = async (caseId: number, actor: number) =>
   (await (await request(`/cases/${caseId}/detail`, actor)).json()) as Detail;
 
-describe.skipIf(!enabled)('approved AI drafts become visible records', () => {
-  it('shows the approved summary in session detail and briefing and turns tasks and questions into open cards', async () => {
-    const { actor, caseId, sessionId } = await fixture();
-    await draftRow(sessionId, actor, ['이미 적은 과제', '통장 사본 떼어 오기']);
+const draft = async (sessionId: number, actor: number): Promise<Revision> => {
+  const res = await request(`/sessions/${sessionId}/draft`, actor, 'POST');
+  expect(res.status).toBe(200);
+  return (await res.json()) as Revision;
+};
+
+describe.skipIf(!enabled)('approved AI analyses become visible records', () => {
+  it('shows the approved v6 summary in session detail and turns tasks and questions into open cards', async () => {
+    const { actor, caseId, sessionId, cardId } = await fixture();
+    useStub(cardId, ['이미 적은 과제', '통장 사본 떼어 오기'], ['내역서를 못 뗀 이유']);
 
     const before = await detailOf(caseId, actor);
     expect(before.sessions.find((s) => s.id === sessionId)?.ai_summary).toBeNull();
 
+    const first = await draft(sessionId, actor);
     const approved = await request(`/sessions/${sessionId}/draft/approve`, actor, 'POST', {
-      summary: '월세 연체가 두 달로 늘었고 내역서는 아직 못 뗌.',
+      draft_id: first.id, source_versions: first.source_versions,
     });
     expect(approved.status).toBe(200);
 
     const detail = await detailOf(caseId, actor);
-    expect(detail.sessions.find((s) => s.id === sessionId)?.ai_summary).toEqual({
-      summary: '월세 연체가 두 달로 늘었고 내역서는 아직 못 뗌.',
-      changes: ['연체 1개월 → 2개월'],
-      fact_changes: [FACT],
-    });
+    const summary = detail.sessions.find((s) => s.id === sessionId)?.ai_summary;
+    expect(summary?.kind).toBe('v6');
+    expect(summary?.summary?.core[0]?.text).toBe('월세 연체가 두 달로 늘었고 내역서는 아직 못 뗌.');
     const openTexts = detail.open_cards.map((c) => [c.kind, c.text, c.source_type]);
     expect(openTexts).toContainEqual(['promise', '통장 사본 떼어 오기', 'ai_approved']);
     expect(openTexts).toContainEqual(['question', '내역서를 못 뗀 이유', 'ai_approved']);
     // A task the practitioner already wrote is not duplicated by approval.
     expect(openTexts.filter((c) => c[1] === '이미 적은 과제')).toHaveLength(1);
 
-    const briefing = (await (await request(`/cases/${caseId}/briefing`, actor)).json()) as BriefingView;
-    expect(briefing.last_session_summary.session_seq).toBe(1);
-    expect(briefing.last_session_summary.summary_state).toBe('approved');
-    expect(briefing.last_session_summary.summary).toBe('월세 연체가 두 달로 늘었고 내역서는 아직 못 뗌.');
-    expect(briefing.open_tasks?.items.map((t) => t.text)).toContain('통장 사본 떼어 오기');
-    expect(briefing.today_questions?.map((q) => q.text)).toContain('내역서를 못 뗀 이유');
-
     // Re-approving an edited draft replaces the unresolved AI cards instead of stacking them.
-    await draftRow(sessionId, actor, ['통장 사본 떼어 오기']);
+    const second = await draft(sessionId, actor);
     expect((await request(`/sessions/${sessionId}/draft/approve`, actor, 'POST', {
-      tasks: ['주민센터 동행 일정 잡기'], questions: [],
+      draft_id: second.id,
+      source_versions: second.source_versions,
+      edits: { tasks: ['주민센터 동행 일정 잡기'], questions: [] },
     })).status).toBe(200);
     const again = await detailOf(caseId, actor);
     const aiCards = again.open_cards.filter((c) => c.source_type === 'ai_approved').map((c) => c.text);

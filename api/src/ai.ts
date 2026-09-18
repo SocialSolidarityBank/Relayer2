@@ -3,6 +3,7 @@
 //   동의 확인 → 마스킹 → 외부 호출 → **초안 저장** → 사람이 승인해야 기록
 //
 // 승인 전에는 어떤 것도 회차 기록이 되지 않는다. 승인은 사람만 한다(GLOSSARY §6-5).
+import { readFileSync } from 'node:fs';
 import { assertConsent, replaceAiCards } from './service.ts';
 import { AI_PROVIDERS, type AiProviderId } from './consent.ts';
 import { audit } from './audit.ts';
@@ -11,15 +12,18 @@ import { maskAll } from './domain/masking.ts';
 
 import { decryptPii, decryptText } from './pii.ts';
 import type { Card, FactChange, Session } from './domain/types.ts';
+import type { StubFile } from './domain/record-analysis.ts';
 
 /**
  * 제공자는 기관이 고른다. 바꾸면 동의 문안 해시가 달라져 기존 동의가 `확인 필요`로 떨어진다 —
  * 그게 맞는 동작이다. 누구에게 보내는지가 곧 동의의 내용이다.
+ * 호출 시점에 읽는다 — 테스트가 import 뒤에 AI_PROVIDER 를 바꿔도 적용된다.
+ * gemini-2.5-flash 는 신규 사용자에게 닫혔다(2026-09-15 실측 404). 별칭을 쓴다.
+ * openai 는 gpt-5.5 — 9개 모델을 재 보고 골랐다(SPEC.md §15-4).
  */
-const PROVIDER = (process.env.AI_PROVIDER ?? 'openai') as AiProviderId;
-// gemini-2.5-flash 는 신규 사용자에게 닫혔다(2026-09-15 실측 404). 별칭을 쓴다.
-// openai 는 gpt-5.5 — 9개 모델을 재 보고 골랐다(SPEC.md §15-4).
-const MODEL = process.env.AI_MODEL ?? (PROVIDER === 'gemini' ? 'gemini-flash-latest' : 'gpt-5.5');
+const provider = (): AiProviderId => (process.env.AI_PROVIDER ?? 'openai') as AiProviderId;
+const model = (): string =>
+  process.env.AI_MODEL ?? (provider() === 'gemini' ? 'gemini-flash-latest' : 'gpt-5.5');
 
 export type Draft = {
   id: number;
@@ -50,7 +54,6 @@ const SYSTEM = [
   '- 진단·평가·판정을 하지 않는다. 적힌 말을 정리만 한다.',
   '- 존댓말 대신 기록체(…함, …라고 말함)를 쓴다.',
   '- 숫자는 반드시 살린다. 건수·금액·기간. "늘었다"가 아니라 "3건에서 4건으로".',
-  '- 같은 것을 두 번 다르게 말했으면 **나중 말**을 쓴다. 처음에 둘러대고 나중에 진짜를 말하는 일이 잦다.',
   '',
   '무엇이 먼저인가 (요약에 넣을 것을 고르는 순서):',
   '1. 안전 — 폭력·착취, 위기 발언, 연락 두절 위험',
@@ -61,20 +64,16 @@ const SYSTEM = [
   '',
   '요약에 넣지 않는 것: 지각·날씨·교통 같은 잡담, 같은 말의 반복, 변화 없는 상태.',
   '',
-  '사실관계 변화(fact_changes): [지난 회차] 자료가 함께 오면, 지난 회차에서 말한 것과 이번 회차에서',
-  '말한 것이 **서로 어긋나는 사실**만 찾는다(건수·금액·기간·관계·상태). 새로 알게 된 것은 아니다.',
-  '양쪽 원문을 한 문장씩 **자료에 적힌 그대로** 옮긴다. 고쳐 쓰거나 줄이지 않는다.',
-  '어느 쪽이 맞는지 판정하지 않는다 — 앞뒤 맥락만 한두 문장으로 적는다. 지난 회차 자료가 없으면 빈 배열.',
 ].join('\n');
 
 // 칸은 **사람이 쓰는 칸과 같다**(GLOSSARY §6-2). 그래야 승인하면 그대로 카드가 된다.
 // 한 덩어리로 받으면 무엇을 버릴지 모델이 제멋대로 고른다.
-type Shape = { summary: string; changes: string[]; tasks: string[]; questions: string[]; fact_changes: FactChange[] };
+type Shape = { summary: string; changes: string[]; tasks: string[]; questions: string[] };
 
 const SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['summary', 'changes', 'tasks', 'questions', 'fact_changes'],
+  required: ['summary', 'changes', 'tasks', 'questions'],
   properties: {
     summary: {
       type: 'string',
@@ -99,46 +98,25 @@ const SCHEMA = {
       items: { type: 'string' },
       description: '다음에 확인할 것. 자료에 적힌 것만.',
     },
-    fact_changes: {
-      type: 'array',
-      description: '지난 회차와 이번 회차가 서로 어긋나는 사실. 양쪽 원문을 그대로 옮긴다. 없으면 빈 배열.',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['topic', 'before', 'after', 'note'],
-        properties: {
-          topic: { type: 'string', description: '무엇이 달라졌는지 한 줄' },
-          before: {
-            type: 'object', additionalProperties: false, required: ['seq', 'quote'],
-            properties: { seq: { type: 'integer', description: '지난 회차 번호' }, quote: { type: 'string', description: '그 회차 자료의 원문 한 문장' } },
-          },
-          after: {
-            type: 'object', additionalProperties: false, required: ['seq', 'quote'],
-            properties: { seq: { type: 'integer', description: '이번 회차 번호' }, quote: { type: 'string', description: '이번 회차 자료의 원문 한 문장' } },
-          },
-          note: { type: 'string', description: '앞뒤 맥락 한두 문장. 판정이 아니다.' },
-        },
-      },
-    },
   },
 } as const;
 
-async function callGemini(prompt: string): Promise<Shape> {
+async function callGemini<T>(args: ModelCall): Promise<T> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new AiUnavailable('AI 정리 불가, GEMINI_API_KEY 없음');
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model()}:generateContent`,
     {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM }] },
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        systemInstruction: { parts: [{ text: args.system }] },
+        contents: [{ role: 'user', parts: [{ text: args.prompt }] }],
         // Gemini 의 스키마는 OpenAPI 계열이라 `additionalProperties` 를 모른다. 중첩까지 전부 뺀다.
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: JSON.parse(
-            JSON.stringify(SCHEMA, (k, v) => (k === 'additionalProperties' ? undefined : v)),
+            JSON.stringify(args.schema, (k, v) => (k === 'additionalProperties' ? undefined : v)),
           ),
         },
       }),
@@ -148,7 +126,7 @@ async function callGemini(prompt: string): Promise<Shape> {
   const payload = (await res.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
   const text = payload.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) throw new AiUnavailable('AI 응답 해석 실패');
-  return JSON.parse(text) as Shape;
+  return JSON.parse(text) as T;
 }
 
 /**
@@ -170,7 +148,7 @@ export async function openAiKey(): Promise<{ key: string; source: 'db' | 'env' }
  */
 const OPENAI_STORE = false;
 
-async function callOpenAi(prompt: string): Promise<Shape> {
+async function callOpenAi<T>(args: ModelCall): Promise<T> {
   const found = await openAiKey();
   if (!found) throw new AiUnavailable('AI 정리 불가, OpenAI API 키 없음');
   const { key } = found;
@@ -179,17 +157,17 @@ async function callOpenAi(prompt: string): Promise<Shape> {
     method: 'POST',
     headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
     body: JSON.stringify({
-      model: MODEL,
+      model: model(),
       // 추론을 길게 돌릴 일이 아니다. 적힌 말을 정리할 뿐이다.
       // gpt-5.4 이상은 'minimal' 을 받지 않는다. 'none' 이 같은 자리다.
-      reasoning: { effort: MODEL.startsWith('gpt-5.') ? 'none' : 'minimal' },
+      reasoning: { effort: model().startsWith('gpt-5.') ? 'none' : 'minimal' },
       // 응답 재사용용 보관을 끈다. 남용 감시 30일은 별건이다.
       store: OPENAI_STORE,
       input: [
-        { role: 'system', content: SYSTEM },
-        { role: 'user', content: prompt },
+        { role: 'system', content: args.system },
+        { role: 'user', content: args.prompt },
       ],
-      text: { format: { type: 'json_schema', name: 'session_draft', strict: true, schema: SCHEMA } },
+      text: { format: { type: 'json_schema', name: args.name, strict: true, schema: args.schema } },
     }),
   });
 
@@ -205,15 +183,43 @@ async function callOpenAi(prompt: string): Promise<Shape> {
       ?.find((o) => o.type === 'message')
       ?.content?.find((c) => c.type === 'output_text')?.text;
   if (!text) throw new AiUnavailable('AI 응답 해석 실패');
-  return JSON.parse(text) as Shape;
+  return JSON.parse(text) as T;
 }
 
-const callModel = (prompt: string): Promise<Shape> =>
-  PROVIDER === 'gemini' ? callGemini(prompt) : callOpenAi(prompt);
+/** 모델 호출 한 번의 재료. 시스템·프롬프트·응답 스키마는 부르는 쪽이 정한다. */
+export type ModelCall = {
+  system: string;
+  prompt: string;
+  /** OpenAI json_schema(strict)·Gemini responseSchema 에 그대로 들어가는 JSON Schema. */
+  schema: unknown;
+  /** 스키마 이름(OpenAI strict 는 필수). */
+  name: string;
+  /** AI_PROVIDER=stub 일 때 StubFile.by_seq 의 열쇠(회차 번호). 없으면 default. */
+  stubKey?: string;
+};
+
+/**
+ * stub 제공자(2026-09-18 Q). 동의·마스킹·검증은 그대로 돌고 모델 자리만 고정 파일로 단락한다.
+ * 파일 모양은 domain/record-analysis.ts 의 StubFile — by_seq[stubKey] ?? default.
+ */
+async function callStub<T>(args: ModelCall): Promise<T> {
+  const file = process.env.AI_STUB_FILE;
+  if (!file) throw new AiUnavailable('AI 정리 불가, AI_STUB_FILE 없음');
+  const stub = JSON.parse(readFileSync(file, 'utf8')) as StubFile;
+  const picked = (args.stubKey && stub.by_seq?.[args.stubKey]) ?? stub.default;
+  if (!picked) throw new AiUnavailable('AI 정리 불가, stub 응답 없음');
+  return picked as T;
+}
+
+export const callModel = <T>(args: ModelCall): Promise<T> => {
+  const p = provider();
+  if (p === 'stub') return callStub<T>(args);
+  return p === 'gemini' ? callGemini<T>(args) : callOpenAi<T>(args);
+};
 
 /** 회차 하나의 자료 조각(상담 내용 + 카드). 마스킹 전 평문이다. */
 async function sessionParts(session: Session): Promise<Array<{ label: string; text: string }>> {
-  const cards = await sql<Card[]>`select * from cards where source_session_id = ${session.id} order by id`;
+  const cards = await sql<Card[]>`select * from cards where source_session_id = ${session.id} and source_type = 'manual' order by id`;
   return [
     { label: '상담 내용', text: decryptText(session.memo) ?? '' },
     ...cards.map((c) => ({ label: SECTION_LABEL[c.source_section] ?? c.source_section, text: decryptText(c.text) ?? '' })),
@@ -223,8 +229,7 @@ async function sessionParts(session: Session): Promise<Array<{ label: string; te
 /**
  * 한 회차의 초안을 만든다. 저장된 자료만 쓰고, 보내기 전에 마스킹한다.
  * 동의(외부 LLM·국외 처리)가 없으면 호출 자체를 하지 않는다.
- * 지난 회차 자료도 함께 보낸다 — 사실관계 변화는 견줄 상대가 있어야 나온다.
- * ponytail: 지난 회차 전부를 매번 보낸다. 회차가 수십 개로 늘면 최근 N개로 자른다.
+ * v6(2026-09-18 Q): 현재 회차만 보낸다 — 지난 회차 자료·사실관계 변화 생성은 record-analysis.ts 로 넘어갔다.
  */
 export async function draftSession(sessionId: number, actorId: number): Promise<Draft> {
   const [session] = await sql<Session[]>`select * from sessions where id = ${sessionId}`;
@@ -249,30 +254,18 @@ export async function draftSession(sessionId: number, actorId: number): Promise<
   if (parts.length === 0) throw new AiUnavailable('정리할 내용 없음, 상담 내용 먼저 입력');
   const { parts: masked, hits } = maskAll(parts, subject);
 
-  // 지난 회차는 기록된 것만, 회차 순으로. 마스킹 건수는 이번 회차 것만 센다 — 감사에 남는 값이다.
-  const previous = await sql<Session[]>`
-    select * from sessions where case_id = ${session.case_id} and seq < ${session.seq} and status = 'done' order by seq`;
-  const history: string[] = [];
-  for (const p of previous) {
-    const pParts = await sessionParts(p);
-    if (pParts.length === 0) continue;
-    const { parts: pMasked } = maskAll(pParts, subject);
-    history.push(`[지난 회차 ${p.seq}회차]`, ...pMasked.map((x) => `(${x.label}) ${x.text}`), '');
-  }
-
   const prompt = [
     `${session.seq}회차 상담 자료다. 아래 내용만 보고 정리한다.`,
     '',
     ...masked.map((p) => `[${p.label}]\n${p.text}`),
-    ...(history.length > 0 ? ['', '---- 지난 회차 자료 (사실관계 변화를 찾는 데만 쓴다) ----', ...history] : []),
   ].join('\n');
 
-  const shape = await callModel(prompt);
+  const shape = await callModel<Shape>({ system: SYSTEM, prompt, schema: SCHEMA, name: 'session_draft' });
 
   const [row] = await sql<Array<{ id: number; created_at: string }>>`
     insert into ai_drafts (session_id, status, summary, changes, tasks, questions, fact_changes, mask_hits, model, created_by)
     values (${sessionId}, 'draft', ${shape.summary}, ${sql.json(shape.changes)}, ${sql.json(shape.tasks)},
-            ${sql.json(shape.questions)}, ${sql.json(shape.fact_changes)}, ${sql.json(hits)}, ${MODEL}, ${actorId})
+            ${sql.json(shape.questions)}, ${sql.json([])}, ${sql.json(hits)}, ${model()}, ${actorId})
     returning id, created_at`;
 
   // 무엇을 몇 건 마스킹해 **어디로** 보냈는지 남긴다. 보낸 원문은 남기지 않는다.
@@ -282,11 +275,11 @@ export async function draftSession(sessionId: number, actorId: number): Promise<
     action: 'ai.draft',
     caseId: session.case_id,
     fields: [
-      `recipient=${AI_PROVIDERS[PROVIDER].legalRecipient}`,
-      `country=${AI_PROVIDERS[PROVIDER].country}`,
-      `model=${MODEL}`,
+      `recipient=${AI_PROVIDERS[provider()].legalRecipient}`,
+      `country=${AI_PROVIDERS[provider()].country}`,
+      `model=${model()}`,
       // 어떤 보관 설정으로 보냈는지가 증거다. Gemini 경로에는 그 설정이 없어 남기지 않는다.
-      ...(PROVIDER === 'openai' ? [`store=${OPENAI_STORE}`] : []),
+      ...(provider() === 'openai' ? [`store=${OPENAI_STORE}`] : []),
       ...Object.entries(hits).map(([kind, n]) => `masked:${kind}=${n}`),
     ],
   });
@@ -299,9 +292,9 @@ export async function draftSession(sessionId: number, actorId: number): Promise<
     changes: shape.changes,
     tasks: shape.tasks,
     questions: shape.questions,
-    fact_changes: shape.fact_changes,
+    fact_changes: [],
     mask_hits: hits,
-    model: MODEL,
+    model: model(),
     created_by: actorId,
     created_at: row.created_at,
   };
