@@ -181,7 +181,7 @@ function Sessions({
           const state = [
             s.line,
             s.written === false && '수기 미작성',
-            s.voice.recordings > 0 && `녹음 ${s.voice.recordings}`,
+            s.voice.recordings > 0 && `녹음 ${s.voice.recordings}건`,
             transcriptLabel,
           ];
           const summary = s.ai_summary?.summary ?? null;
@@ -785,7 +785,8 @@ function SessionStatus({ detail }: { detail: CaseDetail }) {
   const planned = detail.case.sessions_planned;
   // 최신순으로 쌓는다 — 지금 상태가 맨 위다.
   const rows = [...detail.sessions].sort((a, b) => b.seq - a.seq);
-  // 부제는 얇은 안내문 크기이고 숫자만 굵다(E3).
+  // 부제는 얇은 안내문 크기이고 숫자만 굵다(E3). **단위는 GLOSSARY 규칙**(2026-09-18 Q 결정 D14):
+  // 회차·기록은 `회`, 문서·녹음·전사는 `건`. 수를 단위 없이 두면 무엇을 센 것인지 읽히지 않는다.
   const head = [
     intake ? (intake.status === 'done' ? '인테이크 작성함' : '인테이크 예정만') : '인테이크 없음',
     planned ? (
@@ -798,10 +799,10 @@ function SessionStatus({ detail }: { detail: CaseDetail }) {
       </>
     ),
     <>
-      수기 <strong>{done.filter((s) => s.written).length}</strong>
+      수기 기록 <strong>{done.filter((s) => s.written).length}</strong>회
     </>,
     <>
-      전사 승인 <strong>{done.filter((s) => s.voice.transcript === 'approved').length}</strong>
+      전사 승인 <strong>{done.filter((s) => s.voice.transcript === 'approved').length}</strong>건
     </>,
     next?.scheduled_at ? (
       <>
@@ -914,7 +915,7 @@ function Fulls({
               <Meta
                 parts={[
                   x.written ? '수기 있음' : '수기 미작성',
-                  x.voice.recordings > 0 && `녹음 ${x.voice.recordings}`,
+                  x.voice.recordings > 0 && `녹음 ${x.voice.recordings}건`,
                   x.voice.recordings > 0 ? TRANSCRIPT_LABEL[x.voice.transcript] : undefined,
                 ]}
               />

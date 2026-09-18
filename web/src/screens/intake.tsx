@@ -15,6 +15,7 @@ import {
 } from '../api.ts';
 import {
   INTAKE_GROUPS,
+  INTAKE_MEMO_QUESTION,
   NOT_APPLICABLE_OPTION,
   PREFERRED_METHOD_OPTIONS,
   type IntakeQuestion,
@@ -98,18 +99,25 @@ function Question({
   question,
   value,
   onChange,
+  hideLabel = false,
 }: {
   question: IntakeQuestion;
   value: string | string[] | undefined;
   onChange: (next: string | string[]) => void;
+  /**
+   * 카드 제목이 이미 같은 말을 할 때(문항 하나뿐인 구획) 라벨 행을 빼고 `aria-label` 로만 남긴다.
+   * `전체 상담 목표` 카드가 쓰던 방식과 같다 — 같은 말을 두 줄로 읽히게 두지 않는다.
+   */
+  hideLabel?: boolean;
 }) {
   if (question.kind === 'text') {
     // 예시는 placeholder 하나로만 보여 준다. 같은 문장을 도움말로 또 쓰면 두 번 읽힌다.
     return (
-      <FormField label={question.label} htmlFor={question.key}>
+      <FormField label={question.label} htmlFor={question.key} hideLabel={hideLabel}>
         <input
           id={question.key}
           type="text"
+          aria-label={hideLabel ? question.label : undefined}
           value={typeof value === 'string' ? value : ''}
           placeholder={question.hint}
           onChange={(e) => onChange(e.target.value)}
@@ -121,11 +129,12 @@ function Question({
 
   if (question.kind === 'textarea') {
     return (
-      <FormField label={question.label} htmlFor={question.key} control="textarea">
+      <FormField label={question.label} htmlFor={question.key} control="textarea" hideLabel={hideLabel}>
         <textarea
           id={question.key}
           rows={2}
           ref={grow}
+          aria-label={hideLabel ? question.label : undefined}
           value={typeof value === 'string' ? value : ''}
           placeholder={question.hint}
           onInput={(e) => grow(e.currentTarget)}
@@ -257,6 +266,7 @@ export function IntakeScreen({ caseId, readOnly = false }: { caseId: number; rea
             question={q}
             value={answers[q.key]}
             onChange={(v) => setAnswer(q.key, v)}
+            hideLabel={q.label === group.title}
           />
         ))}
     </Card>
@@ -375,6 +385,17 @@ export function IntakeScreen({ caseId, readOnly = false }: { caseId: number; rea
             onDraft={setQuestionDraft}
             onChange={setQuestions}
             readOnly={readOnly}
+          />
+        </Card>
+
+        {/* 마지막 구획(2026-09-18 Q 결정 D13). 앞 구획 어디에도 안 들어가는 말을 받는 자유 글이고
+            선택이다. 정본은 `intake-questions.ts` 의 `INTAKE_MEMO_QUESTION` — 저장 키도 거기 있다. */}
+        <Card title={INTAKE_MEMO_QUESTION.label}>
+          <Question
+            question={INTAKE_MEMO_QUESTION}
+            value={answers[INTAKE_MEMO_QUESTION.key]}
+            onChange={(v) => setAnswer(INTAKE_MEMO_QUESTION.key, v)}
+            hideLabel
           />
         </Card>
       </div>
