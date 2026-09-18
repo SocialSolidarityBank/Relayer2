@@ -34,7 +34,7 @@ ffmpeg -i in.webm -ac 1 -ar 24000 -b:a 48k out.mp3
 ```
 
 이유: 아래 테스트 세트가 정확히 이 형식이라 Azure 왕복이 검증돼 있고, 어느 브라우저든 재생되며, 1시간 22 MB.
-ogg/opus 가 더 작지만(≈11 MB) Safari 재생이 불확실하다. 맥미니에 ffmpeg 있음(`/opt/homebrew/bin/ffmpeg`), 1시간 인코딩 수 초.
+ogg/opus 가 더 작지만(≈11 MB) Safari 재생이 불확실하다. `ffmpeg`를 사용할 수 있는 운영자 장비에서 1시간 인코딩은 수 초다.
 저장 형식이 하나면 보유기간 스윕·백업 용량 계산도 단순해진다.
 
 ## 용량 기준점 (1시간 1파일)
@@ -51,8 +51,9 @@ ogg/opus 가 더 작지만(≈11 MB) Safari 재생이 불확실하다. 맥미니
 ## 합성 테스트 데이터 세트 (전부 허구, 커밋하지 않는다)
 
 - 공개 목록: `https://pub-0acad9da70b54900924fea276388490a.r2.dev/2026-09-17/manifest.json`
-  (Cloudflare R2 `relayer-testdata`, account@bss.or.kr, 인증 없음. **User-Agent `Python-urllib` 만 403** — urllib 이면 아무 UA 나 붙인다)
-- 설명서 `README.md`·설계 `DESIGN.md` 같은 자리. 원본·도구는 맥북 `~/DEVELOPER/PROJECTS/relayer-testdata` (git 아님, 레포 밖).
+  (Cloudflare R2의 공개 테스트 객체. 인증 정보는 문서에 적지 않는다.)
+- 설명서 `README.md`·설계 `DESIGN.md` 같은 자리. 원본·도구는 저장소 밖의 테스트 디렉터리에
+  둔다(커밋하지 않는다).
 - 사례 10건 · 회차 103(음성 93 · 수기 93) · 음성 462분 · 167 MB · mp3 24kHz mono 48k.
   분야: 재무(도박 숨김, 14회) · 정신건강(자살사고→회복, 19회) · 아동심리(12) · 가정(부부 싸움, 9) · 자립준비청년(연락두절, 5) ·
   전세사기(7) · 노동(사투리·급종결, 6) · 노인 인지저하(착취 위험, 16) · 알코올(자진종결, 3) · 다문화(폭력 위험, 11).

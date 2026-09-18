@@ -8,15 +8,14 @@
 ## 진행자 준비 (측정 직전 5분)
 
 ```bash
-cd ~/DEVELOPER/PROJECTS/RELAYER2
+cd <repository-directory>
 ./scripts/reset-for-measure.sh --mini     # 참가자가 바뀔 때마다. reset 이라고 적어야 진행된다
 ```
 
 **참가자에게 주는 것은 주소 한 줄이다.**
 
 ```
-https://relayer.kr/test                    (도메인 연결이 끝났으면)
-https://mac-mini.tail79fba7.ts.net/test    (언제나 되는 주소)
+https://relayer.kr/test                    (공개 베타 주소)
 ```
 
 계정 `test2` / `test2`. 참가자 브라우저는 **새 창이나 시크릿**으로 연다 — 진행자의 로그인이 남아 있으면

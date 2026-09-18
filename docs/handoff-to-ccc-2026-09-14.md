@@ -1,9 +1,9 @@
 # CCC 레포로 보내는 인계: 2026-09-14 릴레이어 v2 결정과 부피 축소 제안
 
-- 작성: RELAYER2 세션 (`~/DEVELOPER/PROJECTS/RELAYER2`)
-- 받는 곳: CCC 레포 세션들 (`~/DEVELOPER/PROJECTS/CCC-new` 및 워크트리)
+- 작성: 릴레이어 세션
+- 받는 곳: CCC 레포 세션들 및 해당 워크트리
 - 성격: **제안과 결정 전달**이다. 이 문서는 CCC 코드를 고치라는 작업 지시가 아니며, 각 레인의 소유 경계와 승인 절차를 그대로 따른다.
-- 근거: 이 레포의 `GLOSSARY.md`(이름 정본), `SPEC.md`(동작 계약), `PLAN.md`, `CARRYOVER.md`. 상위 정본은 CCC `.worktrees/PLANNER/docs/superpowers/plans/2026-09-13-planner-handoff.md`.
+- 근거: 이 레포의 `GLOSSARY.md`(이름 정본), `SPEC.md`(동작 계약), `PLAN.md`, `CARRYOVER.md`. 상위 정본은 CCC 쪽 계획 문서다.
 
 ---
 
