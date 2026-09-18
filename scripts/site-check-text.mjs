@@ -1,6 +1,6 @@
 // 이 폴더의 한글을 검수한다. 의존성 없음. 글을 고친 뒤 한 번 돌린다.
 //
-//   node site/check-text.mjs
+//   node scripts/site-check-text.mjs
 //
 // 세 가지를 잡는다.
 //   1. 쓰지 않기로 한 기호: 가운데점, 긴 대시, 짧은 대시, 깨진 글자(U+FFFD)
@@ -13,9 +13,10 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const here = dirname(fileURLToPath(import.meta.url));
-const repo = join(here, '..');
-const targets = readdirSync(here).filter((f) => /\.(html|css|js|mjs|md)$/.test(f));
+// 이 파일은 scripts/ 에 있고 검사 대상은 site/ 다. site/ 에 두면 그 파일까지 공개된다.
+const repo = join(dirname(fileURLToPath(import.meta.url)), '..');
+const here = join(repo, 'site');
+const targets = readdirSync(here).filter((f) => /\.(html|css|js)$/.test(f));
 
 const FORBIDDEN = [
   ['\u00B7', '가운데점'],
