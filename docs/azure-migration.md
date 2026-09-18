@@ -2,7 +2,7 @@
 
 릴레이어는 BSS가 `koreacentral`의 Azure Container Apps에서 기관당 앱 하나를 운영한다.
 데이터베이스와 Speech 리소스는 기관 소유이고, Blob 저장소와 Container App은 기관별로
-분리한다. 실제 자원 생성과 DNS 변경은 플래너의 별도 GO 뒤에만 한다.
+분리한다. 실제 자원 생성·DNS·인증서는 한 명령이 하되, APPLY 는 플래너의 별도 GO 뒤에만 한다.
 
 ## 고정 토폴로지
 
@@ -14,7 +14,7 @@
 | Blob containers | `voice`, `documents` | 둘 다 비공개 |
 | Container App | `relayer2-<slug>` | 외부 ingress, target port 8787, min 0/max 1 |
 | Infisical | `prod:/RELAYER2/<slug>` | 기관별 시크릿 정본 |
-| 공개 주소 | `https://<slug>.relayer.kr` | DNS는 프로비저닝 범위 밖 |
+| 공개 주소 | `https://<slug>.relayer.kr` | Cloudflare **DNS only** CNAME + `asuid.<slug>` TXT, ACA 관리형 인증서 |
 
 Storage Account 이름에는 하이픈을 쓸 수 없으므로 스크립트가 slug의 하이픈만 제외한다.
 전체 이름이 Azure의 24자 제한을 넘으면 자원을 만들기 전에 거절한다.
@@ -76,16 +76,22 @@ APPLY 순서는 고정이다.
    만들고 system managed identity를 켠다.
 6. Storage Account 범위에 `Storage Blob Data Contributor`를 보장한다.
 7. 컨테이너 안에서 `node api/src/migrate.ts --check`를 실행한다.
-8. ACA 기본 FQDN의 `GET /auth/signup`이 `open:true`인지 확인하고
-   `https://<slug>.relayer.kr/#/signup`을 출력한다.
+8. ACA 기본 FQDN의 `GET /auth/signup`이 `open:true`인지 확인한다.
+9. Cloudflare 에 `<slug>` CNAME(프록시 없음 — 관리형 인증서가 CNAME 으로 검증한다)과
+   `asuid.<slug>` TXT 를 보장한다. 토큰은 Infisical `prod:/` 의 `CLOUDFLARE_DNS_API_TOKEN`
+   (Zone.DNS Edit, `relayer.kr` 한정)이다. 같은 값이면 건너뛰고, **다른 값이면 덮지 않고 멈춘다**.
+10. `az containerapp hostname add` + `bind --validation-method CNAME` 으로 관리형 인증서를
+    붙이고(발급 5~10분) `https://<slug>.relayer.kr/health` 를 확인한 뒤
+    `https://<slug>.relayer.kr/#/signup`을 출력한다.
 
 기존 Azure 자원과 Infisical 이름은 skip-if-exists다. 재실행은 값을 갱신하거나 기존
 앱 구성을 덮지 않는다. 이미지 교체와 시크릿 회전은 별도 운영 변경이다.
 
-## test2 스테이징 DRY-RUN
+## test2 스테이징
 
-`test2`는 공개 주소 `https://test2.relayer.kr`과 전용 DB 스키마
-`relayer_test2`를 쓴다. 현재 단계에서는 아래 DRY-RUN만 허용한다.
+`test2`는 공개 주소 `https://test2.relayer.kr`과 전용 DB 스키마 `relayer_test2`를 쓴다.
+2026-09-18 에 APPLY 했다 — DNS·인증서까지 붙어 있고, 첫 관리자·Speech 키·녹음 토글은
+마법사로 등록했다. 재실행은 DRY-RUN 으로 계획만 본다:
 
 ```bash
 PGSCHEMA=relayer_test2 scripts/azure/provision-institution.sh test2
@@ -94,7 +100,6 @@ PGSCHEMA=relayer_test2 scripts/azure/provision-institution.sh test2
 프롬프트에 기관 Supabase 세션 풀러 URL을 붙여 넣는다. 출력에는
 `relayer2test2`, `relayer2-test2`, `prod:/RELAYER2/test2`,
 `BLOB_ACCOUNT=relayer2test2`, `PGSCHEMA=relayer_test2`와 실행 순서만 나타나야 한다.
-실제 APPLY와 `test2.relayer.kr` DNS 연결은 플래너의 별도 GO 전에는 하지 않는다.
 
 ## 기존 단일 자원 처리
 
