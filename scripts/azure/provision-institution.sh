@@ -368,7 +368,20 @@ printf '13. custom hostname %s\n' "$public_host"
 bound="$(az containerapp hostname list --name "$app_name" --resource-group "$RG" \
   --query "[?name=='${public_host}'] | length(@)" --output tsv)"
 if [ "$bound" = "0" ]; then
-  az containerapp hostname add --name "$app_name" --resource-group "$RG" --hostname "$public_host" --output none
+  # 방금 만든 TXT 를 Azure 가 아직 못 볼 수 있다(2026-09-18 실측: InvalidCustomHostNameValidation).
+  # 전파는 보통 1~2분이라 20초 간격으로 최대 5분 기다린다.
+  added=0
+  for attempt in $(seq 1 15); do
+    if az containerapp hostname add --name "$app_name" --resource-group "$RG" --hostname "$public_host" \
+         --output none 2>"$TMP/hostname-add.err"; then
+      added=1
+      break
+    fi
+    grep -q 'InvalidCustomHostNameValidation' "$TMP/hostname-add.err" || { cat "$TMP/hostname-add.err" >&2; fail "hostname add 실패"; }
+    printf '  DNS 전파 대기 (%s/15)\n' "$attempt"
+    sleep 20
+  done
+  [ "$added" = 1 ] || fail "asuid.${public_host} TXT 가 5분 안에 보이지 않았습니다."
   # 관리형 인증서 발급은 DNS 전파 뒤 수 분 걸린다. bind 가 끝까지 기다린다.
   az containerapp hostname bind --name "$app_name" --resource-group "$RG" --hostname "$public_host" \
     --environment "$ACA_ENV" --validation-method CNAME --output none
