@@ -416,11 +416,13 @@ export async function draftSession(sessionId: number, actorId: number): Promise<
  */
 export function verifyEvidence(shape: Shape, parts: Array<{ label: string; text: string }>): Shape {
   const squash = (s: string) => s.replace(/\s+/g, ' ').trim();
+  // 모델이 라벨을 `[상담 내용]` 처럼 대괄호째 옮긴다(2026-09-18 실측). 화면·짝 찾기는 맨 라벨을 쓴다.
+  const label = (s: string) => squash(s).replace(/^\[|\]$/g, '');
   const texts = parts.map((p) => ({ label: p.label, text: squash(p.text) }));
-  const found = (label: string, quote: string): boolean => {
+  const found = (source: string, quote: string): boolean => {
     const q = squash(quote);
     if (!q) return false;
-    const own = texts.find((t) => t.label === label);
+    const own = texts.find((t) => t.label === label(source));
     return (own?.text.includes(q) ?? false) || texts.some((t) => t.text.includes(q));
   };
   const isGrade = (g: string): g is AiEvidence['grade'] => (EVIDENCE_GRADES as readonly string[]).includes(g);
@@ -431,13 +433,14 @@ export function verifyEvidence(shape: Shape, parts: Array<{ label: string; text:
       const grade = quotes.length === 0 ? '없음' : isGrade(e.grade) ? e.grade : '정황';
       return {
         ...e,
+        source: label(e.source),
         quotes,
         context: quotes.length === 0 ? '' : e.context,
         grade,
         transforms: (e.transforms ?? []).filter((t) => (EVIDENCE_TRANSFORMS as readonly string[]).includes(t)),
       };
     }),
-    omissions: (shape.omissions ?? []).filter((o) => found(o.source, o.quote)),
+    omissions: (shape.omissions ?? []).filter((o) => found(o.source, o.quote)).map((o) => ({ ...o, source: label(o.source) })),
     omitted_minor_count: Math.max(0, Math.trunc(Number(shape.omitted_minor_count) || 0)),
   };
 }
