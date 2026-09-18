@@ -33,24 +33,18 @@ export function Chevron({ dir = 'down' }: { dir?: 'up' | 'down' | 'left' | 'righ
  * **돌아갈 곳이 없으면 아예 그리지 않는다.** 없는 출구를 그려 두면 눌러도 아무 일이
  * 일어나지 않아 화면이 고장난 것처럼 보인다.
  */
-export function BackLink({ title }: { title?: string }) {
+export function BackLink() {
   const [canGoBack, setCanGoBack] = useState(false);
   useEffect(() => {
     setCanGoBack(window.history.length > 1);
   }, []);
-  // HERO 위에 큰 제목이 없는 화면은 이 줄 오른쪽에 페이지 이름(page-eyebrow)을 세운다(2026-09-18 Q).
-  if (!canGoBack && !title) return null;
+  if (!canGoBack) return null;
   return (
     <div className="page-backbar">
-      {canGoBack ? (
-        <button type="button" className="page-back" onClick={() => window.history.back()}>
-          <Chevron dir="left" />
-          <span>뒤로</span>
-        </button>
-      ) : (
-        <span className="page-back-spacer" aria-hidden="true" />
-      )}
-      {title && <span className="page-eyebrow">{title}</span>}
+      <button type="button" className="page-back" onClick={() => window.history.back()}>
+        <Chevron dir="left" />
+        <span>뒤로</span>
+      </button>
     </div>
   );
 }
@@ -193,10 +187,10 @@ export function PageHeader({
  * 이식 CSS(`wire.css:269-293`)를 그대로 쓰고 새 클래스를 만들지 않는다.
  *
  * 구분선 **위에는 이름과 행동만**, 아래는 라벨/값 정보 격자다(내부 폭 760 초과 4열, 그 아래
- * 80px 라벨 행). 값이 칸보다 길면 **한 줄로 잘라 말줄임**하고 전체는 `title` 로 남긴다
- * (2026-09-17 Q — 카드 장폭이 넓어 4열이 들어간다). 값이 없는 항목은 호출부가 빈 값을 주면
- * 자동으로 빠진다. **배지를 두지 않는다** — 상태도 라벨/값이다(CCC 2026-09-08 Q).
- * 이름이 없으면 가명이 이름 자리를 대신하고, 이름이 있으면 가명은 정보 격자의 값으로 내려간다.
+ * 80px 라벨 행). 칸은 **늘 같은 수**다(2026-09-18 Q — 값이 없으면 `-`): 칸이 빠지면 화면마다
+ * 격자가 달라 균형이 깨진다. 값이 칸보다 길면 한 줄로 잘라 **말줄임**하고 전체는 `title` 로
+ * 남긴다(2026-09-18 Q). 라벨과 값 사이는 `--space-1` 로 고정이다. **배지를 두지 않는다** —
+ * 상태도 라벨/값이다(CCC 2026-09-08 Q).
  *
  * 제목은 `h1` 이다 — 이 화면의 주제가 화면 용도가 아니라 **사람**이다(DESIGN.md §4).
  * 스크롤을 따라오지 않는다(sticky 는 셸과 기록 레일의 것이다).
@@ -212,40 +206,57 @@ export function ParticipantHero({
   details?: ReadonlyArray<[string, ReactNode]>;
   actions?: ReactNode;
 }) {
-  const shown = details.filter(([, value]) => value !== null && value !== undefined && value !== '');
+  const shown = details.map(([label, value]) => [label, value === null || value === undefined || value === '' ? '-' : value] as const);
+  /**
+   * 모바일 판정은 JS 가 한다 — `<details open>` 은 CSS 로 바꿀 수 없는 속성이다.
+   * 크기·간격·열 수는 그대로 CSS(미디어·컨테이너 쿼리)가 맡는다.
+   */
+  const [wide, setWide] = useState(() => window.matchMedia('(min-width: 768px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)');
+    const sync = () => setWide(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
   return (
     <header className="page-header surface-card participant-hero-card">
       <div className="participant-hero-top">
-        <h1 className="participant-hero-title">
+        {/* 사람 이름은 `h2` 다 — 화면의 `h1` 은 HERO 위 페이지 제목이 갖는다(2026-09-18 Q,
+            구 눈썹 텍스트 대체). 크기·굵기는 `.participant-name-group[data-size=hero]` 가 정한다. */}
+        <h2 className="participant-hero-title">
           <span className="participant-name-group" data-size="hero">
             <span className={name ? 'participant-name' : 'participant-name participant-card-name is-empty'}>
               {name ?? pseudonym}
             </span>
           </span>
-        </h1>
+        </h2>
         {actions && <div className="page-actions">{actions}</div>}
       </div>
       {shown.length > 0 && (
         <>
           <hr className="participant-hero-divider" />
-          <div className="participant-hero-info">
-            <div className="participant-hero-details">
-              {shown.map(([label, value]) => (
-                <div
-                  className="wire-field-row"
-                  data-layout="stack"
-                  data-size="sm"
-                  data-truncate="true"
-                  key={label}
-                >
-                  <span className="wire-field-label">{label}</span>
-                  <span className="wire-field-value" title={typeof value === 'string' ? value : undefined}>
-                    {value}
-                  </span>
-                </div>
-              ))}
+          {/* 모바일에서는 정보 격자가 **기본 접힘**이다(2026-09-18 Q 9) — 390 에서 이름·행동·
+              네 줄이 화면 절반을 먹어 본문이 한참 아래로 밀렸다. 768 이상에서는 늘 펼쳐 있고
+              여는 줄은 숨는다(CSS). `open` 을 CSS 로 못 바꾸므로 폭 판정은 JS 가 한다. */}
+          <details className="participant-hero-fold" open={wide}>
+            <summary className="participant-hero-more">
+              <span>당사자 정보</span>
+              <span className="participant-hero-chevron" aria-hidden="true">
+                <Chevron dir="down" />
+              </span>
+            </summary>
+            <div className="participant-hero-info">
+              <div className="participant-hero-details">
+                {shown.map(([label, value]) => (
+                  <div className="wire-field-row" data-layout="stack" data-size="sm" key={label}>
+                    <span className="wire-field-label">{label}</span>
+                    <span className="wire-field-value" title={typeof value === 'string' ? value : undefined}>{value}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          </details>
         </>
       )}
     </header>
@@ -272,8 +283,8 @@ export const participantHeroDetails = ({
   phone?: string | null;
   email?: string | null;
 }): ReadonlyArray<[string, ReactNode]> => [
-  ['당사자 ID', pseudonym],
-  ['참여 사업', seqLabel ? `${program}, ${seqLabel}` : program],
+  ['ID', pseudonym],
+  ['참여중인 사업', seqLabel ? `${program}, ${seqLabel}` : program],
   ['연락처', phone ?? ''],
   ['이메일', email ?? ''],
 ];
@@ -284,6 +295,7 @@ export const participantHeroDetails = ({
 export function Card({
   title,
   badge,
+  meta,
   hint,
   action,
   tone,
@@ -293,6 +305,8 @@ export function Card({
   title?: string;
   /** 제목 옆에 붙는 식별자 배지(주소 이름 따위). 이식 `.wire-card-head` 는 배지를 auto 마진에서 뺀다. */
   badge?: ReactNode;
+  /** 제목 바로 옆 한 줄 안내(13px --sub). 본문 첫 줄 `hint` 와 달리 제목 행에 선다(2026-09-18 Q — 녹음 카드). */
+  meta?: ReactNode;
   hint?: ReactNode;
   /** 제목과 같은 행 오른쪽 끝에 서는 행동 하나(이식 `.wire-card-head`). */
   action?: ReactNode;
@@ -305,11 +319,12 @@ export function Card({
     <section className={className ? `surface-card wire-card ${className}` : 'surface-card wire-card'}>
       {title && (
         <>
-          {badge || action ? (
+          {badge || action || meta ? (
             <div className="wire-card-title" data-tone={tone}>
               <div className="wire-card-head">
                 <h2>{title}</h2>
                 {badge && <span className="wire-badge"><span className="wire-badge-label">{badge}</span></span>}
+                {meta && <span className="wire-card-meta">{meta}</span>}
                 {action}
               </div>
             </div>
@@ -518,6 +533,24 @@ export function Choice({
         {label}
         {hint && <span className="wire-choice-hint">{hint}</span>}
       </span>
+    </label>
+  );
+}
+
+/**
+ * 알약 안에 든 체크박스(2026-09-18 Q — 일정 등록·기록지의 `종결 상담`). 옆의 알약 버튼과 같은 높이·
+ * 반경이라 한 줄에 나란히 선다. 네이티브 체크박스가 그대로 안에 있어 키보드·접근성은 `Choice` 와 같다.
+ */
+export function ChoicePill({ label, checked, disabled, onChange }: {
+  label: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: () => void;
+}) {
+  return (
+    <label className="wire-button wire-choice-pill" data-variant="secondary" data-checked={checked || undefined}>
+      <input type="checkbox" className="wire-checkbox" checked={checked} disabled={disabled} onChange={onChange} />
+      <span className="wire-button-text">{label}</span>
     </label>
   );
 }

@@ -17,7 +17,9 @@ const login = async (page: Page) => {
   await page.locator('#email').fill('test2');
   await page.locator('#password').fill('test2');
   await page.getByRole('button', { name: '로그인', exact: true }).click();
-  await expect(page.locator('.app-nav-me')).toBeVisible();
+  // 768 미만은 머리줄이 숨고 모바일 바(`.drawer-bar-me`)가 이름을 갖는다(2026-09-18 Q 드로어) —
+  // 보이는 쪽 하나로 로그인됨을 판정한다.
+  await expect(page.locator('.app-nav-me, .drawer-bar-me').filter({ visible: true })).toBeVisible();
 };
 
 const makeCase = async (page: Page, name: string): Promise<number> => {
@@ -126,9 +128,9 @@ test('월간이 기본이고 기간 이동·주간·일간·다시보기가 실�
   // 날짜 클릭이 첫 일정을 펼치느냐는 브라우저의 `open` 처리에 달려 헐겁게 본다.
   expect(await detail.locator('details[open]').count()).toBeLessThanOrEqual(1);
   const foldOf = (name: string) => detail.locator('details', { has: page.getByText(name) });
-  // 머리 요약 한 줄: 가명 | 사업명 회차 | 일시(세로선 구분, 2026-09-17 Q).
+  // 머리 요약 한 줄: 가명 | 사업명 회차 | 일시. 날짜는 전역 표기 `2026.10.14.(수)`(2026-09-18 Q).
   await expect(foldOf(nameA).locator('.fold-title-desc'))
-    .toHaveText(/달력 보기 검증 1회차 10\. 14\./);
+    .toHaveText(/달력 보기 검증 1회차 2026\.10\.14\.\(수\)/);
   // 접힌 줄에는 상담 조건이 없다. 어느 줄이 펼쳐지는지는 위처럼 헐거우니 단정은 **접힌 줄**에 건다 —
   // 넷 중 펼쳐진 줄은 많아도 하나라 접힌 줄은 늘 있다(구 단정은 nameA 가 접혀 있다고 못 박아
   // 첫 일정이 펼쳐진 실행에서 떨어졌다).
@@ -152,7 +154,7 @@ test('월간이 기본이고 기간 이동·주간·일간·다시보기가 실�
     .toHaveAttribute('href', new RegExp(`cases/${caseA}/record$`));
   await review.click();
   await expect(page).toHaveURL(new RegExp(`/cases/${caseA}/info`));
-  await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '기본 정보' })).toBeVisible();
 
   // ── 주간: 같은 시각대의 두 일정이 모두 살아 있다 ─────────────
   await page.goto('/#/schedule');

@@ -14,6 +14,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { encode as encodeQr } from 'uqr';
 import {
+  appUrl,
   ASSIGN_PAGE_SIZE,
   addProgram,
   createInvite,
@@ -59,6 +60,7 @@ import {
   type Worker,
   type WorkerCaseRow,
 } from '../api.ts';
+import { dateLabel, dateTimeLabel } from '../date-time.ts';
 import {
   Badge,
   Button,
@@ -83,8 +85,9 @@ import { DatePicker } from '../date-picker.tsx';
 import { Dialog } from '../dialog.tsx';
 import { AUDIT_DAYS, AUDIT_KIND_TABS, AuditScreen } from './audit.tsx';
 import { CONNECTION_GUIDES } from '../../../site/connection-guide.js';
+import './settings.css';
 
-const date = (s: string) => new Date(s).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
+// 날짜·일시 표기는 `date-time.ts` 한 곳이다(2026-09-18 Q).
 
 /** 주소 뒤 `?program=<id>` — 사업 목록에서 걸개가 걸린 채 건너온 것이다. 없으면 null. */
 const programFromHash = (): number | null => {
@@ -591,7 +594,7 @@ function AssignPane({ me }: { me: { id: number } }) {
     <div className="wire-repeat-card" key={r.id}>
       <Item
         title={<Meta parts={[r.pseudonym, r.program_name]} />}
-        desc={`${r.requester}, ${date(r.created_at)}${r.reason ? `, ${r.reason}` : ''}`}
+        desc={`${r.requester}, ${dateLabel(r.created_at)}${r.reason ? `, ${r.reason}` : ''}`}
         action={action}
       />
     </div>
@@ -892,7 +895,7 @@ export function InvitePane() {
     setErr(null);
     try {
       const { token } = await createInvite(role, note.trim() || null);
-      setLink(`${window.location.origin}${window.location.pathname}#/invite/${token}`);
+      setLink(appUrl(`/invite/${token}`));
       setNote('');
       sent.setData(await listInvites());
     } catch (e) {
@@ -970,7 +973,7 @@ export function InvitePane() {
               <div className="wire-repeat-card" key={v.id}>
                 <Item
                   title={`${v.role === 'admin' ? '관리자' : '실무자'}${v.note ? `, ${v.note}` : ''}`}
-                  desc={`${date(v.created_at)} 만듦, ${date(v.expires_at)}까지, ${state}`}
+                  desc={`${dateLabel(v.created_at)} 만듦, ${dateLabel(v.expires_at)}까지, ${state}`}
                   action={
                     state === '기다리는 중' ? (
                       <Button onClick={() => void revoke(v.id)}>취소하기</Button>
@@ -1091,8 +1094,7 @@ function AssigneeDialog({ worker, onClose }: { worker: Worker; onClose: () => vo
       .then(setRows)
       .catch((e) => setError(e instanceof Error ? e.message : '불러오기 실패'));
   }, [worker.id]);
-  const when = (iso: string) =>
-    new Date(iso).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  // 일시 표기는 `date-time.ts` 의 `dateTimeLabel` 하나다.
   return (
     <dialog ref={dialog} className="assignee-dialog" aria-labelledby="assignee-title" onClose={onClose}>
       <h2 id="assignee-title">{worker.name} 담당 중인 당사자</h2>
@@ -1119,7 +1121,7 @@ function AssigneeDialog({ worker, onClose }: { worker: Worker; onClose: () => vo
                   <td>{c.name ?? ''}</td>
                   <td>{c.program}</td>
                   <td>{c.seq ? `${c.seq}회차` : '기록 없음'}</td>
-                  <td>{c.next_at ? when(c.next_at) : ''}</td>
+                  <td>{c.next_at ? dateTimeLabel(c.next_at) : ''}</td>
                 </tr>
               ))}
             </tbody>
@@ -1480,7 +1482,8 @@ function ConsentPane() {
               key={r.domain}
               group="consent-copy"
               title={r.label}
-              desc={<Meta parts={[r.body, `판 ${r.version}`, `지문 ${r.hash}`]} />}
+              // 접힌 머리는 당사자 정보의 동의 카드와 같다(2026-09-18 Q): 동의 항목 한 줄 · 판 · 지문. 본문은 펼쳐야 보인다.
+              desc={<Meta parts={[r.items.join(', '), `판 ${r.version}`, `지문 ${r.hash}`]} />}
             >
               <ConsentDetail copy={r} />
               {r.editable && (
@@ -1802,6 +1805,8 @@ export function ConnectionsPane() {
   const guide = (id: (typeof CONNECTION_GUIDES)[number]['id']) => {
     const content = CONNECTION_GUIDES.find((item) => item.id === id);
     if (!content) return null;
+    // 번호·화살표·색은 전부 CSS(settings.css)다 — 랜딩 팝업과 innerText 가 같아야 한다(e2e connections).
+    // `AI가 돕는 범위` 는 절차가 아니라 역할 구분이라 라벤더 메모(DESIGN.md §6 AI 톤)로 뗀다.
     return (
       <div className="connection-guide-row">
         <Dialog
@@ -1812,7 +1817,7 @@ export function ConnectionsPane() {
         >
           <ol className="connection-guide" data-guide-id={content.id}>
             {content.steps.map((step) => (
-              <li key={step.label}>
+              <li key={step.label} data-tone={step.label === 'AI가 돕는 범위' ? 'ai' : undefined}>
                 <strong>{step.label}</strong>
                 <span>
                   {step.parts.map((part, index) =>
@@ -1918,7 +1923,7 @@ export function ConnectionsPane() {
           <DataRows
             rows={[
               ['연결 상태', c.db.connected ? '연결됨' : '연결 안 됨'],
-              ['마지막 확인', new Date(c.db.checked_at).toLocaleString('ko-KR')],
+              ['마지막 확인', dateTimeLabel(c.db.checked_at)],
             ]}
           />
         </Fold>
@@ -1946,7 +1951,7 @@ function RequestPane({ me }: { me: { id: number } }) {
           <div className="wire-repeat-card" key={r.id}>
             <Item
               title={<Meta parts={[r.pseudonym, r.program_name]} />}
-              desc={`${date(r.created_at)} 올림${r.reason ? `, ${r.reason}` : ''}`}
+              desc={`${dateLabel(r.created_at)} 올림${r.reason ? `, ${r.reason}` : ''}`}
               action={
                 r.decided_at ? (
                   <Badge tone={r.decision === 'approved' ? 'mint' : undefined}>

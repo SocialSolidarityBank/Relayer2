@@ -21,6 +21,7 @@ import {
   Card,
   Choice,
   ChoiceGroup,
+  ChoicePill,
   Empty,
   ErrorText,
   Field,
@@ -28,14 +29,15 @@ import {
   FormActions,
   Item,
   LineList,
+  PageHeader,
   ParticipantHero,
   withDraft,
   type Line,
 } from '../ui.tsx';
 import { METHODS } from '../vocab.ts';
-import { dateTimeFromIso, dateTimeToIso } from '../date-time.ts';
-import { DateTimeInput } from '../date-time-input.tsx';
-import { RecordingPanel, SessionAudio } from './session-audio.tsx';
+import { dateTimeFromIso, dateTimeToIso, durationOf, endTimeOf } from '../date-time.ts';
+import { DateTimeInput, TimeSelect } from '../date-time-input.tsx';
+import { RecordingPanel } from './session-audio.tsx';
 import { TaskOwnerToggle } from '../task-owner.tsx';
 import { Dialog } from '../dialog.tsx';
 import { OWNER_LABEL } from '../api.ts';
@@ -43,17 +45,18 @@ import { OWNER_LABEL } from '../api.ts';
 /** 지금 시각을 한국 시간의 날짜·시·분으로 표시하는 상담 일시 초깃값. */
 const nowDateTime = () => dateTimeFromIso(new Date().toISOString());
 
-/** 과제 결과 3종(2026-09-15 Q). 화면 말과 저장값을 한 곳에서 잇는다. */
+/** 과제 결과 4종(2026-09-18 Q — `중지` 추가, 구 `이 과제 그만두기` 체크 대체). 화면 말과 저장값을 한 곳에서 잇는다. */
 const TASK_RESULTS: ReadonlyArray<{ label: string; value: OutcomeInput }> = [
   { label: '진행 전', value: { card_id: 0, result: 'not_done', follow: 'continue' } },
   { label: '진행 중', value: { card_id: 0, result: 'in_progress' } },
   { label: '완료', value: { card_id: 0, result: 'done' } },
+  { label: '중지', value: { card_id: 0, result: 'not_done', follow: 'stop' } },
 ];
 
-/** 상태 어휘는 명사형이다(2026-09-18 Q): 진행 전 · 진행 중 · 완료 · 중단. 행동 체크박스 `그만두기`만 동사형. */
+/** 상태 어휘는 명사형이다(2026-09-18 Q): 진행 전 · 진행 중 · 완료 · 중지. */
 const taskResultLabel = (o: OutcomeInput | undefined): string | null => {
   if (!o) return null;
-  if (o.follow === 'stop') return '중단';
+  if (o.follow === 'stop') return '중지';
   if (o.result === 'done') return '완료';
   if (o.result === 'in_progress') return '진행 중';
   if (o.result === 'not_done') return '진행 전';
@@ -68,11 +71,19 @@ export function RecordScreen({
   caseId,
   sessionId: editingId,
   startClosing = false,
+  embedded = false,
+  onSaved,
 }: {
   caseId: number;
   sessionId?: number;
   /** 당사자 카드에서 `상담 종결`로 들어왔으면 종결 체크를 켜고 시작한다(2026-09-17 Q). */
   startClosing?: boolean;
+  /** 회차 원본 팝업의 수기 열에 심을 때 — 페이지 제목·HERO 는 팝업 머리가 말하므로 걷고,
+      레일은 한 열로 흘러 본문 위에 선다(`.record-grid[data-embedded]`). */
+  embedded?: boolean;
+  /** 저장 뒤 화면을 옮기는 대신 부른다(팝업에 심겼을 때 — 팝업이 닫고 목록을 다시 받는다).
+      종결 체크가 켜져 있으면 종결 기록이 다음 순서라 그때는 늘 종결 화면으로 간다. */
+  onSaved?: () => void;
 }) {
   const [briefing, setBriefing] = useState<Briefing | null>(null);
   // 당사자 카드의 연락처·이메일은 사례 상세가 준다(2026-09-17 Q).
@@ -84,8 +95,8 @@ export function RecordScreen({
   const [opinion, setOpinion] = useState('');
   const [nextGoal, setNextGoal] = useState('');
   const [place, setPlace] = useState('');
-  // 소요 시간(분). 빈 칸이면 보내지 않는다(2026-09-18 Q D4 — `sessions.duration_min`).
-  const [duration, setDuration] = useState('');
+  // 종료 시각(`HH:mm`). 시작 시간과 함께 소요 분(`sessions.duration_min`)을 낸다(2026-09-18 Q — 구 소요 분 칸).
+  const [endTime, setEndTime] = useState('');
   // 예정 회차가 없을 때 이 자리에서 바로 적는 일시·상담 방식.
   const [heldAt, setHeldAt] = useState(nowDateTime);
   const [method, setMethod] = useState<NewSessionInput['method']>('in_person');
@@ -111,8 +122,6 @@ export function RecordScreen({
   const [startedId, setStartedId] = useState<number | null>(null);
   const startedRef = useRef<number | null>(null);
   const startingRef = useRef<Promise<number> | null>(null);
-  /** 위 녹음 패널에서 전사문이 바뀌면 올라간다 — 불일치 카드가 다시 읽는 신호. */
-  const [voiceStamp, setVoiceStamp] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -137,7 +146,7 @@ export function RecordScreen({
         setResume(null);
         setMemo(rec.memo ?? '');
         setPlace(rec.place ?? '');
-        setDuration(rec.duration_min == null ? '' : String(rec.duration_min));
+        setEndTime(endTimeOf(rec.held_at, rec.duration_min));
         setHeldAt(rec.held_at ? dateTimeFromIso(rec.held_at) : nowDateTime());
         setMethod((rec.method as NewSessionInput['method']) ?? 'in_person');
         setIsClosing(startClosing || rec.is_closing);
@@ -178,7 +187,7 @@ export function RecordScreen({
       setTaskDraft({ text: '', owner: 'participant' });
       setQuestionDraft({ text: '' });
       setPlace(planned?.place ?? '');
-      setDuration('');
+      setEndTime('');
       // 당사자 카드에서 종결로 들어온 경우가 예정 회차의 표시보다 세다(2026-09-17 Q).
       setIsClosing(startClosing || (planned?.is_closing ?? false));
       setMethod((planned?.method as NewSessionInput['method']) ?? 'in_person');
@@ -211,16 +220,20 @@ export function RecordScreen({
   if (detail?.case.status === 'closed' && !editingId) {
     return (
       <>
-        <ParticipantHero
-          name={briefing.participant_card.name}
-          pseudonym={briefing.participant_card.pseudonym}
-          details={[
-            ['당사자 ID', briefing.participant_card.pseudonym],
-            ['참여 사업', briefing.participant_card.program_name],
-            ['연락처', detail.participant.phone ?? ''],
-            ['이메일', detail.participant.email ?? ''],
-          ]}
-        />
+        {/* 페이지 제목은 HERO 바로 위 `h1` 이다(2026-09-18 Q — 구 뒤로 줄 눈썹 텍스트 대체). */}
+        {!embedded && <PageHeader title="상담 기록지" />}
+        {!embedded && (
+          <ParticipantHero
+            name={briefing.participant_card.name}
+            pseudonym={briefing.participant_card.pseudonym}
+            details={[
+              ['ID', briefing.participant_card.pseudonym],
+              ['참여중인 사업', briefing.participant_card.program_name],
+              ['연락처', detail.participant.phone ?? ''],
+              ['이메일', detail.participant.email ?? ''],
+            ]}
+          />
+        )}
         <div className="wire-container">
           <Card
             title="상담 종결"
@@ -294,7 +307,7 @@ export function RecordScreen({
     setMethod((v?.method as NewSessionInput['method']) ?? 'in_person');
     setPlace(v?.place ?? '');
     setIsClosing(startClosing || (v?.is_closing ?? false));
-    setDuration(resume.duration_min == null ? '' : String(resume.duration_min));
+    setEndTime(endTimeOf(resume.held_at, resume.duration_min));
     setChoice('continue');
   };
 
@@ -319,7 +332,7 @@ export function RecordScreen({
         is_closing: isClosing,
         memo,
         place: inPerson ? place.trim() || null : null,
-        duration_min: duration.trim() === '' ? null : Number(duration),
+        duration_min: durationOf(heldAtIso, endTime) ?? null,
         next_goal_text: nextGoal.trim() || null,
         cards: [
           // `추가`를 누르지 않고 적어만 둔 줄도 함께 저장한다.
@@ -329,7 +342,8 @@ export function RecordScreen({
         ],
         outcomes: Object.values(outcomes),
       });
-      window.location.hash = isClosing ? `#/cases/${caseId}/close` : `#/cases/${caseId}/info`;
+      if (onSaved && !isClosing) onSaved();
+      else window.location.hash = isClosing ? `#/cases/${caseId}/close` : `#/cases/${caseId}/info`;
     } catch (e) {
       setError(e instanceof Error ? e.message : '저장 실패');
     } finally {
@@ -348,27 +362,27 @@ export function RecordScreen({
 
   return (
     <>
-      {/* 당사자 카드가 머리다(2026-09-17 Q 확대 2단계 — 시안). 화면 용도는 아래 첫 구획 제목이
-          말하고, 머리는 사람을 말한다. 정보는 이 화면이 이미 받는 값만 올린다. */}
-      <ParticipantHero
-        name={briefing.participant_card.name}
-        pseudonym={briefing.participant_card.pseudonym}
-        details={[
-          ['당사자 ID', briefing.participant_card.pseudonym],
-          ['참여 사업', `${briefing.participant_card.program_name}, ${seq}회차${editing ? ' 수정' : ''}`],
-          ['연락처', detail?.participant.phone ?? ''],
-          ['이메일', detail?.participant.email ?? ''],
-        ]}        actions={
-          <Button onClick={() => (window.location.hash = `#/cases/${caseId}/info`)}>당사자 정보</Button>
-        }
-      />
-      {/* 시작이 곧 회차 — 녹음·올리기·수기 첫 입력이 회차를 연다(2026-09-16 인계). */}
-      <RecordingPanel
-        sessionId={session?.id ?? startedId}
-        ensureSession={ensureSession}
-        onAccessLost={accessLost}
-        onTranscriptChange={() => setVoiceStamp((v) => v + 1)}
-      />
+      {!embedded && <PageHeader title="상담 기록지" />}
+      {!embedded && (
+        <ParticipantHero
+          name={briefing.participant_card.name}
+          pseudonym={briefing.participant_card.pseudonym}
+          details={[
+            ['ID', briefing.participant_card.pseudonym],
+            ['참여중인 사업', `${briefing.participant_card.program_name}, ${seq}회차${editing ? ' 수정' : ''}`],
+            ['연락처', detail?.participant.phone ?? ''],
+            ['이메일', detail?.participant.email ?? ''],
+          ]}
+          actions={
+            <Button onClick={() => (window.location.hash = `#/cases/${caseId}/info`)}>당사자 정보</Button>
+          }
+        />
+      )}
+      {/* 시작이 곧 회차 — 녹음·올리기·수기 첫 입력이 회차를 연다(2026-09-16 인계).
+          팝업(embedded)에서는 걷는다(2026-09-18 Q) — 오른쪽 열이 녹음·전사를 맡는다. */}
+      {!embedded && (
+        <RecordingPanel sessionId={session?.id ?? startedId} ensureSession={ensureSession} onAccessLost={accessLost} />
+      )}
       {/* 미작성 회차 선택(D12). 닫기(Escape 포함)는 새 회차다 — 지금까지의 동작 그대로. */}
       {resume && choice === null && (
         <Dialog
@@ -391,23 +405,12 @@ export function RecordScreen({
         </Dialog>
       )}
 
-      <div className="wire-container rail-grid record-grid" data-grid="true">
+      <div className="wire-container rail-grid record-grid" data-grid="true" data-embedded={embedded || undefined}>
         <aside className="record-side">
-          {/* 종결 상담 체크는 레일 **맨 위**다(2026-09-17 Q). 이번이 마지막인지가 과제 결과보다
-              먼저 정해지는 일이고, 당사자 카드에서 `상담 종결`로 들어오면 이미 켜진 채로 열린다.
-              제목 없는 2행 카드다(2026-09-18 Q D2) — 체크 한 줄, 안내 한 줄, 가로선 없음. */}
-          <Card className="record-closing-card">
-            <Choice
-              type="checkbox"
-              label="종결 상담"
-              hint="체크 시 상담 기록 저장 후 상담 종결지 작성 화면으로 이동"
-              checked={isClosing}
-              onChange={() => setIsClosing((v) => !v)}
-            />
-          </Card>
-          {/* 확인할 과제·오늘 물어볼 것은 카드 안 카드가 아니라 가로선으로 가른다(2026-09-18 Q D5).
-              항목이 넷 이상이면 접을 수 있는 카드로 세운다 — 기본은 펼침. */}
-          <OpenList title="확인할 과제" count={openTasks.length}>
+          {/* 종결 상담 체크는 하단 저장 줄의 알약이다(2026-09-18 Q — 구 레일 맨 위 카드 삭제).
+              확인할 과제·오늘 물어볼 것은 카드 안 카드가 아니라 가로선으로 가른다(2026-09-18 Q D5).
+              항목이 넷 이상이면 접을 수 있는 카드로 세운다 — 기본은 펼침. 팝업에서는 접어서 본문 아래다. */}
+          <OpenList title="확인할 과제" count={openTasks.length} collapsed={embedded}>
             {openTasks.length === 0 ? (
               <Empty>없음</Empty>
             ) : (
@@ -417,8 +420,8 @@ export function RecordScreen({
                     title={t.text}
                     desc={`${t.source_session_seq}회차, ${OWNER_LABEL[t.owner]}${t.last_result === 'unchecked' ? ', 지난 회차 미확인' : ''}`}
                   />
-                  {/* 결과는 셋이다(2026-09-15 Q). 범례 없이 라디오만 선다(2026-09-18 Q D6).
-                      그만두는 것은 상태가 아니라 과제를 접는 일이라 따로 둔다. */}
+                  {/* 결과는 넷이다(2026-09-18 Q — `중지` 추가, 구 `이 과제 그만두기` 체크 대체). 범례 없이
+                      라디오만 선다(2026-09-18 Q D6). 중지는 이유를 묻는다 — 서버가 `reason` 을 받는다. */}
                   <div className="wire-choice-group" role="radiogroup" aria-label="결과">
                     {TASK_RESULTS.map(({ label, value }) => (
                       <Choice
@@ -427,45 +430,34 @@ export function RecordScreen({
                         name={`outcome-${t.card_id}`}
                         label={label}
                         checked={taskResultLabel(outcomes[t.card_id]) === label}
-                        onChange={() => setOutcome(t.card_id, { ...value, card_id: t.card_id })}
+                        onChange={() => {
+                          if (value.follow !== 'stop') {
+                            setOutcome(t.card_id, { ...value, card_id: t.card_id });
+                            return;
+                          }
+                          const reason = window.prompt('중지하는 이유');
+                          if (reason?.trim())
+                            setOutcome(t.card_id, { ...value, card_id: t.card_id, reason: reason.trim() });
+                        }}
                       />
                     ))}
                   </div>
-                  <Choice
-                    type="checkbox"
-                    label="이 과제 그만두기"
-                    checked={outcomes[t.card_id]?.follow === 'stop'}
-                    onChange={() => {
-                      if (outcomes[t.card_id]?.follow === 'stop') {
-                        setOutcome(t.card_id, null);
-                        return;
-                      }
-                      const reason = window.prompt('그만두는 이유');
-                      if (reason?.trim())
-                        setOutcome(t.card_id, {
-                          card_id: t.card_id,
-                          result: 'not_done',
-                          follow: 'stop',
-                          reason: reason.trim(),
-                        });
-                    }}
-                  />
                 </div>
               ))
             )}
           </OpenList>
 
-          <OpenList title="오늘 물어볼 것" count={openQuestions.length}>
+          <OpenList title="오늘 물어볼 것" count={openQuestions.length} collapsed={embedded}>
             {openQuestions.length === 0 ? (
               <Empty>없음</Empty>
             ) : (
               openQuestions.map((q) => (
                 <div className="record-open-item" key={q.card_id}>
-                  <Item title={q.text} desc={`${q.source_session_seq}회차`} />
+                  {/* 체크 한 줄(`확인 - N회차`) 아래 질문 본문이다(2026-09-18 Q — 구 제목·회차 + `확인함`). */}
                   <Choice
                     type="checkbox"
                     name={`confirm-${q.card_id}`}
-                    label="확인함"
+                    label={`확인 - ${q.source_session_seq}회차`}
                     checked={outcomes[q.card_id]?.result === 'confirmed'}
                     onChange={() =>
                       setOutcome(
@@ -474,6 +466,7 @@ export function RecordScreen({
                       )
                     }
                   />
+                  <p className="seq-text">{q.text}</p>
                 </div>
               ))
             )}
@@ -506,8 +499,10 @@ export function RecordScreen({
 
         <main className="record-main">
           {/* 목표는 기록하면서 봐야 한다(2026-09-18 UI-9). 전체 상담 목표 + 이 회차가 이어받은 오늘 상담 목표.
-              둘 다 없으면 카드를 안 그린다. 고치는 자리는 목표 탭이다(SPEC §4-2) — 여기선 보내기만. */}
-          {briefing.goals && (
+              둘 다 없으면 카드를 안 그린다. 고치는 자리는 **인테이크**뿐이고(2026-09-18 Q — 목표 탭은
+              `상담 목표 기록` 읽기 전용이 됐다) 여기선 기록으로 보내기만 한다.
+              팝업(embedded)은 `오늘 상담 내용` 부터 시작한다(2026-09-18 Q). */}
+          {briefing.goals && !embedded && (
             <Card title="목표">
               <Item
                 title={briefing.goals.overall ?? '전체 상담 목표 없음'}
@@ -521,28 +516,18 @@ export function RecordScreen({
                     : '오늘 상담 목표'
                 }
                 action={
-                  <Button onClick={() => (window.location.hash = `#/cases/${caseId}/info/goals`)}>수정</Button>
+                  <Button onClick={() => (window.location.hash = `#/cases/${caseId}/info/goals`)}>기록 보기</Button>
                 }
               />
             </Card>
           )}
 
-          {/* 일시·소요 시간·방식·장소는 한 묶음이다. 장소는 대면일 때만 나오고 방식 바로 아래에 붙는다(요구 14). */}
+          {/* 일시·종료 시각·방식·장소는 한 묶음이다. 날짜·시작 시간·종료 시각은 일정 등록과 같은 행이다
+              (2026-09-18 Q — 구 소요 분 칸 대체, `.when-row`). 장소는 대면일 때만 나오고 방식 바로 아래에 붙는다(요구 14). */}
           <Card title="1. 오늘 상담 내용">
-            <div className="record-when-row">
+            <div className="when-row">
               <DateTimeInput idPrefix="held-at" value={heldAt} onChange={setHeldAt} disabled={saving} required />
-              <Field label="소요 시간(분)" htmlFor="duration-min">
-                <input
-                  id="duration-min"
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  step={5}
-                  value={duration}
-                  disabled={saving}
-                  onChange={(e) => setDuration(e.target.value)}
-                />
-              </Field>
+              <TimeSelect id="end-time" label="종료 시각" value={endTime} onChange={setEndTime} disabled={saving} />
             </div>
             <ChoiceGroup legend="상담 방식">
               {METHODS.map((m) => (
@@ -610,6 +595,7 @@ export function RecordScreen({
           </Card>
 
           <Card title="3. 다음에 물어볼 것">
+            {/* 수행 주체 자리를 비워 둬 입력칸 폭이 수행할 과제와 같다(2026-09-18 Q). */}
             <LineList
               id="question"
               label="다음에 물어볼 것"
@@ -618,6 +604,7 @@ export function RecordScreen({
               draft={questionDraft}
               onDraft={setQuestionDraft}
               onChange={setQuestions}
+              ownerToggle={<span className="task-owner-slot" aria-hidden="true" />}
             />
           </Card>
 
@@ -646,30 +633,22 @@ export function RecordScreen({
             </Field>
           </Card>
 
-          {(session?.id ?? startedId) ? (
-            <SessionAudio
-              key={session?.id ?? startedId}
-              sessionId={(session?.id ?? startedId)!}
-              writtenChanged={memo !== (editing?.memo ?? '')}
-              voiceStamp={voiceStamp}
-              onAccessLost={accessLost}
-            />
-          ) : (
-            <Fold title="음성·수기 기록 불일치">
-              <Empty>녹음 시작 또는 상담 내용 입력 시 회차 생성</Empty>
-            </Fold>
-          )}
-
+          {/* 저장 줄(2026-09-18 Q): 종결 상담 **알약 체크** + 저장. 구 하단 `음성·수기 기록 불일치` 카드는 걷었다.
+              팝업(embedded)에는 종결 체크가 없다(2026-09-18 Q) — 지난 회차 원본을 고치는 자리다. */}
           <FormActions>
             {error && <ErrorText>{error}</ErrorText>}
+            {!embedded && (
+              <ChoicePill label="종결 상담" checked={isClosing} disabled={saving} onChange={() => setIsClosing((v) => !v)} />
+            )}
             <Button
               variant="primary"
               disabled={(!memo.trim() && !startedId && !editing) || !heldAtIso || saving}
               onClick={() => void save()}
             >
-              {/* 수정 화면에서도 저장 버튼은 `저장`이다. 들어올 때 누른 버튼과 이름이 같으면
-                  같은 일을 또 하는 줄 안다(2026-09-15 예행연습). 화면 제목이 이미 수정이라고 말한다. */}
-              {saving ? '저장 중…' : isClosing ? '저장하고 종결로' : '저장'}
+              {/* 수정 화면(sessionId 있음)의 주 버튼은 `수정`이다 — 저장된 회차를 고쳐 쓰는
+                  일이라 새 기록의 `저장`과 이름을 가른다(2026-09-18 Q). 새 기록은 `저장`,
+                  종결 체크가 켜지면 `저장하고 종결로`. */}
+              {saving ? '저장 중…' : editingId ? (isClosing ? '수정하고 종결로' : '수정') : isClosing ? '저장하고 종결로' : '저장'}
             </Button>
           </FormActions>
         </main>
@@ -681,10 +660,11 @@ export function RecordScreen({
 /**
  * 레일의 열린 항목 묶음. 넷 이상이면 접을 수 있는 카드(기본 펼침), 아니면 보통 카드다
  * (2026-09-18 Q D5). 제목은 같고, 접을 수 있을 때만 개수가 붙는다(`완료한 과제 N` 과 같은 꼴).
+ * `collapsed` 면(팝업, 2026-09-18 Q) 개수와 무관하게 **접힌 카드**다 — 본문 아래로 내려가 있다.
  */
-function OpenList({ title, count, children }: { title: string; count: number; children: ReactNode }) {
-  return count >= 4 ? (
-    <Fold title={<>{title}<span className="fold-count">{count}</span></>} open>
+function OpenList({ title, count, collapsed = false, children }: { title: string; count: number; collapsed?: boolean; children: ReactNode }) {
+  return collapsed || count >= 4 ? (
+    <Fold title={<>{title}<span className="fold-count">{count}</span></>} open={!collapsed}>
       {children}
     </Fold>
   ) : (

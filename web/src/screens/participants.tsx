@@ -5,10 +5,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { getCaseDetail, listParticipants, type ParticipantRow } from '../api.ts';
 import { Button, Card, Chevron, Empty, Meta, PageHeader, Select } from '../ui.tsx';
 import './participants.css';
+import { dateTimeLabel } from '../date-time.ts';
 
-const scheduleDate = new Intl.DateTimeFormat('ko-KR', {
-  month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
-});
+// 날짜·일시 표기는 `date-time.ts` 한 곳이다(2026-09-18 Q — `2026.09.21.(월) AM 10:26`).
 const displayName = (row: ParticipantRow) => (row.can_access && row.name) || row.pseudonym;
 const workersOf = (row: ParticipantRow) => row.assignees.map((a) => a.name);
 
@@ -52,7 +51,7 @@ export function ParticipantsScreen({
    * 로 부른다(2026-09-18 Q A4 — 구 규칙은 보이는 열 건을 미리 불러 감사 줄을 열 개씩 남겼다).
    * 한 번 부른 사례는 다시 부르지 않는다.
    */
-  const [contacts, setContacts] = useState<Record<number, 'loading' | 'error' | { phone: string | null; email: string | null }>>({});
+  const [contacts, setContacts] = useState<Record<number, 'loading' | 'error' | { phone: string | null; email: string | null; overall_goal: string | null }>>({});
 
   useEffect(() => {
     void listParticipants().then(setRows);
@@ -128,7 +127,7 @@ export function ParticipantsScreen({
       .then((detail) =>
         setContacts((prev) => ({
           ...prev,
-          [caseId]: { phone: detail.participant.phone, email: detail.participant.email },
+          [caseId]: { phone: detail.participant.phone, email: detail.participant.email, overall_goal: detail.case.overall_goal },
         })),
       )
       .catch(() => setContacts((prev) => ({ ...prev, [caseId]: 'error' })));
@@ -208,18 +207,20 @@ export function ParticipantsScreen({
                 ? `${row.program_name} ${row.last_session_seq}회차`
                 : row.program_name,
               row.can_access && row.next_scheduled_at
-                ? `다음 상담 ${scheduleDate.format(new Date(row.next_scheduled_at))}`
+                ? `다음 상담 ${dateTimeLabel(row.next_scheduled_at)}`
                 : null,
             ];
-            const reach = contact === 'loading'
-              ? ([['연락처', '불러오는 중']] as Array<[string, string]>)
-              : contact === 'error'
-                ? ([['연락처', '불러오기 실패']] as Array<[string, string]>)
-                : ([
-                    ['연락처', contact?.phone ?? ''],
-                    ['이메일', contact?.email ?? ''],
-                    ['담당 실무자', workersOf(row).join(', ')],
-                  ] as Array<[string, string]>).filter(([, value]) => value !== '');
+            // 펼친 본문은 **네 칸 고정**이다(2026-09-18 Q): 연락처 · 이메일 · 담당 실무자 · 전체 상담 목표.
+            // 없는 값은 `-` — 칸이 빠지면 카드마다 격자가 달라진다. HERO 와 같은 규칙.
+            const loaded = contact && contact !== 'loading' && contact !== 'error' ? contact : null;
+            const value = (v: string | null | undefined) =>
+              contact === 'loading' ? '불러오는 중' : contact === 'error' ? '불러오기 실패' : v || '-';
+            const reach: Array<[string, string]> = [
+              ['연락처', value(loaded?.phone)],
+              ['이메일', value(loaded?.email)],
+              ['담당 실무자', workersOf(row).join(', ') || '-'],
+              ['전체 상담 목표', value(loaded?.overall_goal)],
+            ];
             /**
              * 카드는 접힘 카드다(2026-09-18 Q A2·A4 — 일정 화면의 `Fold` 와 같은 골격).
              * 공용 `Fold`(ui.tsx)를 그대로 쓰지 못하는 것은 `className` 을 받지 않아
@@ -281,18 +282,14 @@ export function ParticipantsScreen({
                   </span>
                 </summary>
                 <div className="wire-card-body">
-                  {reach.length === 0 ? (
-                    <Empty>연락처 없음</Empty>
-                  ) : (
-                    <div className="participant-card-fields">
-                      {reach.map(([label, value]) => (
-                        <div className="wire-field-row" data-layout="stack" data-size="sm" key={label}>
-                          <span className="wire-field-label">{label}</span>
-                          <span className="wire-field-value">{value}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <div className="participant-card-fields">
+                    {reach.map(([label, value]) => (
+                      <div className="wire-field-row" data-layout="stack" data-size="sm" key={label}>
+                        <span className="wire-field-label">{label}</span>
+                        <span className="wire-field-value" title={value}>{value}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </details>
             );

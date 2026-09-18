@@ -31,9 +31,7 @@ test('날짜 선택은 저장하지 않고, 취소를 보존하며 한국 시간
   await expect(open).toBeFocused();
   await expect(open).toContainText('1월 31일');
   expect((await (await page.request.get(`${api}/cases/${caseId}`)).json()).sessions).toHaveLength(0);
-  await page.locator('#schedule-period').selectOption('오전');
-  await page.locator('#schedule-hour').selectOption('12');
-  await page.locator('#schedule-minute').selectOption('15');
+  await page.locator('#schedule-time').selectOption('00:15');
   await page.getByRole('radio', { name: '전화', exact: true }).check();
   await page.getByRole('button', { name: '일정 저장', exact: true }).click();
   // 저장 뒤 도착지는 상담 일정 보기다(2026-09-17 Q — 잇달아 잡는 일이 많다).

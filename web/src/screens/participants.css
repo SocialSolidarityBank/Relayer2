@@ -3,9 +3,16 @@
 
 /* 검색칸은 업무 바의 절반이다. 이식 기본(`flex:1 1 360px; max-width:540px`)은 오른쪽에
    걸개 넷이 서면 자리를 다 먹으므로 자라지 않게 못 박는다. */
-.participant-toolbar { flex-wrap: wrap; row-gap: var(--space-3); }
+.participant-toolbar { flex-wrap: wrap; row-gap: var(--space-3); container-type: inline-size; }
 .participant-toolbar-search { flex: 0 1 340px; }
 .participant-toolbar-actions { flex: 1 1 auto; justify-content: flex-end; flex-wrap: wrap; }
+/* 걸개 넷은 **한 줄에 다 들어갈 때만** 오른쪽 끝이다. 검색 340 + 간격 12 + 걸개 660 = 1012 —
+   그보다 좁으면 묶음이 검색칸 아래 자기 행으로 내려가는데, 그때도 오른쪽 끝이면 검색칸과
+   시작선이 어긋난다(2026-09-18 Q 실측 1200: 첫 걸개 x=136 vs 검색 x=21). 줄이 바뀌면 왼쪽선에
+   맞춘다. 판정은 창 폭이 아니라 툴바 자신의 폭이다. */
+@container (max-width: 1011px) {
+  .participant-toolbar-actions { justify-content: flex-start; }
+}
 /* 걸개·정렬 선택창은 알약 높이의 고정 폭이다. 폭을 안 박으면 `wire-input-box` 가 남은
    자리를 다 먹어 넷이 한 줄씩 쌓였다(1440 실측 587px). 사업명만 한 단 넓다. */
 .participant-toolbar-actions > .wire-input-box { flex: 0 0 150px; min-height: var(--pill-height); min-width: 0; }
@@ -49,6 +56,19 @@
 .participant-state[data-tone='neutral'] { color: var(--sub); }
 /* 행동 둘은 줄바꿈하지 않는다 — 머리 한 줄의 오른쪽 끝이 이 카드의 고정된 자리다. */
 .participant-card .wire-item-action { display: flex; flex: none; align-items: center; gap: var(--space-2); }
+/* 펼친 본문은 네 칸 격자다(2026-09-18 Q): 연락처 · 이메일 · 담당 실무자 · 전체 상담 목표.
+   HERO 정보 격자와 같은 레시피(라벨 위·값 아래, 간격 4, 값 한 줄 말줄임). 폭은 카드 자신이 잰다:
+   900 이상 4열, 480 이상 2열, 그 아래 1열. */
+.participant-card { container-type: inline-size; }
+.participant-card .participant-card-fields { grid-template-columns: minmax(0, 1fr); gap: var(--space-4) var(--space-6); }
+.participant-card .participant-card-fields > .wire-field-row[data-layout='stack'] { gap: var(--space-1); }
+.participant-card .participant-card-fields .wire-field-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+@container (min-width: 480px) {
+  .participant-card .participant-card-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container (min-width: 900px) {
+  .participant-card .participant-card-fields { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
 
 /* 쪽 넘기기는 가운데다. 꺽쇠 버튼 둘과 `N / M 쪽` 한 줄. */
 .participant-pager { display: flex; align-items: center; justify-content: center; gap: var(--space-4); }

@@ -6,6 +6,7 @@
 // `size="wide"` 는 두 열 본문용 큰 팝업이다(2026-09-18 Q E2 — 폭 min(1200px, 96vw)).
 import { useEffect, useRef, type ReactNode } from 'react';
 import { Button, FormActions } from './ui.tsx';
+import { NavIcon } from './shell-icons.tsx';
 
 export function Dialog({
   id,
@@ -16,6 +17,7 @@ export function Dialog({
   onClose,
   className,
   actions,
+  headClose,
   children,
 }: {
   id: string;
@@ -29,6 +31,8 @@ export function Dialog({
   className?: string;
   /** 닫기 왼쪽에 서는 행동(수정·저장). */
   actions?: ReactNode;
+  /** 제목 행 오른쪽 끝에 32px 원형 X 닫기를 두고 아래 `닫기` 버튼 줄을 걷는다(회차 원본). */
+  headClose?: boolean;
   children: ReactNode;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -65,12 +69,29 @@ export function Dialog({
           onClose?.();
         }}
       >
-        <h2 id={`${id}-title`}>{title}</h2>
+        {headClose ? (
+          <div className="dialog-head">
+            <h2 id={`${id}-title`}>{title}</h2>
+            <button
+              type="button"
+              className="header-icon-button dialog-close"
+              aria-label="닫기"
+              title="닫기"
+              onClick={() => dialog.current?.close()}
+            >
+              <NavIcon name="close" />
+            </button>
+          </div>
+        ) : (
+          <h2 id={`${id}-title`}>{title}</h2>
+        )}
         {children}
-        <FormActions>
-          {actions}
-          <Button onClick={() => dialog.current?.close()}>닫기</Button>
-        </FormActions>
+        {!headClose && (
+          <FormActions>
+            {actions}
+            <Button onClick={() => dialog.current?.close()}>닫기</Button>
+          </FormActions>
+        )}
       </dialog>
     </>
   );

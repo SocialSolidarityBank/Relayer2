@@ -215,9 +215,10 @@ export function Routes() {
     const reviewing = path.match(/^#\/cases\/(\d+)\/sessions\/(\d+)\/review$/);
     if (reviewing) return <ReviewScreen caseId={Number(reviewing[1])} sessionId={Number(reviewing[2])} />;
 
-    // 목표 탭 직행(2026-09-18 UI-9). 기록 화면의 목표 카드 `수정`이 여기로 온다.
+    // 목표 직행(2026-09-18 UI-9). 기록 화면의 목표 카드 `기록 보기`가 여기로 온다 — 목표 기록은
+    // 기본 정보 탭의 아코디언이다(2026-09-18 Q, 구 넷째 탭 폐지).
     const goals = path.match(/^#\/cases\/(\d+)\/info\/goals$/);
-    if (goals) return <ParticipantInfoScreen caseId={Number(goals[1])} initialTab="목표" />;
+    if (goals) return <ParticipantInfoScreen caseId={Number(goals[1])} initialTab="기본 정보" />;
 
     const byCase = path.match(/^#\/cases\/(\d+)\/(record|schedule|intake|info|close)$/);
     if (byCase) {
@@ -236,12 +237,7 @@ export function Routes() {
     return null;
   })();
 
-  // HERO 만 있고 큰 제목이 없는 화면의 페이지 이름(뒤로 줄 오른쪽, 16px 라벤더). 필요한 화면만 준다.
-  const eyebrow = /^#\/cases\/\d+\/schedule$/.test(path)
-    ? '상담 일정 등록'
-    : /^#\/cases\/\d+\/record$/.test(path) || /^#\/cases\/\d+\/sessions\/\d+\/edit$/.test(path)
-      ? '상담 기록지'
-      : undefined;
+  // 페이지 이름은 각 화면이 HERO 위 `h1`(PageHeader)로 갖는다(2026-09-18 Q — 구 뒤로 줄 눈썹 텍스트 폐지).
 
 
   /**
@@ -428,7 +424,7 @@ export function Routes() {
       {/* 뒤로 가기는 본문 위 한 자리다(정본 .page-backbar). 돌아갈 곳이 없으면 안 그린다. */}
       <div className="content-column">
         <ApiFailureBanner />
-        <BackLink title={eyebrow} />
+        <BackLink />
         <div className="page-content">{screen}</div>
       </div>
     </div>

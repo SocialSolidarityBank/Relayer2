@@ -63,6 +63,12 @@ export class Forbidden extends Error {}
 const BASE = import.meta.env.DEV ? '/api' : '';
 
 /**
+ * 밖으로 나가는 앱 주소(당사자 열람 링크·초대 링크). 배포에서 앱은 `/app` 아래고 `/` 는 공개 쪽이라
+ * `origin + '#/…'` 로 만들면 랜딩으로 떨어진다(2026-09-18 실측). 지금 문서의 경로를 그대로 쓴다.
+ */
+export const appUrl = (hash: string): string => `${window.location.origin}${window.location.pathname}#${hash}`;
+
+/**
  * 부르다 실패한 사실을 셸에 알린다(2026-09-16 검수).
  *
  * 화면 스무 곳이 `void getX().then(setX)` 꼴이라 실패하면 `setX` 가 안 불리고

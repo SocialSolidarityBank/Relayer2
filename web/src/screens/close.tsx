@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { closeCase, getCaseDetail, type CaseDetail } from '../api.ts';
 import { OWNER_LABEL } from '../api.ts';
 import { Button, Card, Choice, ChoiceGroup, Empty, ErrorText, Field, FormActions, Item, Meta, ParticipantHero } from '../ui.tsx';
+import { dateTimeLabel } from '../date-time.ts';
 
 // 종결 사유는 통합사례관리 종결 구분을 따른다. 없는 말을 지어내지 않는다.
 const REASONS = ['목표 달성', '타 기관 의뢰', '당사자 거부·중단', '연락 두절', '이사·전출', '기타'] as const;
@@ -40,9 +41,9 @@ export function CloseScreen({ caseId }: { caseId: number }) {
   // 당사자 카드 정보 넷(2026-09-17 Q — ②ⓐ 모든 화면 같은 격자).
   // 당사자 카드 정보 넷(2026-09-17 Q): ID · 사업과 회차 · 연락처 · 이메일.
   const heroDetails: Array<[string, string]> = [
-    ['당사자 ID', detail.pseudonym],
+    ['ID', detail.pseudonym],
     [
-      '참여 사업',
+      '참여중인 사업',
       `${detail.case.program_name}${lastSeq ? `, 마지막 ${lastSeq}회차` : ', 기록 없음'}`,
     ],
     ['연락처', detail.participant.phone ?? ''],
@@ -63,7 +64,7 @@ export function CloseScreen({ caseId }: { caseId: number }) {
         />
         <div className="wire-container">
           <Card title="이미 종결한 사례">
-            <Item title={detail.closure.close_reason} desc={new Date(detail.closure.closed_at).toLocaleString('ko-KR')} />
+            <Item title={detail.closure.close_reason} desc={dateTimeLabel(detail.closure.closed_at)} />
             <Button onClick={() => (window.location.hash = `#/cases/${caseId}/info`)}>당사자 정보로</Button>
           </Card>
         </div>

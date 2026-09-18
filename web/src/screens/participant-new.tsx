@@ -2,6 +2,7 @@
 // 정본 화면 이름이다. `사례 등록`이라는 이름은 존재하지 않는다.
 import { useEffect, useState } from 'react';
 import {
+  appUrl,
   createCase,
   getConsentCopy,
   issueAccess,
@@ -187,7 +188,7 @@ export function ParticipantNewScreen() {
             사례가 없으면 링크를 만들 수 없기 때문이다. */}
         <ConsentLinkCard
           status={issued ? 'active' : 'none'}
-          link={issued ? `${window.location.origin}/#/access/${issued.token}` : null}
+          link={issued ? appUrl(`/access/${issued.token}`) : null}
           code={issued?.code ?? null}
           busy={saving === 'link'}
           disabled={!ready}

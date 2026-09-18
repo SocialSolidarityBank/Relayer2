@@ -34,6 +34,8 @@ app_name="relayer2-${slug}"
 public_url="${RELAYER_PUBLIC_URL:-https://${slug}.relayer.kr}"
 [[ "$public_url" =~ ^https://[^/[:space:]]+/?$ ]] || fail "RELAYER_PUBLIC_URL은 경로 없는 https URL이어야 합니다."
 public_url="${public_url%/}"
+public_host="${public_url#https://}"
+[[ "$public_host" == *.*.* ]] || fail "RELAYER_PUBLIC_URL 은 <이름>.<zone> 꼴의 하위 도메인이어야 합니다(DNS 는 zone 안에 만든다)."
 pgschema="${PGSCHEMA:-}"
 if [ -n "$pgschema" ]; then
   [[ "$pgschema" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || fail "PGSCHEMA는 PostgreSQL 식별자 형식이어야 합니다."
@@ -91,7 +93,7 @@ DRY-RUN — 외부 시스템을 호출하거나 변경하지 않았습니다.
 2. DATABASE_URL 연결 확인: select 1
 3. Infisical prod:${secret_path}: 부모→자식 폴더 생성, 기존 DATABASE_URL PII_ENC_KEY SESSION_SECRET 건너뜀
 4. resource group ${RG}: 기존 자원 재사용
-5. storage account ${storage_account}: public blob 차단, TLS 1.2
+5. storage account ${storage_account}: public blob 차단, TLS 1.2, 계정 키 접근 끔
 6. blob containers voice documents: private
 7. Container App ${app_name}: ${ACA_ENV}, ${IMAGE}, ingress 8787, min 0/max 1
    BLOB_ACCOUNT=${storage_account}
@@ -102,8 +104,10 @@ ${schema_plan}
 9. Storage Blob Data Contributor: ${storage_account} scope
 10. node api/src/migrate.ts --check
 11. GET /auth/signup open:true
+12. Cloudflare DNS ${public_host}: CNAME(프록시 없음) + TXT asuid.${public_host}
+13. custom hostname ${public_host}: 관리형 인증서(CNAME 검증), GET ${public_url}/health
 가입 URL: ${public_url}/#/signup
-APPLY=1일 때만 위 계획을 실행합니다. DNS는 이 스크립트가 변경하지 않습니다.
+APPLY=1일 때만 위 계획을 실행합니다. DNS 토큰은 Infisical prod:/ CLOUDFLARE_DNS_API_TOKEN 이다.
 EOF
   exit 0
 fi
@@ -231,7 +235,10 @@ printf '5. storage account %s\n' "$storage_account"
 ensure "$storage_account" az storage account show --name "$storage_account" --resource-group "$RG" -- \
   az storage account create --name "$storage_account" --resource-group "$RG" --location "$LOCATION" \
     --sku Standard_LRS --kind StorageV2 --min-tls-version TLS1_2 --https-only true \
-    --allow-blob-public-access false --output none
+    --allow-blob-public-access false --allow-shared-key-access false --output none
+# 계정 키(뒷문)는 잠근다 — 앱은 관리 ID(정문)만 쓴다. 이미 있던 계정도 같은 상태로 맞춘다.
+az storage account update --name "$storage_account" --resource-group "$RG" \
+  --allow-shared-key-access false --output none
 
 printf '6. blob containers voice documents\n'
 for container in voice documents; do
@@ -332,12 +339,56 @@ fqdn="$(az containerapp show --name "$app_name" --resource-group "$RG" --query p
 curl -fsS --retry 12 --retry-delay 5 --retry-all-errors "https://${fqdn}/health" >/dev/null
 
 printf '10. node api/src/migrate.ts --check\n'
-az containerapp exec --name "$app_name" --resource-group "$RG" \
-  --command 'node api/src/migrate.ts --check'
+# `az containerapp exec` 는 TTY 가 없으면 termios 오류로 죽는다(2026-09-18 실측). 파이프로
+# 돌릴 때는 `script` 로 가짜 TTY 를 준다. 출력에서 "migrations up to date" 를 직접 확인한다.
+exec_out="$TMP/migrate-check.log"
+if [ -t 0 ]; then
+  az containerapp exec --name "$app_name" --resource-group "$RG" \
+    --command 'node api/src/migrate.ts --check' | tee "$exec_out"
+else
+  script -q "$exec_out" az containerapp exec --name "$app_name" --resource-group "$RG" \
+    --command 'node api/src/migrate.ts --check' </dev/null >/dev/null
+fi
+grep -q 'migrations up to date' "$exec_out" || fail "migrate --check 가 'migrations up to date' 를 내지 않았습니다."
 
 printf '11. GET /auth/signup open:true\n'
 curl -fsS --retry 5 --retry-delay 2 --retry-all-errors "https://${fqdn}/auth/signup" | \
   python3 -c 'import json,sys; raise SystemExit(0 if json.load(sys.stdin).get("open") is True else 1)' || \
   fail "/auth/signup이 open:true가 아닙니다."
 
+printf '12. Cloudflare DNS %s\n' "$public_host"
+verification_id="$(az containerapp show --name "$app_name" --resource-group "$RG" \
+  --query properties.customDomainVerificationId --output tsv)"
+[ -n "$verification_id" ] || fail "customDomainVerificationId 를 확인하지 못했습니다."
+OP_BIOMETRIC_UNLOCK_ENABLED=false "$OPSVC" run --env-file="$op_refs" -- \
+  env PROJECT_ID="$INFISICAL_PROJECT_ID" PYTHONPATH=scripts \
+  python3 scripts/cloudflare_dns.py "$public_host" "$fqdn" "$verification_id"
+
+printf '13. custom hostname %s\n' "$public_host"
+bound="$(az containerapp hostname list --name "$app_name" --resource-group "$RG" \
+  --query "[?name=='${public_host}'] | length(@)" --output tsv)"
+if [ "$bound" = "0" ]; then
+  # 방금 만든 TXT 를 Azure 가 아직 못 볼 수 있다(2026-09-18 실측: InvalidCustomHostNameValidation).
+  # 전파는 보통 1~2분이라 20초 간격으로 최대 5분 기다린다.
+  added=0
+  for attempt in $(seq 1 15); do
+    if az containerapp hostname add --name "$app_name" --resource-group "$RG" --hostname "$public_host" \
+         --output none 2>"$TMP/hostname-add.err"; then
+      added=1
+      break
+    fi
+    grep -q 'InvalidCustomHostNameValidation' "$TMP/hostname-add.err" || { cat "$TMP/hostname-add.err" >&2; fail "hostname add 실패"; }
+    printf '  DNS 전파 대기 (%s/15)\n' "$attempt"
+    sleep 20
+  done
+  [ "$added" = 1 ] || fail "asuid.${public_host} TXT 가 5분 안에 보이지 않았습니다."
+  # 관리형 인증서 발급은 DNS 전파 뒤 수 분 걸린다. bind 가 끝까지 기다린다.
+  az containerapp hostname bind --name "$app_name" --resource-group "$RG" --hostname "$public_host" \
+    --environment "$ACA_ENV" --validation-method CNAME --output none
+  printf '  생성: %s (관리형 인증서)\n' "$public_host"
+else
+  printf '  있음: %s\n' "$public_host"
+fi
+curl -fsS --retry 12 --retry-delay 10 --retry-all-errors "${public_url}/health" >/dev/null || \
+  fail "${public_url}/health 응답 없음 — DNS 전파나 인증서 상태를 확인하세요."
 printf '가입 URL: %s/#/signup\n' "$public_url"

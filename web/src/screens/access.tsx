@@ -4,15 +4,9 @@ import { useState } from 'react';
 import { openAccess, type ParticipantView } from '../api.ts';
 import { Button, Card, Empty, ErrorText, Field, FormActions, Item, PageHeader } from '../ui.tsx';
 import { METHOD_LABEL } from '../vocab.ts';
+import { dateTimeLabel } from '../date-time.ts';
 
-const when = (iso: string): string =>
-  new Date(iso).toLocaleString('ko-KR', {
-    month: 'long',
-    day: 'numeric',
-    weekday: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+// 일시 표기는 `date-time.ts` 의 `dateTimeLabel` 하나다(2026-09-18 Q).
 
 export function AccessScreen({ token }: { token: string }) {
   const [code, setCode] = useState('');
@@ -75,7 +69,7 @@ export function AccessScreen({ token }: { token: string }) {
             view.schedule.map((s) => (
               <Item
                 key={s.scheduled_at}
-                title={when(s.scheduled_at)}
+                title={dateTimeLabel(s.scheduled_at)}
                 desc={[s.program_name, s.method ? METHOD_LABEL[s.method] : null, s.place]
                   .filter(Boolean)
                   .join(', ')}

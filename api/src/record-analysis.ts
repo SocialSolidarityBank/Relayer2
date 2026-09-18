@@ -10,12 +10,12 @@
 //   · 사실의 근거는 수기(w:)뿐. 전사(t:)는 연결·대조만 한다(T19).
 import { createHash } from 'node:crypto';
 import { assertConsent, replaceAiCards, approvedSummaries } from './service.ts';
-import { AI_PROVIDERS, type AiProviderId } from './consent.ts';
+import { AI_PROVIDERS } from './consent.ts';
 import { audit } from './audit.ts';
 import { sql } from './db.ts';
 import { maskText, type MaskSubject } from './domain/masking.ts';
 import { decryptJson, decryptPii, decryptText, encryptText } from './pii.ts';
-import { callModel, AiUnavailable } from './ai.ts';
+import { callModel, AiUnavailable, model, provider } from './ai.ts';
 import { validateStructuredRecord } from './domain/structured-record.ts';
 import { validateSessionSummary } from './domain/session-summary.ts';
 import { validateTranscriptLinks } from './domain/transcript-links.ts';
@@ -598,8 +598,8 @@ export async function draftAnalysis(sessionId: number, actorId: number): Promise
       : []),
   ].join('\n');
 
-  const PROVIDER = (process.env.AI_PROVIDER ?? 'openai') as AiProviderId;
-  const MODEL = process.env.AI_MODEL ?? (PROVIDER === 'gemini' ? 'gemini-flash-latest' : 'gpt-5.5');
+  const PROVIDER = provider();
+  const MODEL = model();
 
   const insertFailed = async (error: string): Promise<AnalysisRevision> => {
     const [row] = await sql<AnalysisRow[]>`

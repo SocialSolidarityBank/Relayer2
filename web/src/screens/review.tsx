@@ -275,8 +275,8 @@ export function ReviewScreen({ caseId, sessionId }: { caseId: number; sessionId:
         name={detail?.participant.name ?? null}
         pseudonym={detail?.pseudonym ?? '확인 중'}
         details={[
-          ['당사자 ID', detail?.pseudonym ?? '확인 중'],
-          ['참여 사업', `${detail?.case.program_name ?? '확인 중'}${seq ? `, ${seq}회차` : ''}`],
+          ['ID', detail?.pseudonym ?? '확인 중'],
+          ['참여중인 사업', `${detail?.case.program_name ?? '확인 중'}${seq ? `, ${seq}회차` : ''}`],
           ['연락처', detail?.participant.phone ?? ''],
           ['이메일', detail?.participant.email ?? ''],
         ]}

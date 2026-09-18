@@ -535,7 +535,7 @@ record_analyses(id, session_id, status draft|approved|failed, schema_version, ru
 
 ### 15-5. 사례 기억은 초안 입력이 아니다 (2026-09-18 Q, v6)
 
-`case_memories` 표·갱신 훅·철회·감사는 남아 있으나 **v6 초안 입력으로 쓰지 않는다** — 소비자 없는 보류 기능이다(겹치는 `feat/case-memory` 레인과의 결정, v6 우선).
+`case_memories` 표·갱신 훅·철회·감사(§15-7)는 남아 있으나 **v6 초안 입력으로 쓰지 않는다** — 소비자 없는 보류 기능이다(겹치는 `feat/case-memory` 레인과의 결정 20, v6 우선). 승인 뒤 갱신 훅(`approve_draft`)도 v6 승인 경로에는 없다.
 
 ### 15-6. 모델은 재서 고른다 (2026-09-15 실측)
 
@@ -560,6 +560,32 @@ record_analyses(id, session_id, status draft|approved|failed, schema_version, ru
 핵심을 버렸다. 모델을 바꾸는 것보다 칸을 나누고 우선순위를 주는 편이 효과가 컸다.
 
 관문 2 는 **입력 수와 걸린 시간**을 재는 관문이다. 여기서 10초를 흘리면 측정이 무의미해진다.
+
+### 15-7. 사례 기억 (2026-09-18 Q · v6 이후 보류 기능)
+
+```
+case_memories(case_id PK → support_cases cascade, enc_text, through_seq, refs, mask_hits, model, created_by, updated_at)
+```
+
+사례당 **한 행**의 요약 캐시다. 처음엔 초안의 과거 입력이었으나 **v6(§15-4·§15-5) 이후 초안은 읽지 않는다** — 저장·삭제·동결만 남았다.
+
+- **무엇인가.** 그 사례의 기록된(`status=done`) 회차 전체를 마스킹(§15-2 그대로 — 식별자만, 민감정보 내용은 남는다)해
+  외부 LLM 이 접은 글이다. 전체 상담 목표·미완료 과제·약속·회차 사이에 달라진 사실을 회차 번호와 함께 담고, 기본값 4,000자를 넘지 않는다.
+  `refs` 는 근거로 읽은 회차·카드 id 다 — 데이터 계약만 있고 화면은 아직 없다. 본문은 `encryptText` 로 감싼다.
+- **기록이 아니다.** 초안과 같은 비공식 지위다. 사람이 승인하지 않고 화면에 보이지 않으며, 언제든 같은 절차로 다시 만든다.
+  증분이 아니라 매번 처음부터 접는다 — 원본이 고쳐져도 같은 답이 나온다.
+- **같은 문을 지난다.** `external_llm_cross_border_processing` 동의 → 마스킹 → 외부 호출(초안과 같은 제공자·`store:false`) → 저장 →
+  감사 `ai.memory`(trigger·through_seq·수신자·국가·모델·store·masked 건수). 동의가 없으면 호출도 행도 없다.
+- **언제 접히나.** 회차 기록 저장(`PUT /cases/:id/intake`·`PATCH /sessions/:id`)과 초안 승인 뒤에 **뒤에서 한 번**(`trigger=record_done|edit|approve_draft`).
+  크론 없음. 실패해도 요청은 성공이며 로그에 남는다. 방금 저장한 회차가 마지막 회차면 **그 앞까지만** 접는다 — 그 회차의 초안은 "직전까지" 의 기억을 원하기 때문이다.
+- **초안은 읽지 않는다(v6).** 구 `draft_request` 재생성 경로는 없어졌다. 접을 때 응답의 `refs` 가 사례 밖 id 를 가리키거나 본문이 상한을 넘으면 실패로 본다.
+- **사라지는 때.** (1) 사례·당사자 삭제는 FK cascade. (2) `external_llm_cross_border_processing` 철회는 그 자리에서 삭제(`ai.memory.withdraw`, 음성 철회 규칙과 대칭).
+  `sensitive_information_processing` 철회는 기록과 같이 지우지 않는다(§14 철회는 지움이 아니다). (3) 기록된 회차를 고쳐 저장하면 **같은 트랜잭션에서** 지우고 뒤에서 다시 접는다 —
+  재생성이 실패해도 옛 기억이 초안에 들어가는 창이 없다. (4) 글 기록 1년 파기 스위프는 아직 없다(§17) — 생기면 cascade 로 따라간다.
+- **종결되면 얼어붙는다.** `support_cases.status='closed'` 인 사례는 갱신하지 않는다(행 보존). 종결 사례의 초안 요청은 이미 409 다.
+- **동시 갱신은 막지 않는다.** 둘 다 그 시점의 맞는 스냅샷이고, 초안은 `through_seq` 가 정확히 맞을 때만 읽는다.
+- 시험: `api/test/case-memory.integration.test.ts` — 동의 게이트, 원문 누출 0, 감사 필드, 수정 시 삭제→재생성, 사례 밖 refs·상한 초과 실패, 종결·철회·삭제.
+- 범위 밖: 위키·백링크·하이라이트 화면, 질의응답 화면, 실무자 기억, 당사자 횡단 기억, 민감정보 범주 제외, 기억 이력 표.
 
 ---
 

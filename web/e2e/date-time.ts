@@ -22,22 +22,16 @@ export const pickDate = async (page: Page, idPrefix: string, date: string) => {
   await dialog.getByRole('button', { name: '선택 완료', exact: true }).click();
 };
 
-/** `YYYY-MM-DDTHH:mm`(24시간제, 한국 시간)을 날짜 + 오전·오후/시/분으로 채운다. */
+/** `YYYY-MM-DDTHH:mm`(24시간제, 한국 시간)을 날짜 + 시작 시간 선택창(5분 격자)으로 채운다(2026-09-18 Q). */
 export const pickDateTime = async (page: Page, idPrefix: string, value: string) => {
   const [date, time] = value.split('T');
-  const [hour, minute] = time.split(':').map(Number);
   await pickDate(page, idPrefix, date);
-  await page.locator(`#${idPrefix}-period`).selectOption(hour < 12 ? '오전' : '오후');
-  await page.locator(`#${idPrefix}-hour`).selectOption(String(hour % 12 || 12));
-  await page.locator(`#${idPrefix}-minute`).selectOption(String(minute).padStart(2, '0'));
+  await page.locator(`#${idPrefix}-time`).selectOption(time);
 };
 
 /** 저장된 ISO 가 화면에 한국 시간으로 그대로 올라왔는지 본다(수정 수화 검증). */
 export const expectDateTime = async (page: Page, idPrefix: string, value: string) => {
   const [date, time] = value.split('T');
-  const [hour, minute] = time.split(':').map(Number);
   await expect(page.locator(`#${idPrefix}-date`)).toContainText(dayLabel(date));
-  await expect(page.locator(`#${idPrefix}-period`)).toHaveValue(hour < 12 ? '오전' : '오후');
-  await expect(page.locator(`#${idPrefix}-hour`)).toHaveValue(String(hour % 12 || 12));
-  await expect(page.locator(`#${idPrefix}-minute`)).toHaveValue(String(minute).padStart(2, '0'));
+  await expect(page.locator(`#${idPrefix}-time`)).toHaveValue(time);
 };

@@ -42,10 +42,12 @@ body { margin: 0; }
    `artifacts/2026-09-09-workflow-prototypes/prototype.css` 의 `.participant-tabs` 를 가져왔다).
    상자는 `--panel` 면 + `--gradient-brand` 1px 아웃라인(선택 어휘와 같은 테두리)이고,
    고른 탭만 `--gradient-action` 으로 채운다 — 버튼·켠 체크와 같은 '고른 것' 어휘다.
-   칸은 같은 폭으로 나눠 토글로 읽히게 한다. 767 이하는 2열이다. */
+   칸은 같은 폭으로 나눠 토글로 읽히게 한다. **열 수는 이 열의 폭이 정한다**(2026-09-18 Q 7):
+   640 미만이면 세로 1열 3행, 640 이상 3열이다(2026-09-18 Q — 3탭) — 창 폭 기준이면 사이드바가 먹은 폭을 못 본다. */
+.info-screen { container-type: inline-size; }
 .info-tabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-2);
   margin-bottom: var(--space-4);
   padding: var(--space-2);
@@ -68,8 +70,37 @@ body { margin: 0; }
   color: var(--on-action);
   font-weight: 600;
 }
-@media (max-width: 767px) {
-  .info-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@container (min-width: 640px) {
+  .info-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+/* 접힘 카드 머리의 요약 줄은 이 화면에서 줄바꿈한다(2026-09-18 Q 11) — 한 줄 말줄임이
+   `수기…` 처럼 잘려 무슨 회차인지 못 읽혔다.
+   **최소 폭을 함께 줘야 한다**: flex 항목이라 `min-width:0` 만 있으면 좁은 폭에서 최소
+   내용폭(한 글자)까지 쭈그러진다(390 실측 — 글자가 세로로 한 줄씩 쌓였다). 폭이 모자라면
+   제목 줄 아래로 내려가 온전한 너비로 접힌다. */
+.info-screen .wire-card-summary > .wire-card-title { flex-wrap: wrap; row-gap: var(--space-1); }
+.info-screen .fold-title-desc { flex: 1 1 12rem; min-width: 12rem; white-space: normal; overflow: visible; }
+/* 모바일 HERO 정보는 기본 접힘이다(2026-09-18 Q 9) — 390 에서 이름·행동·네 줄이 화면
+   절반을 먹었다. 768 이상은 늘 펼쳐 있고 여는 줄을 숨긴다: `open` 은 마크업이 정하고
+   (`ui.tsx` 의 matchMedia) 여기서는 노출과 옷만 다룬다. */
+.participant-hero-fold { display: grid; gap: var(--space-4); min-width: 0; }
+.participant-hero-more {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--mint-deep);
+  cursor: pointer;
+  list-style: none;
+}
+.participant-hero-more::-webkit-details-marker { display: none; }
+.participant-hero-more:focus-visible { outline: 2px solid var(--blue-deep); outline-offset: 2px; }
+.participant-hero-chevron { flex: none; display: inline-flex; color: currentColor; transition: transform var(--motion-fast) var(--ease-standard); }
+.participant-hero-fold[open] > .participant-hero-more .participant-hero-chevron { transform: rotate(180deg); }
+@media (min-width: 768px) {
+  .participant-hero-more { display: none; }
 }
 /* 두 칸 변형 — 드로어 머리의 `수기 기록 ↔ 녹음 전사` 전환이 쓴다. 제목·닫기와 한 줄이라
    아래 여백을 두지 않고 글자 폭만 차지한다. */
@@ -134,10 +165,16 @@ body { margin: 0; }
    하나뿐이라 선이 가르는 것이 없다 — 나누는 일은 제목 줄의 아래 패딩 24 가 이미 한다.
    `Fold` 가 그리던 `.wire-card-divider` 는 마크업에서 걷었다(선이 두 줄이었다). */
 .wire-card-details[open] > .wire-card-summary { border-bottom: 0; }
-/* 펼친 제목 줄의 설명 글자도 채운 면 전용 색을 받는다(2026-09-17 Q). 이식 CSS 는 제목·배지·
-   세로선만 반전하고 설명(`--sub`)은 빼 두었다 — 다크의 `--sub`(#B5AEBE)가 파스텔 면 위에
-   올라가 대비 1.15:1 이 됐다(실측). 라이트도 4.34:1 로 기준 밑이었다. */
-.wire-card-details[open]:not(.is-crisis) > .wire-card-summary .fold-title-desc { color: var(--on-action); }
+/* 펼친 머리는 두 테마 모두 파스텔 면이다. **제목 묶음 안 모든 글자**를 `--on-action` 으로
+   뒤집는다 — 회색 메타·계열색 플래그(`AI` 라벤더·`원본 수정됨` 코랄)·상태 텍스트·개수 칩이
+   제 색을 들고 오면 면 위에서 사라진다(2026-09-18 Q "텍스트 반전 안 됨": 라벤더 `AI` 가
+   라벤더 파스텔 위에 얹혔다). 클래스마다 덧대던 규칙 넷(요약 줄·회차 번호·날짜·사업 행)을
+   이 하나로 모았다 — 새 글자가 들어와도 따로 규칙을 안 붙인다. 버튼은 제목 묶음 밖(오른쪽
+   행동 묶음)에 서므로 안 걸리고, 위험 회차(`is-crisis`)는 코랄 면이라 뒤집지 않는다. */
+.wire-card-details[open]:not(.is-crisis) > .wire-card-summary .wire-card-title,
+.wire-card-details[open]:not(.is-crisis) > .wire-card-summary .wire-card-title * { color: var(--on-action); }
+/* 개수 칩은 회색 면을 벗고 면 전용 선만 남긴다 — 파스텔 위 회색 상자는 얼룩으로 읽힌다. */
+.wire-card-details[open]:not(.is-crisis) > .wire-card-summary .fold-count { background: transparent; box-shadow: inset 0 0 0 1px var(--line-on-action); }
 
 /* 항목 행에 행동이 있으면 **글 왼쪽 · 행동 오른쪽, 세로 가운데**다(2026-09-17 Q).
    이식 CSS 의 `.wire-item-action{justify-self:start}` 는 행동을 설명 아래 왼쪽에 쌓아,
@@ -176,7 +213,30 @@ body { margin: 0; }
 .wire-form-label[data-tone="ai"],
 .wire-card-title[data-tone="ai"],
 .wire-card-title[data-tone="ai"] > .wire-card-head > h2 { color: var(--lavender-deep); }
+/* 폼 묶음 제목(legend)은 **입력 라벨과 같은 규칙**이다(2026-09-18 Q — 일정 등록의 `상담 방식`):
+   14/600 민트, 가로선 없음. 이식 규칙(16/600 + 위 가로선)은 카드 안에서 카드 제목과 겹쳐 위계가 없었다. */
+.wire-fieldset { border-top: 0; padding-top: 0; }
+.wire-fieldset > legend { font-size: var(--text-sm); }
+/* 카드 제목 옆 한 줄 안내(`Card meta`, 2026-09-18 Q — 녹음 카드). 13 --sub, 제목과 8 띄운다.
+   이식 `.wire-card-head` 가 둘째 자식부터 auto 마진을 주므로 왼쪽 정렬로 되돌린다. */
+.wire-card-head > .wire-card-meta:nth-child(n + 2) { margin-left: 0; font-size: var(--text-detail); font-weight: 400; color: var(--sub); }
+/* 알약 안 체크박스(`ChoicePill`, 2026-09-18 Q). 알약 계약 그대로에 체크상자만 앞에 든다. */
+.wire-choice-pill { gap: var(--space-2); cursor: pointer; }
+.wire-choice-pill > .wire-checkbox { margin: 0; }
 
+/* 근거 하이라이터(2026-09-18 Q). 요약의 문장은 **텍스트 링크**다 — 버튼 옷을 벗고 글자 그대로에
+   민트 밑줄만 둔다. 모달은 머리(제목 + 원형 X)와 본문뿐이고 폭은 읽기 폭(720)이다. */
+.seq-link { padding: 0; border: 0; background: none; font: inherit; color: var(--ink); text-align: left; cursor: pointer; text-decoration: underline; text-decoration-color: var(--mint-deep); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.seq-link:hover { color: var(--mint-deep); }
+.seq-link:focus-visible { outline: 2px solid var(--blue-deep); outline-offset: 2px; border-radius: 2px; }
+.schedule-date-dialog.evidence-dialog { width: min(720px, 96vw); padding: 0; }
+.evidence-dialog .dialog-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-5) var(--space-6); border-bottom: 1px solid var(--line); }
+.evidence-dialog .dialog-head h2 { margin: 0; font-size: var(--text-md); font-weight: 600; }
+.evidence-body { display: grid; gap: var(--space-4); padding: var(--space-6); }
+.evidence-sentence { margin: 0; font-size: var(--text-sm); font-weight: 600; line-height: 1.6; color: var(--ink); }
+.evidence-body > .seq-section-title { margin: 0; }
+.evidence-text { margin: 0; font-size: var(--text-sm); line-height: 1.7; color: var(--ink); white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; }
+.evidence-mark { padding: 0 2px; border-radius: 2px; background: var(--mint-tint); color: var(--ink); }
 /* 정보 조각 사이는 부호가 아니라 **간격**이다(`Meta`). 이식 CSS 의 세로선(`border-left`)과
    12 패딩을 걷는다. `Meta` 가 조각 사이에 공백 한 칸(≈4px)을 두므로 여기서 12 를 더해 약 16 이
    된다. 인라인이어야 부모의 말줄임이 조각 전체에 먹는다. */
@@ -376,25 +436,57 @@ body { margin: 0; }
    접힌 카드는 머리 한 줄이 카드 면 전체라 늘리면 아래가 빈다. */
 .card-grid[data-align='start'] { align-items: start; }
 
-/* 펼친 회차 본문은 **테두리 없는 텍스트 구역**들이다 — 카드 안 카드를 만들지 않는다.
-   네 구역(핵심·변화·확인필요·완료)은 팀 목업 넷의 2×2 배치를 따른다(2026-09-18 Q).
-   위험 신호·기록 상태는 한 줄을 다 쓴다(`is-wide`) — 하나는 경고, 하나는 꼬리다. */
-.seq-sections { display: grid; gap: var(--space-5); min-width: 0; }
-.seq-sections[data-cols='2'] { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
-.seq-sections[data-cols='2'] > .is-wide { grid-column: 1 / -1; }
-@media (max-width: 767px) {
-  .seq-sections[data-cols='2'] { grid-template-columns: minmax(0, 1fr); }
+/* 펼친 회차 본문은 **아코디언 카드 1열 여러 행**이다(2026-09-18 Q — 구 테두리 없는 텍스트 구역 2열).
+   카드 하나가 구역 하나(핵심 · 변화 · 완료·해결 · 확인필요 · 기록 상태)이고 `Fold` 를 그대로 쓴다.
+   제목은 14px 컬러 텍스트(`data-tone`)이고 펼치면 카드 머리 반전 규칙(L1)이 뒤집는다. */
+.seq-sections { display: grid; gap: var(--space-4); min-width: 0; }
+.seq-section-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: var(--leading-snug);
+  color: var(--mint-deep);
 }
-.seq-section { display: grid; gap: var(--space-1); min-width: 0; }
-.seq-section > p { margin: 0; }
-.seq-section-title { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: var(--text-sm); font-weight: 600; color: var(--mint-deep); }
-.seq-section-title.is-risk { color: var(--risk); }
-/* 계열색은 §6 라벨 색 그대로다: AI 산출=라벤더, 변화=블루(시간 축), 주목·경고=코랄.
-   목업의 이모지(🔵🟠🟢)는 쓰지 않는다 — 색이 이미 그 일을 한다. */
-.seq-section-title.is-ai { color: var(--lavender-deep); }
-.seq-section-title.is-change { color: var(--blue-deep); }
-.seq-section-title.is-warn { color: var(--discrepancy); }
-.seq-section-note { margin: 0; font-size: var(--text-detail); color: var(--sub); }
+/* 계열색은 §6 라벨 색 그대로다: AI 산출=라벤더, 변화=블루(시간 축), 주목·경고=코랄,
+   위험=`--risk`, 완료=중립. 목업의 이모지(🔵🟠🟢)는 쓰지 않는다 — 색이 이미 그 일을 한다. */
+.seq-section-title[data-tone='ai'] { color: var(--lavender-deep); }
+.seq-section-title[data-tone='change'] { color: var(--blue-deep); }
+.seq-section-title[data-tone='state'] { color: var(--blue-deep); }
+.seq-section-title[data-tone='warn'] { color: var(--discrepancy); }
+.seq-section-title[data-tone='risk'] { color: var(--risk); }
+.seq-section-title[data-tone='done'] { color: var(--sub); }
+.seq-section-note { margin: 0; font-size: var(--text-caption); color: var(--sub); }
+/* 머리 줄의 상태 표시도 컬러 텍스트다(2026-09-18 Q — 구 채운 배지). 면·테두리를 두지 않는다. */
+.seq-flag { flex: none; font-size: var(--text-sm); font-weight: 600; white-space: nowrap; }
+.seq-flag[data-tone='risk'] { color: var(--risk); }
+.seq-flag[data-tone='warn'] { color: var(--discrepancy); }
+/* 회차별 원본의 회차 행(2026-09-18 Q): **행 전체가 버튼**이고 오른쪽 끝 꺽쇠(`>`)가 여는 신호다.
+   레시피는 접힘 카드 머리와 같다(회차 16/600 · 날짜 13/400 · 상태 메타), 면은 카드 안이라 두지 않고
+   행 사이는 가로선이다. */
+.seq-rows { display: grid; min-width: 0; }
+.seq-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  width: 100%;
+  padding: var(--space-3) 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  font: inherit;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.seq-row + .seq-row { border-top: 1px solid var(--line); }
+.seq-row:focus-visible { outline: 2px solid var(--blue-deep); outline-offset: 2px; }
+.seq-row > .seq-head-no { font-size: var(--text-base); font-weight: 600; }
+.seq-row-state { flex: 1 1 12rem; min-width: 0; font-size: var(--text-sm); color: var(--sub); }
+.seq-row-chevron { flex: none; margin-inline-start: auto; }
+/* 상담 목표 기록 아코디언(2026-09-18 Q — 구 넷째 탭). 두 묶음이 세로로 선다. */
+.goal-history { display: grid; gap: var(--space-5); min-width: 0; }
+.goal-history > section { display: grid; gap: var(--space-2); min-width: 0; }
+.goal-history .wire-subhead { margin: 0; }
 
 @media (max-width: 767px) {
   /* 좁은 화면에서는 회차 머리를 두 줄로 푼다(390 실측 148px → 버튼이 배지 위로 끼어들었다):
@@ -502,28 +594,12 @@ body { margin: 0; }
 .record-open-item { display: grid; gap: var(--space-2); min-width: 0; }
 .record-open-item + .record-open-item { padding-top: var(--space-4); border-top: 1px solid var(--line); }
 
-/* 종결 카드는 제목 없는 2행이다(D2): 체크 한 줄, 안내 한 줄 — 체크는 첫 줄에 선다(이식
-   .wire-choice 의 flex-start 그대로). 체크 행의 위아래 8 패딩만 걷어 24 사방 한 값을 지킨다. */
-.record-closing-card .wire-choice { padding: 0; }
-
-/* 일시와 소요 시간이 한 행이다(D7 — `sessions.duration_min`). 날짜·시·분 부품이 왼쪽을 넓게
-   쓰고 분 칸은 좁다. 767 이하에서는 한 열이다. */
-.record-when-row { display: grid; grid-template-columns: minmax(0, 1fr) 128px; gap: var(--space-4) var(--space-6); align-items: end; min-width: 0; }
-.record-when-row > * { min-width: 0; }
-@media (max-width: 767px) {
-  .record-when-row { grid-template-columns: minmax(0, 1fr); }
-}
-
-/* 녹음 카드(2026-09-18 Q): 버튼 둘은 제목 줄 오른쪽(Card action), 안내 세 줄은 본문에서
-   라벨·값 2열로 왼쪽 정렬한다. 라벨은 민트 deep(§6), 값은 --sub. */
-.recording-note { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-1) var(--space-4); margin: 0; min-width: 0; font-size: var(--text-sm); line-height: var(--leading-normal); }
-.recording-note > div { display: contents; }
-.recording-note dt { font-weight: 600; color: var(--mint-deep); text-align: left; }
-.recording-note dd { margin: 0; color: var(--sub); text-align: left; }
+/* (구 종결 카드 `.record-closing-card`·일시 행 `.record-when-row`·녹음 안내 `.recording-note` 는
+   2026-09-18 Q 로 걷었다 — 종결은 저장 줄 알약, 일시 행은 공용 `.when-row`, 안내는 카드 제목 옆 meta.) */
 .recording-actions { display: flex; flex: none; gap: var(--space-3); }
 /* 열린 과제·물어볼 것 개수는 제목이 아니라 개수 칩이다(2026-09-18 Q — 붙여 쓰면 '11번째'처럼 읽혔다).
-   여백을 띄우고 굵기를 낮춰 제목과 분리한다. */
-.fold-count { margin-left: var(--space-2); padding: 0 var(--space-2); border-radius: var(--radius-pill); background: var(--muted); font-size: var(--text-badge); font-weight: 400; color: var(--sub); }
+   크기는 **공용 배지와 같다**(2026-09-18 Q — 22 높이 · 12 글자 · 1px --line, 면 없음). */
+.fold-count { display: inline-flex; align-items: center; margin-left: var(--space-2); height: var(--badge-height); padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-pill); background: transparent; font-size: var(--text-badge); font-weight: 400; line-height: normal; color: var(--sub); }
 /* ==== L4 설정 (UI 개편 2026-09-18, ui-plan §1 I·J·K·L) ================================== */
 /* 카드 머리 오른쪽 끝 행동(I2·K3·L4). `Card` 의 action 슬롯을 감싸는 이름표 — 이식 `.wire-card-head`
    가 둘째 자식부터 `margin-left:auto` 로 오른쪽 끝에 세우고 세로 가운데는 flex 가 이미 맞춘다. */
@@ -600,7 +676,6 @@ body { margin: 0; }
 .program-row-name { flex: none; }
 .program-row > .wire-meta-row { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; font-size: var(--text-sm); color: var(--sub); }
 .program-row > .wire-button { flex: none; }
-.wire-card-details[open]:not(.is-crisis) > .wire-card-summary .program-row > .wire-meta-row { color: var(--on-action); }
 
 /* 카드 밖 한 줄 안내(L4). 경고는 코랄. */
 .wire-note { margin: 0; font-size: var(--text-sm); color: var(--sub); }
@@ -612,6 +687,13 @@ body { margin: 0; }
    좁아지면 한 칸으로 접는 이식 규칙은 그대로 유지해야 해서 같은 컨테이너 쿼리를 다시 선언한다
    (app.css 가 뒤 파일이라 조건 없는 선언 하나만 두면 좁은 화면에서도 네 칸이 남는다). */
 .participant-hero-details { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+/* 라벨과 값 사이는 4 로 고정이고(2026-09-18 Q) 값은 **한 줄 말줄임**이다 — 긴 사업명·목표가
+   칸을 세로로 늘려 네 칸 높이가 어긋났다. 전체 글은 `title` 이 갖는다. */
+.participant-hero-details > .wire-field-row[data-layout='stack'] { gap: var(--space-1); }
+.participant-hero-details .wire-field-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+/* 다섯째 칸부터는 2행 전폭이다(2026-09-18 Q — 당사자 정보의 `전체 상담 목표`). 네 칸 격자에
+   긴 글이 한 칸에 갇히면 세로로 늘어난다. 한 열로 접힌 폭에서는 어차피 전폭이다. */
+.participant-hero-details > .wire-field-row:nth-child(n + 5) { grid-column: 1 / -1; }
 @container (max-width: 760px) {
   .participant-hero-details { grid-template-columns: minmax(0, 1fr); }
 }
@@ -639,58 +721,20 @@ body { margin: 0; }
   .original-cols { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* 회차별 요약(F1~F3). 펼친 머리는 두 테마 모두 파스텔 면이라 회차 번호·날짜도 `--on-action`
-   으로 뒤집는다 — 다크에서 `--ink`(밝음)·`--sub`(회색)가 파스텔 위에 얹혀 안 보였다(F1).
-   테마별 리터럴은 없다: 모두 토큰이다. */
-.wire-card-details[open]:not(.is-crisis) > .wire-card-summary .seq-head-no,
-.wire-card-details[open]:not(.is-crisis) > .wire-card-summary .seq-head-meta { color: var(--on-action); }
-/* 구역 제목은 배지다(F2): 정해진 배경 + 어두운 글씨. 배지 면(`--badge-*`)은 두 테마 모두 밝아
-   `--on-action`(항상 어두운 잉크)이 읽힌다. 계열은 §6 그대로 — AI 산출=라벤더, 변화=민트,
-   확인필요=코랄, 시간·상태=블루, 완료=중립선. */
-.seq-section-title {
-  justify-self: start;
-  align-self: start;
-  min-height: var(--badge-height);
-  padding: 0 var(--space-3);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
-  font-size: var(--text-badge);
-  font-weight: 600;
-  color: var(--ink);
-  background: var(--panel);
-}
-.seq-section-title.is-ai { border-color: var(--badge-lavender); background: var(--badge-lavender); color: var(--on-action); }
-.seq-section-title.is-change { border-color: var(--badge-mint); background: var(--badge-mint); color: var(--on-action); }
-.seq-section-title.is-warn { border-color: var(--badge-coral); background: var(--badge-coral); color: var(--on-action); }
-.seq-section-title.is-state { border-color: var(--badge-blue); background: var(--badge-blue); color: var(--on-action); }
-.seq-section-title.is-risk { border-color: var(--risk); background: var(--risk); color: var(--on-badge); }
-.seq-section-title > .wire-badge { margin-inline-start: var(--space-1); }
-/* 한글 본문 여백(F3): 행간 1.6, 단락 사이 0.75em, 낱말 안 줄바꿈 없음. */
+/* 회차별 요약(F1~F3). 펼친 머리의 회차 번호·날짜 반전은 위 L1 의 제목 묶음 통합 규칙이 맡는다
+   (2026-09-18 Q — 구 클래스별 규칙 삭제). */
+/* 구 구역 제목 배지 블록(채운 면 + 어두운 글씨)은 2026-09-18 Q 로 걷었다 — 제목은 위
+   `.seq-section-title` 의 14px 컬러 텍스트 하나이고, 계열색은 `data-tone` 이 정한다. */
+/* 한글 본문 여백(F3): 행간 1.6, 낱말 안 줄바꿈 없음. 항목 사이 여백은 `--space-2` 가 갖는다. */
 .seq-sections { line-height: 1.6; word-break: keep-all; overflow-wrap: anywhere; }
-.seq-list { margin: 0; padding-inline-start: 1.25em; display: grid; gap: 0.25em; font-size: var(--text-sm); color: var(--ink); }
+/* 불렛은 제목 왼쪽선에 맞춰 안쪽으로 들인다. 항목 사이 8 은 행간(1.6)보다 넓어 두 줄짜리
+   항목이 옆 항목과 붙어 읽히지 않는다(2026-09-18 Q "텍스트 사이 구분이 약하다"). */
+.seq-list { margin: 0; padding-inline-start: 1.1em; display: grid; gap: var(--space-2); font-size: var(--text-sm); color: var(--ink); }
 .seq-list > li > .seq-section-note { margin-inline-start: var(--space-2); }
 .seq-text { margin: 0; font-size: var(--text-sm); color: var(--ink); }
-.seq-section > .seq-list + .seq-list,
-.seq-section > .seq-text + .seq-text,
-.seq-section > .seq-list + .seq-text,
-.seq-section > .seq-text + .seq-list { margin-block-start: 0.75em; }
-/* 요약 머리 행동 넷(F4)은 넓은 화면에서 한 줄, 767 이하는 기존 줄바꿈 규칙을 탄다. */
 
-/* 목표 탭(G1~G3). 카드 하나 안에서 두 구획은 라벨 색으로 갈린다 — 전체 목표는 기본(민트),
-   다음 상담 목표는 블루(시간 축). 전체 목표 칸은 그라데이션 아웃라인 2px 로 강조한다(G2 —
-   캘린더 외곽선과 같은 `--gradient-brand`). */
-.goal-overall { margin-block-end: var(--space-5); }
-.goal-overall .wire-input-box {
-  border: 2px solid transparent;
-  background: linear-gradient(var(--panel), var(--panel)) padding-box, var(--gradient-brand) border-box;
-}
-.goal-next .wire-form-label { color: var(--blue-deep); }
-.next-goal-list { display: grid; gap: var(--space-2); width: 100%; }
-/* 줄마다 칸 하나 + 위쪽에 선 +/- 스테퍼(AC-G3: 스테퍼 top = 칸 top). 스테퍼 어휘는 등록 화면의
-   `.number-stepper` 그대로이고 여기서는 세로 자리만 칸의 윗선에 못박는다. */
-.next-goal-row { position: relative; }
-.next-goal-row > textarea { padding-inline-end: var(--space-6); resize: none; }
-.next-goal-row > .number-stepper { top: var(--control-pad); }
+/* 구 목표 탭(G1~G3)의 편집 칸·스테퍼 CSS 는 2026-09-18 Q 로 걷었다 — 탭이 `상담 목표 기록`
+   읽기 전용 두 카드가 되면서 마크업이 사라졌다. 전체 상담 목표는 HERO 2행이 보여 준다. */
 
 /* 당사자 등록(H1): 동의 접힘 카드 사이 여백 8. */
 .consent-folds { display: grid; gap: var(--space-2); }
@@ -710,19 +754,10 @@ body { margin: 0; }
 .intake-form .wire-card-body { gap: var(--space-5); }
 .intake-form .wire-card-divider { display: none; }
 .intake-form .wire-card-title { margin-bottom: var(--space-4); }
-.intake-form .wire-fieldset { border-top: 0; padding-top: 0; }
-.intake-form .wire-fieldset > legend { font-size: var(--text-sm); }
 
-/* 과제 수행 주체(2026-09-18 Q): 넓으면 라디오 둘, 행이 460 미만으로 좁아지면 선택창으로 바꿔
-   입력칸 폭을 지킨다. 컨테이너는 입력+토글+추가가 함께 선 행이다. */
-.wire-field-with-action { container-type: inline-size; }
-.task-owner { flex: none; display: flex; align-items: center; }
-.task-owner-radios { display: flex; flex-wrap: nowrap; align-items: center; gap: var(--space-4); flex: none; }
-.task-owner-select { display: none; flex: none; width: 132px; }
-@container (max-width: 460px) {
-  .task-owner-radios { display: none; }
-  .task-owner-select { display: block; }
-}
+/* 과제 수행 주체(2026-09-18 Q): 늘 선택창이다(구 라디오/선택창 전환 폐지). 물어볼 것 행은 이
+   자리만큼 비워 두 입력칸 폭이 같다(`.task-owner-slot`). */
+.task-owner, .task-owner-slot { flex: none; width: 132px; }
 
 /* ==== AI-MODULE ==== */
 /* v6 상담기록 분석(2026-09-18 Q). 새 hue 없음 — 기존 토큰만 쓴다.
