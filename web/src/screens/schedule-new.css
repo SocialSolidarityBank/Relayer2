@@ -14,12 +14,10 @@
 /* 상담 내용은 세 행이다(2026-09-18 Q). 폭이 줄면 각 행이 세로로 접혀 최소 폭을 지킨다 —
    컨테이너는 입력 묶음(.schedule-inputs) 자신의 폭이라 창 크기와 무관하게 폼 폭으로 접는다. */
 .schedule-inputs { container-type: inline-size; }
-/* 1행: 날짜·시작 시각(DateTimeInput 내부) + 종료 시각. */
-.schedule-when-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 150px); gap: var(--space-4) var(--space-5); align-items: end; min-width: 0; }
+/* 1행(날짜·시작 시간·종료 시각)은 공용 `.when-row`(date-time-input.css)다. */
 /* 2행: 상담 방식 + 상담 장소. */
 .schedule-method-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4) var(--space-6); align-items: start; min-width: 0; }
 @container (max-width: 640px) {
-  .schedule-when-fields,
   .schedule-method-row { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
 }
 /* 저장 바 카드는 걷었다(2026-09-18 Q). 종결 체크와 저장 버튼은 제목 줄 오른쪽에 함께 서고,

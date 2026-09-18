@@ -19,7 +19,7 @@ import {
   type Transcript,
   type TranscriptSegment,
 } from './speech-api.ts';
-import { Button, Empty, ErrorText, Item } from './ui.tsx';
+import { Button, Empty, ErrorText, Fold, Item } from './ui.tsx';
 import { Dialog } from './dialog.tsx';
 import { fmtBytes, fmtMs } from './screens/session-audio.tsx';
 import { IntakeScreen } from './screens/intake.tsx';
@@ -138,25 +138,31 @@ function Voice({ sessionId }: { sessionId: number }) {
         ))
       )}
       {transcript ? (
-        <section className="seq-section original-section">
-          <h3 className="seq-section-title">
-            전사문
-            {/* 상태는 채운 배지가 아니라 컬러 텍스트다(배지 금지). */}
-            {transcript.status === 'draft' && <span className="seq-flag">확인 전</span>}
-          </h3>
-          {/* 자동 전사는 틀릴 수 있다 — 없는 발화·시각·화자를 화면이 만들어 채우지 않는다. */}
-          <p className="seq-section-note">자동 전사라 틀린 곳 있음</p>
-          <div className="transcript-blocks">
-            {blocks.map((b, i) => (
-              <div className="transcript-block" key={i}>
-                <Button variant="ghost" onClick={() => seek(transcript.recording_id, b.offset_ms)}>
-                  {fmtMs(b.offset_ms)}
-                </Button>
-                <p className="transcript-block-text">{b.texts.join(' ')}</p>
-              </div>
-            ))}
-          </div>
-        </section>
+        <>
+          {/* 전사문 원문은 녹음 아래 **접힌 아코디언**이다(2026-09-18 Q — 구 왼쪽 기록지의 `전사문(확인됨)`
+              칸 대체). 상태는 채운 배지가 아니라 머리의 컬러 텍스트다. */}
+          <Fold
+            title={transcript.status === 'approved' ? '전사문(확인됨)' : '전사문 초안'}
+            desc={transcript.status === 'draft' ? '확인 전' : undefined}
+          >
+            <p className="transcript-full">{transcript.text}</p>
+          </Fold>
+          <section className="seq-section original-section">
+            <h3 className="seq-section-title">전사 기록</h3>
+            {/* 자동 전사는 틀릴 수 있다 — 없는 발화·시각·화자를 화면이 만들어 채우지 않는다. */}
+            <p className="seq-section-note">자동 전사라 틀린 곳 있음</p>
+            <div className="transcript-blocks">
+              {blocks.map((b, i) => (
+                <div className="transcript-block" key={i}>
+                  <Button variant="ghost" onClick={() => seek(transcript.recording_id, b.offset_ms)}>
+                    {fmtMs(b.offset_ms)}
+                  </Button>
+                  <p className="transcript-block-text">{b.texts.join(' ')}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        </>
       ) : (
         recordings.length > 0 && <Empty>전사문 없음</Empty>
       )}

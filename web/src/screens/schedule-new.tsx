@@ -8,6 +8,7 @@ import {
   Card,
   Choice,
   ChoiceGroup,
+  ChoicePill,
   Empty,
   ErrorText,
   Field,
@@ -17,32 +18,13 @@ import {
   participantHeroDetails,
 } from '../ui.tsx';
 import { METHODS } from '../vocab.ts';
-import { DateTimeInput } from '../date-time-input.tsx';
-import { dateTimeFromIso, dateTimeLabel, dateTimeToIso, EMPTY_DATE_TIME } from '../date-time.ts';
+import { DateTimeInput, TimeSelect } from '../date-time-input.tsx';
+import { dateTimeFromIso, dateTimeLabel, dateTimeToIso, durationOf, EMPTY_DATE_TIME } from '../date-time.ts';
 import './schedule-new.css';
 
 // 저장 요약의 일시 표기는 `date-time.ts` 의 `dateTimeLabel` 하나다(2026-09-18 Q).
-/** 종료 시각 입력은 24시간제 `HH:mm` 이다(네이티브 `input[type=time]`). */
-const endTimeFormatter = new Intl.DateTimeFormat('en-GB', {
-  timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', hour12: false,
-});
 /** 예정 회차가 없을 때의 기본값은 **지금**이다(Q 결정 D1). 빈 칸이 아니라 확인할 값을 준다. */
 const nowDateTime = () => dateTimeFromIso(new Date().toISOString());
-
-/**
- * 시작 일시와 종료 시각으로 소요 분을 센다(Q 결정 D4 · §4 계약 `duration_min`).
- * 종료가 시작보다 이르면 자정을 넘긴 것으로 보지 않고 **세지 않는다** — 날짜를 안 물었으므로
- * 넘김인지 오타인지 알 수 없고, 틀린 소요시간은 없는 것보다 나쁘다.
- */
-const durationOf = (startIso: string | null, endTime: string): number | undefined => {
-  if (!startIso || !endTime) return undefined;
-  const start = new Date(startIso);
-  const [h, m] = endTime.split(':').map(Number);
-  if (!Number.isFinite(h) || !Number.isFinite(m)) return undefined;
-  const [sh, sm] = endTimeFormatter.format(start).split(':').map(Number);
-  const minutes = h * 60 + m - (sh * 60 + sm);
-  return minutes > 0 ? minutes : undefined;
-};
 
 /**
  * 일정 예약. `thenRecord` 면 **당사자 목록 카드의 `상담 기록하기`** 로 들어온 것이다(Q 결정 D1) —
@@ -162,13 +144,13 @@ export function ScheduleNewScreen({ caseId, thenRecord = false }: { caseId: numb
     ) : (
     <form className="wire-container schedule-form" onSubmit={e => { e.preventDefault(); void save(); }}>
       <fieldset className="schedule-inputs" disabled={saving} aria-label="상담 일정 입력">
-        {/* 카드 하나다(2026-09-18 Q). 세 행: ①날짜·시작·종료 ②상담 방식·장소 ③메모.
-            제목 줄 오른쪽에 종결 상담 체크와 저장 버튼이 함께 선다(2026-09-18 Q — 구 하단 저장 바 삭제). */}
+        {/* 카드 하나다(2026-09-18 Q). 세 행: ①날짜·시작 시간·종료 시각 ②상담 방식·장소 ③메모.
+            제목 줄 오른쪽에 종결 상담 **알약 체크**와 저장 버튼이 함께 선다(2026-09-18 Q). */}
         <Card
           title="상담 정보"
           action={
             <div className="schedule-title-actions">
-              <Choice type="checkbox" label="종결 상담" checked={isClosing} onChange={() => setIsClosing(v => !v)} />
+              <ChoicePill label="종결 상담" checked={isClosing} onChange={() => setIsClosing(v => !v)} />
               {passThrough ? (
                 <Button variant="primary" onClick={() => (window.location.hash = `#/cases/${caseId}/record`)}>상담 기록하기</Button>
               ) : (
@@ -177,12 +159,10 @@ export function ScheduleNewScreen({ caseId, thenRecord = false }: { caseId: numb
             </div>
           }
         >
-          <div className="schedule-when-fields">
+          <div className="when-row">
             <DateTimeInput idPrefix="schedule" value={at} onChange={setAt} disabled={saving} />
-            {/* 종료 시각(Q 결정 D4). 네이티브 시각 입력이라 24시간제 표기·키보드 입력을 그대로 쓴다. */}
-            <Field label="종료 시각" htmlFor="end-time">
-              <input id="end-time" type="time" value={endTime} onChange={e => setEndTime(e.target.value)} />
-            </Field>
+            {/* 종료 시각(Q 결정 D4)은 시작 시간과 같은 선택창이다(2026-09-18 Q). */}
+            <TimeSelect id="end-time" label="종료 시각" value={endTime} onChange={setEndTime} disabled={saving} />
           </div>
           <div className="schedule-method-row">
             <ChoiceGroup legend="상담 방식">

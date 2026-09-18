@@ -95,8 +95,11 @@ const measure = () => {
     const t = b.querySelector('.wire-button-text');
     const br = b.getBoundingClientRect();
     if (!t || br.width === 0) continue;
+    // 체크 알약(`.wire-choice-pill`)은 체크상자+글자 묶음이 가운데다 — 글자만 재면 상자 폭만큼 어긋난다.
+    const box = b.querySelector('.wire-checkbox')?.getBoundingClientRect();
     const tr = t.getBoundingClientRect();
-    const dx = (tr.left + tr.right) / 2 - (br.left + br.right) / 2;
+    const left = box ? Math.min(box.left, tr.left) : tr.left;
+    const dx = (left + tr.right) / 2 - (br.left + br.right) / 2;
     const dy = (tr.top + tr.bottom) / 2 - (br.top + br.bottom) / 2;
     out.push({
       kind: 'button',
