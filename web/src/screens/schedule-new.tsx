@@ -1,5 +1,6 @@
 // A안: 선택 완료와 일정 저장을 구분한다. 예정 회차를 만드는 API는 그대로 쓴다.
 import { useEffect, useRef, useState } from 'react';
+import { Dialog } from '../dialog.tsx';
 import { getCase, getCaseDetail, planSession } from '../api.ts';
 import type { CaseDetail, CaseView, NewSessionInput } from '../api.ts';
 import {
@@ -10,7 +11,6 @@ import {
   Empty,
   ErrorText,
   Field,
-  FormActions,
   Meta,
   ParticipantHero,
   participantHeroDetails,
@@ -66,9 +66,8 @@ export function ScheduleNewScreen({ caseId, thenRecord = false }: { caseId: numb
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
-  /** 일시를 확인하라는 작은 안내(D1). 예정 회차가 없이 기록하러 들어왔을 때 한 번 뜬다. */
+  /** 일시를 확인하라는 작은 안내(D1·C5). 예정 회차가 없이 기록하러 들어왔을 때 한 번 뜬다. */
   const [notice, setNotice] = useState(false);
-  const noticeDialog = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
     let live = true;
@@ -100,14 +99,6 @@ export function ScheduleNewScreen({ caseId, thenRecord = false }: { caseId: numb
     setMemo(planned.plan_memo ?? '');
     setIsClosing(planned.is_closing);
   }, [view, thenRecord]);
-
-  // 안내는 네이티브 모달이다(`Dialog`·`Confirm` 과 같은 문법) — Escape·바깥 클릭이 닫기다.
-  useEffect(() => {
-    const el = noticeDialog.current;
-    if (!el) return;
-    if (notice && !el.open) el.showModal();
-    if (!notice && el.open) el.close();
-  }, [notice]);
 
   const scheduledAt = dateTimeToIso(at);
   const save = async () => {
@@ -221,22 +212,10 @@ export function ScheduleNewScreen({ caseId, thenRecord = false }: { caseId: numb
           <Button type="submit" variant="primary" disabled={!scheduledAt || saving}>{saving ? '저장 중…' : '일정 저장'}</Button>
         )}
       </footer>
-      {/* 일시 확인 안내(D1). `Dialog`(dialog.tsx)는 여는 버튼이 딸린 부품이라 자동으로 뜨는
-          이 자리에 못 쓴다 — 같은 `<dialog>` 문법과 같은 CSS 클래스를 쓴다. `Dialog` 에
-          `open` 프롭이 생기면 이 지역 마크업은 지운다(PR 요청). */}
-      <dialog
-        ref={noticeDialog}
-        className="schedule-date-dialog"
-        aria-labelledby="schedule-notice-title"
-        onCancel={() => setNotice(false)}
-        onClose={() => setNotice(false)}
-      >
-        <h2 id="schedule-notice-title">일시 확인 필요</h2>
+      {/* 일시 확인 안내(D1·C5). 부르는 쪽이 여닫는 `Dialog` — 닫기가 확인이다. */}
+      <Dialog id="schedule-notice" title="일시 확인 필요" open={notice} onClose={() => setNotice(false)}>
         <p className="panel-meta">예정 회차 없음, 지금 일시를 기본값으로 둠</p>
-        <FormActions>
-          <Button variant="primary" onClick={() => setNotice(false)}>확인</Button>
-        </FormActions>
-      </dialog>
+      </Dialog>
     </form>
     )}
   </>;

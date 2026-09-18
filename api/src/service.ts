@@ -289,6 +289,9 @@ export async function planSession(
  * 상담 시작(2026-09-16 Q). 시작이 곧 회차다 — 수기든 녹음이든 시작한 순간 기록 회차가 생기고
  * 부족한 정보는 나중에 채운다. 예정 회차를 주면 그 회차가 기록됨이 되고, 없으면 새로 만든다.
  * 저장(recordSession)과 달리 카드·결과·목표 이어받기를 건드리지 않는다 — 그건 채울 때 한다.
+ *
+ * 이미 기록됨인 회차라도 **수기가 없으면**(memo 없음) 그 회차를 그대로 돌려준다(2026-09-18 Q D12 —
+ * 녹음만 하고 나간 미작성 회차를 이어 쓴다). `held_at` 은 처음 시작한 시각 그대로다.
  */
 export async function startSession(
   caseId: number,
@@ -305,7 +308,14 @@ export async function startSession(
       const [target] = await tx<Session[]>`
         select * from sessions where id = ${input.session_id} and case_id = ${caseId} for update`;
       if (!target) throw new NotFound('회차 없음');
-      if (target.status === 'done') throw new SessionAlreadyStarted('이미 시작한 회차');
+      if (target.status === 'done') {
+        if (decryptText(target.memo)?.trim()) throw new SessionAlreadyStarted('이미 시작한 회차');
+        // 기록됨 회차를 다시 여는 것은 고쳐 쓰기와 같은 잠금을 받는다(사업 종료 → 409).
+        await assertProgramActive(caseId);
+        await tx`update sessions set method = ${input.method ?? target.method},
+          is_closing = ${input.is_closing ?? target.is_closing} where id = ${target.id}`;
+        return { session_id: target.id, seq: target.seq };
+      }
       await tx`update sessions set status = 'done', held_at = ${now},
         method = ${input.method ?? target.method}, is_closing = ${input.is_closing ?? target.is_closing}
         where id = ${target.id}`;

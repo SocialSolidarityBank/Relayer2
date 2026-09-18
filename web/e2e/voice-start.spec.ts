@@ -96,4 +96,25 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
   // ── 팝업을 닫으면 목록이 그대로 있다 ───────────────────────
   await expect(page.getByRole('heading', { name: NAME })).toBeVisible();
   await expect(page.getByRole('tab', { name: '회차별 원본 보기' })).toBeVisible();
+
+  // ── 미작성 회차 이어 쓰기(2026-09-18 Q D12) ─────────────────
+  // 녹음만 하고 나갔다가 다시 들어오면 `이어 쓰기 / 새 회차`를 묻는다. 이어 쓰면 같은 1회차다.
+  await page.goto(`/#/cases/${caseId}/record`);
+  const resume = page.getByRole('dialog', { name: '미작성 회차 있음' });
+  await expect(resume).toContainText('1회차, 녹음 1건, 수기 없음');
+  await resume.getByRole('button', { name: '이어 쓰기' }).click();
+  await expect(resume).toBeHidden();
+  await expect(page.locator('.page-header')).toContainText('1회차');
+  await expect(page.locator('audio')).toHaveCount(1);
+  await page.locator('#memo').fill('녹음 뒤 적은 수기.');
+  await page.getByRole('button', { name: '저장', exact: true }).click();
+  await expect(page).toHaveURL(/\/info$/);
+  const res = await page.request.get(`${api}/cases/${caseId}/detail`);
+  const detail = (await res.json()) as { sessions: Array<{ seq: number; written: boolean }> };
+  expect(detail.sessions.map((s) => [s.seq, s.written])).toEqual([[1, true]]);
+  // 수기가 채워졌으니 다시 들어와도 묻지 않는다.
+  await page.goto(`/#/cases/${caseId}/record`);
+  await expect(page.locator('.record-main')).toBeVisible();
+  await expect(resume).toBeHidden();
+  await expect(page.locator('.page-header')).toContainText('2회차');
 });
