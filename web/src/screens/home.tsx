@@ -9,16 +9,14 @@ import { Button, Card, Chevron, Empty, ErrorText, Fold, FormActions, Meta, PageH
 import { METHOD_LABEL } from '../vocab.ts';
 import '../date-time-input.css';
 import './home.css';
+import { dayLabel } from '../date-time.ts';
 
 const VIEWS = [{ key: 'month', label: '월간' }, { key: 'week', label: '주간' }, { key: 'day', label: '일간' }] as const;
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const dayFormatter = new Intl.DateTimeFormat('ko-KR', { timeZone: 'UTC', year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
-const shortDayFormatter = new Intl.DateTimeFormat('ko-KR', { timeZone: 'UTC', month: 'numeric', day: 'numeric', weekday: 'short' });
-/** 시간표 열 머리: 2026.09.14(금). 좌측정렬·글자수 고정으로 줄맞춤한다. */
-const gridWeekday = new Intl.DateTimeFormat('ko-KR', { timeZone: 'UTC', weekday: 'short' });
-const gridDayLabel = (day: string) =>
-  `${day.slice(0, 4)}.${day.slice(5, 7)}.${day.slice(8, 10)}(${gridWeekday.format(new Date(`${day}T00:00:00Z`))})`;
+// 구 `shortDayFormatter`(`9. 14. (월)`)는 전역 표기로 흡수됐다(2026-09-18 Q).
+/** 시간표 열 머리는 전역 날짜 표기다: `2026.09.14.(월)`. 좌측정렬·글자수 고정으로 줄맞춤한다. */
 /** 시간표 시각 머리: AM 09:00 · PM 12:00. 글자수 고정. */
 const gridHourLabel = (hour: number) => `${hour < 12 ? 'AM' : 'PM'} ${String(hour % 12 || 12).padStart(2, '0')}:00`;
 type CalendarEvent = { row: ScheduleRow; time: CalendarTime };
@@ -238,7 +236,7 @@ export function HomeScreen({ focusCaseId = null }: { focusCaseId?: number | null
                   <thead><tr><th scope="col"><span className="wire-toolbar-label">시간</span></th>{period.days.map(day => <th key={day} scope="col" data-today={day === today}>
                     <div className="sc-time-heading">
                       <button type="button" data-day={day} aria-label={`${dayFormatter.format(new Date(`${day}T00:00:00Z`))} 일간 보기`} onClick={() => { jumpTo(day); setView('day'); }}>
-                        {gridDayLabel(day)}
+                        {dayLabel(day)}
                       </button>
                     </div>
                   </th>)}</tr></thead>
@@ -294,7 +292,7 @@ export function HomeScreen({ focusCaseId = null }: { focusCaseId?: number | null
                           parts={[
                             row.name ? row.pseudonym : null,
                             `${row.program_name} ${row.seq}회차`,
-                            `${shortDayFormatter.format(new Date(`${time.day}T00:00:00Z`))} ${time.label}`,
+                            `${dayLabel(time.day)} ${time.label}`,
                           ]}
                         />
                       }

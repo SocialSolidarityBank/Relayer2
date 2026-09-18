@@ -236,12 +236,7 @@ export function Routes() {
     return null;
   })();
 
-  // HERO 만 있고 큰 제목이 없는 화면의 페이지 이름(뒤로 줄 오른쪽, 16px 라벤더). 필요한 화면만 준다.
-  const eyebrow = /^#\/cases\/\d+\/schedule$/.test(path)
-    ? '상담 일정 등록'
-    : /^#\/cases\/\d+\/record$/.test(path) || /^#\/cases\/\d+\/sessions\/\d+\/edit$/.test(path)
-      ? '상담 기록지'
-      : undefined;
+  // 페이지 이름은 각 화면이 HERO 위 `h1`(PageHeader)로 갖는다(2026-09-18 Q — 구 뒤로 줄 눈썹 텍스트 폐지).
 
 
   /**
@@ -428,7 +423,7 @@ export function Routes() {
       {/* 뒤로 가기는 본문 위 한 자리다(정본 .page-backbar). 돌아갈 곳이 없으면 안 그린다. */}
       <div className="content-column">
         <ApiFailureBanner />
-        <BackLink title={eyebrow} />
+        <BackLink />
         <div className="page-content">{screen}</div>
       </div>
     </div>

@@ -36,3 +36,22 @@ export function dateTimeToIso(value: DateTimeValue): string | null {
   }
   return instant.toISOString();
 }
+
+const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토'];
+
+/**
+ * 전역 날짜 표기(2026-09-18 Q): `2026.09.18.(금)`. 한국 시간 기준이고 기기 시간대와 무관하다.
+ * 화면마다 `2026. 9. 18.` · `9. 18. (금)` 로 갈리던 표기를 이 한 곳으로 모은다.
+ */
+export function dateLabel(iso: string | null | undefined): string {
+  if (!iso) return '날짜 없음';
+  const parsed = Date.parse(iso);
+  if (!Number.isFinite(parsed)) return '날짜 없음';
+  return dayLabel(new Date(parsed + KST_OFFSET_MS).toISOString().slice(0, 10));
+}
+
+/** 같은 표기의 `YYYY-MM-DD` 입력판. 달력이 쓰는 날짜 문자열은 이미 한국 날짜다. */
+export function dayLabel(day: string): string {
+  const weekday = WEEKDAY[new Date(`${day}T00:00:00Z`).getUTCDay()];
+  return `${day.slice(0, 4)}.${day.slice(5, 7)}.${day.slice(8, 10)}.(${weekday})`;
+}

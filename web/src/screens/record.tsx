@@ -28,6 +28,7 @@ import {
   FormActions,
   Item,
   LineList,
+  PageHeader,
   ParticipantHero,
   withDraft,
   type Line,
@@ -211,6 +212,8 @@ export function RecordScreen({
   if (detail?.case.status === 'closed' && !editingId) {
     return (
       <>
+        {/* 페이지 제목은 HERO 바로 위 `h1` 이다(2026-09-18 Q — 구 뒤로 줄 눈썹 텍스트 대체). */}
+        <PageHeader title="상담 기록지" />
         <ParticipantHero
           name={briefing.participant_card.name}
           pseudonym={briefing.participant_card.pseudonym}
@@ -348,8 +351,9 @@ export function RecordScreen({
 
   return (
     <>
-      {/* 당사자 카드가 머리다(2026-09-17 Q 확대 2단계 — 시안). 화면 용도는 아래 첫 구획 제목이
-          말하고, 머리는 사람을 말한다. 정보는 이 화면이 이미 받는 값만 올린다. */}
+      {/* 페이지 제목은 HERO 바로 위 `h1` 이다(2026-09-18 Q). 머리 카드는 사람을 말하고
+          화면 이름은 이 줄이 말한다. 정보는 이 화면이 이미 받는 값만 올린다. */}
+      <PageHeader title="상담 기록지" />
       <ParticipantHero
         name={briefing.participant_card.name}
         pseudonym={briefing.participant_card.pseudonym}

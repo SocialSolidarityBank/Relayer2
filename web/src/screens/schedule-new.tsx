@@ -12,6 +12,7 @@ import {
   ErrorText,
   Field,
   Meta,
+  PageHeader,
   ParticipantHero,
   participantHeroDetails,
 } from '../ui.tsx';
@@ -132,6 +133,8 @@ export function ScheduleNewScreen({ caseId, thenRecord = false }: { caseId: numb
   const passThrough = thenRecord && planned !== null;
 
   return <>
+    {/* 페이지 제목은 HERO 바로 위 `h1` 이다(2026-09-18 Q — 구 뒤로 줄 눈썹 텍스트 대체). */}
+    <PageHeader title="상담 일정 등록" />
     <ParticipantHero
       name={detail?.participant.name ?? null}
       pseudonym={view?.pseudonym ?? '확인 중'}
