@@ -19,7 +19,7 @@ const CONSENTS = [
   'voice_original_retention_period',
   'document_attachment',
 ];
-const USER_AGENT = 'relayer-curated-dataset/0.2.0';
+const USER_AGENT = 'relayer-curated-dataset/0.2.1';
 const DEFAULT_RECEIPT = '.relayer-dataset-receipt.json';
 
 const usage = `사용법:

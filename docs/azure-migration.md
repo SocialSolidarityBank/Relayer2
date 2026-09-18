@@ -72,7 +72,7 @@ APPLY 순서는 고정이다.
 3. 기존 Infisical 이름을 덮지 않고 정본 `.env`를 다시 내려받는다.
 4. Resource Group과 Container Apps Environment는 재사용하고 기관 Storage Account와
    `voice`, `documents` 컨테이너를 보장한다.
-5. 공개 GHCR 이미지 `ghcr.io/socialsolidaritybank/relayer:0.2.0`으로 기관 ACA 앱을
+5. 공개 GHCR 이미지 `ghcr.io/socialsolidaritybank/relayer:0.2.1`으로 기관 ACA 앱을
    만들고 system managed identity를 켠다.
 6. Storage Account 범위에 `Storage Blob Data Contributor`를 보장한다.
 7. 컨테이너 안에서 `node api/src/migrate.ts --check`를 실행한다.
