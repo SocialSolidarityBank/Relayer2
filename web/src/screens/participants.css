@@ -3,9 +3,16 @@
 
 /* 검색칸은 업무 바의 절반이다. 이식 기본(`flex:1 1 360px; max-width:540px`)은 오른쪽에
    걸개 넷이 서면 자리를 다 먹으므로 자라지 않게 못 박는다. */
-.participant-toolbar { flex-wrap: wrap; row-gap: var(--space-3); }
+.participant-toolbar { flex-wrap: wrap; row-gap: var(--space-3); container-type: inline-size; }
 .participant-toolbar-search { flex: 0 1 340px; }
 .participant-toolbar-actions { flex: 1 1 auto; justify-content: flex-end; flex-wrap: wrap; }
+/* 걸개 넷은 **한 줄에 다 들어갈 때만** 오른쪽 끝이다. 검색 340 + 간격 12 + 걸개 660 = 1012 —
+   그보다 좁으면 묶음이 검색칸 아래 자기 행으로 내려가는데, 그때도 오른쪽 끝이면 검색칸과
+   시작선이 어긋난다(2026-09-18 Q 실측 1200: 첫 걸개 x=136 vs 검색 x=21). 줄이 바뀌면 왼쪽선에
+   맞춘다. 판정은 창 폭이 아니라 툴바 자신의 폭이다. */
+@container (max-width: 1011px) {
+  .participant-toolbar-actions { justify-content: flex-start; }
+}
 /* 걸개·정렬 선택창은 알약 높이의 고정 폭이다. 폭을 안 박으면 `wire-input-box` 가 남은
    자리를 다 먹어 넷이 한 줄씩 쌓였다(1440 실측 587px). 사업명만 한 단 넓다. */
 .participant-toolbar-actions > .wire-input-box { flex: 0 0 150px; min-height: var(--pill-height); min-width: 0; }
