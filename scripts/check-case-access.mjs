@@ -1,5 +1,6 @@
 // Runs the case-access/audio regression suite in a disposable localhost database.
 // Never connects to the application's .env or production database.
+// Extra argv goes to vitest as-is — `node scripts/check-case-access.mjs test/foo.integration.test.ts` runs one file.
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
 import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
@@ -51,7 +52,7 @@ try {
   const [oldLink] = await db`select revoked_at from participant_access where token='legacy-unscoped'`;
   assert(oldLink.revoked_at, 'Unscoped legacy links must be revoked during migration');
   console.log('Assignment and legacy-link migration checks passed');
-  run('pnpm', ['--dir', 'api', 'exec', 'vitest', 'run']);
+  run('pnpm', ['--dir', 'api', 'exec', 'vitest', 'run', ...process.argv.slice(2)]);
 } finally {
   if (db) await db.end();
   if (created) await control.unsafe(`drop database "${database}" with (force)`);
