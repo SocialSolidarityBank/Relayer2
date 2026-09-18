@@ -56,6 +56,19 @@
 .participant-state[data-tone='neutral'] { color: var(--sub); }
 /* 행동 둘은 줄바꿈하지 않는다 — 머리 한 줄의 오른쪽 끝이 이 카드의 고정된 자리다. */
 .participant-card .wire-item-action { display: flex; flex: none; align-items: center; gap: var(--space-2); }
+/* 펼친 본문은 네 칸 격자다(2026-09-18 Q): 연락처 · 이메일 · 담당 실무자 · 전체 상담 목표.
+   HERO 정보 격자와 같은 레시피(라벨 위·값 아래, 간격 4, 값 한 줄 말줄임). 폭은 카드 자신이 잰다:
+   900 이상 4열, 480 이상 2열, 그 아래 1열. */
+.participant-card { container-type: inline-size; }
+.participant-card .participant-card-fields { grid-template-columns: minmax(0, 1fr); gap: var(--space-4) var(--space-6); }
+.participant-card .participant-card-fields > .wire-field-row[data-layout='stack'] { gap: var(--space-1); }
+.participant-card .participant-card-fields .wire-field-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+@container (min-width: 480px) {
+  .participant-card .participant-card-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container (min-width: 900px) {
+  .participant-card .participant-card-fields { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
 
 /* 쪽 넘기기는 가운데다. 꺽쇠 버튼 둘과 `N / M 쪽` 한 줄. */
 .participant-pager { display: flex; align-items: center; justify-content: center; gap: var(--space-4); }

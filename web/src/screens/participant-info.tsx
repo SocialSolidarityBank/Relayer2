@@ -41,6 +41,7 @@ import {
 } from '../ui.tsx';
 import { ConsentLinkCard } from '../consent-link.tsx';
 import { SessionOriginalDialog } from '../session-original.tsx';
+import { Dialog } from '../dialog.tsx';
 import { dateLabel, timeLabel } from '../date-time.ts';
 
 const TABS = ['기본 정보', '회차별 요약', '회차별 원본'] as const;
@@ -81,6 +82,56 @@ const Lines = ({ text }: { text: string }) => {
 
 /** 요약 안 구역의 계열색. §6 라벨 색 그대로다 — 채운 배지 면은 2026-09-18 에 걷었다. */
 type SeqTone = 'ai' | 'change' | 'warn' | 'state' | 'risk' | 'done';
+
+/**
+ * 근거 하이라이터(2026-09-18 Q). 요약의 문장 하나(변화·확인필요·완료·위험)를 누르면 그 문장이
+ * 나온 회차의 **수기 기록**을 띄우고 문장과 겹치는 말을 표시한다. 문장 전체가 그대로 있으면
+ * 그 자리를, 없으면 문장의 낱말(2자 이상)마다 표시한다 — AI 가 접은 문장은 원문과 글자가 다르다.
+ * ponytail: 낱말 겹침은 근사치다. 문장별 원문 좌표(`refs`)가 서버에 생기면 그것으로 바꾼다.
+ */
+type Evidence = { sentence: string; seq: number; heldAt: string | null; memo: string | null };
+
+const norm = (s: string) => s.replace(/\s+/g, ' ').trim();
+
+function Highlighted({ text, sentence }: { text: string; sentence: string }) {
+  const whole = norm(sentence);
+  const idx = whole ? text.indexOf(whole) : -1;
+  const words =
+    idx >= 0
+      ? [whole]
+      : [...new Set(whole.split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 2))].sort((a, b) => b.length - a.length);
+  if (words.length === 0) return <>{text}</>;
+  const re = new RegExp(words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'g');
+  const out: ReactNode[] = [];
+  let last = 0;
+  for (const m of text.matchAll(re)) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    out.push(<mark className="evidence-mark" key={m.index}>{m[0]}</mark>);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return <>{out}</>;
+}
+
+/** 머리(`근거` + 닫기)와 본문뿐인 모달(2026-09-18 Q). 본문 = 누른 문장 → 출처 회차 라벨 → 표시된 수기 기록. */
+function EvidenceDialog({ evidence, onClose }: { evidence: Evidence; onClose: () => void }) {
+  return (
+    <Dialog id="evidence" title="근거" headClose open onClose={onClose} className="evidence-dialog">
+      <div className="evidence-body">
+        <p className="evidence-sentence">{evidence.sentence}</p>
+        <p className="seq-section-title">
+          <Meta parts={[`${evidence.seq}회차`, dateLabel(evidence.heldAt), '수기 기록']} />
+        </p>
+        {evidence.memo ? (
+          <p className="evidence-text"><Highlighted text={evidence.memo} sentence={evidence.sentence} /></p>
+        ) : (
+          <Empty>수기 기록 없음</Empty>
+        )}
+        <p className="seq-section-note">문장과 겹치는 말을 표시, AI 정리 문장은 원문과 글자가 다를 수 있음</p>
+      </div>
+    </Dialog>
+  );
+}
 
 /**
  * 요약 안 구역 하나 — **아코디언 카드**다(2026-09-18 Q "모두 아코디언 카드로, 1열 여러 행").
@@ -124,10 +175,24 @@ function SeqSection({
  */
 function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
   const [brief, setBrief] = useState<Briefing | null>(null);
+  const [evidence, setEvidence] = useState<Evidence | null>(null);
   useEffect(() => {
     void getBriefing(caseId).then(setBrief);
   }, [caseId]);
   const risk = brief?.risk_signals ?? null;
+  /** 문장 하나를 근거 모달로 여는 텍스트 링크. 출처 회차는 문장이 난 회차다. */
+  const link = (sentence: string, seq: number) => {
+    const src = detail.sessions.find((x) => x.seq === seq);
+    return (
+      <button
+        type="button"
+        className="seq-link"
+        onClick={() => setEvidence({ sentence, seq, heldAt: src?.held_at ?? null, memo: src?.memo ?? null })}
+      >
+        {sentence}
+      </button>
+    );
+  };
 
   const done = detail.sessions.filter((s) => s.status === 'done');
   const count = (n: number, unit: string) => (n === 0 ? '없음' : `${n}${unit}`);
@@ -213,7 +278,7 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
                     <ul className="seq-list">
                       {risks.map((r) => (
                         <li key={r.card_id}>
-                          {r.text}
+                          {link(r.text, r.source_session_seq)}
                           {r.last_result === 'unchecked' && <span className="seq-section-note">지난 회차 미확인</span>}
                         </li>
                       ))}
@@ -238,7 +303,7 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
                   {s.ai_summary && s.ai_summary.changes.length > 0 && (
                     <ul className="seq-list">
                       {s.ai_summary.changes.map((c, i) => (
-                        <li key={i}>{c}</li>
+                        <li key={i}>{link(c, s.seq)}</li>
                       ))}
                     </ul>
                   )}
@@ -257,7 +322,7 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
                     <ul className="seq-list">
                       {pending.map((i) => (
                         <li key={`${i.kind}-${i.item.card_id}`}>
-                          {i.item.text}
+                          {link(i.item.text, i.item.source_session_seq)}
                           {i.item.last_result === 'unchecked' && (
                             <span className="seq-section-note">지난 회차 미확인</span>
                           )}
@@ -272,7 +337,7 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
                   ) : (
                     <ul className="seq-list">
                       {settled.map((i) => (
-                        <li key={`${i.kind}-${i.item.card_id}`}>{i.item.text}</li>
+                        <li key={`${i.kind}-${i.item.card_id}`}>{link(i.item.text, i.item.source_session_seq)}</li>
                       ))}
                     </ul>
                   )}
@@ -297,6 +362,7 @@ function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
           />
         </Card>
       )}
+      {evidence && <EvidenceDialog evidence={evidence} onClose={() => setEvidence(null)} />}
     </>
   );
 }

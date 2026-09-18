@@ -224,6 +224,19 @@ body { margin: 0; }
 .wire-choice-pill { gap: var(--space-2); cursor: pointer; }
 .wire-choice-pill > .wire-checkbox { margin: 0; }
 
+/* 근거 하이라이터(2026-09-18 Q). 요약의 문장은 **텍스트 링크**다 — 버튼 옷을 벗고 글자 그대로에
+   민트 밑줄만 둔다. 모달은 머리(제목 + 원형 X)와 본문뿐이고 폭은 읽기 폭(720)이다. */
+.seq-link { padding: 0; border: 0; background: none; font: inherit; color: var(--ink); text-align: left; cursor: pointer; text-decoration: underline; text-decoration-color: var(--mint-deep); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.seq-link:hover { color: var(--mint-deep); }
+.seq-link:focus-visible { outline: 2px solid var(--blue-deep); outline-offset: 2px; border-radius: 2px; }
+.schedule-date-dialog.evidence-dialog { width: min(720px, 96vw); padding: 0; }
+.evidence-dialog .dialog-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-5) var(--space-6); border-bottom: 1px solid var(--line); }
+.evidence-dialog .dialog-head h2 { margin: 0; font-size: var(--text-md); font-weight: 600; }
+.evidence-body { display: grid; gap: var(--space-4); padding: var(--space-6); }
+.evidence-sentence { margin: 0; font-size: var(--text-sm); font-weight: 600; line-height: 1.6; color: var(--ink); }
+.evidence-body > .seq-section-title { margin: 0; }
+.evidence-text { margin: 0; font-size: var(--text-sm); line-height: 1.7; color: var(--ink); white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; }
+.evidence-mark { padding: 0 2px; border-radius: 2px; background: var(--mint-tint); color: var(--ink); }
 /* 정보 조각 사이는 부호가 아니라 **간격**이다(`Meta`). 이식 CSS 의 세로선(`border-left`)과
    12 패딩을 걷는다. `Meta` 가 조각 사이에 공백 한 칸(≈4px)을 두므로 여기서 12 를 더해 약 16 이
    된다. 인라인이어야 부모의 말줄임이 조각 전체에 먹는다. */
