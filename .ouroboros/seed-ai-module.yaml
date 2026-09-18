@@ -1,0 +1,307 @@
+goal: >-
+  origin/main(d3c024f, 2026-09-18) 기준 한 레인이 현재 회차의 수기 원본(memo + 수기 카드 4종, 첫상담은 자유 글 항목)만을 근거로
+  v6 규칙(01 시간순 계층·상태 띠, 02 핵심·변화 3하위·확인필요·완료·해결, 04 전사 전문 연결·불일치 4조건)으로
+  단락 구조·상태·키워드(구조 데이터+LLM 추출)·전사 연결·요약을 한 초안으로 만들어 한 번 승인하게 하고 —
+  목표(전체+회차)는 시간 모호 시 묶음 기준과 핵심 선별 1순위, 전사는 연결·대조만, 지난 회차·브리핑·나중 말 규칙은 버림 —
+  원본 팝업 수기 열의 `원문 그대로|구조화` 토글, 전사 열의 띠·하이라이트·클릭 대조 4항목·불일치 필터,
+  키워드 칩→같은 사례 전 회차 백링크 패널, 회차별 요약 4구역(빈 구역 숨김, DESIGN 현행 색·명사구·이모지 없음,
+  자유 편집 시 근거 해제 표시)으로 그리며, relayer-testdata 발췌 골든케이스·LLM 스텁·브라우저 증거·원문 coverage·수동 1회로
+  검증하고 SPEC/GLOSSARY/DESIGN을 같이 고친다(다중 녹음·사례 넘어 백링크·단일 HTML·자동 재처리·배포는 범위 밖).
+
+task_type: code
+
+project_type: brownfield
+
+metadata:
+  version: "1.0.0"
+  ambiguity_score: 0.2
+  interview: "Path B (no MCP) 2026-09-18. 점수는 추정치(측정 아님). 장부 docs/ai-module-ledger-2026-09-18.md. 규칙 정본 docs/relayer_v1_handoff.md 부록(01·02·04·별첨·공통 HTML). 수용 게이트 contrarian/gap_hunter 회수·closer 메인 적용 → HIGH 3건을 Q 결정 17~19로 종결 → restate 승인"
+
+constraints:
+  - "바탕: origin/main d3c024f 에서 새 워크트리 `.worktrees/ai-module`·브랜치 `feat/ai-module-v6`. 루트 체크아웃(detached f282f4c)·`.worktrees/DESIGN`·`PLANNER`·`landing`·`memory` 의 파일을 건드리지 않는다. 공유 dev DB `relayer`(:55432) 에 마이그레이션을 돌리지 않는다(일회용 DB). 원격 push·병합·배포·`ccc-preview` 없음"
+  - "겹치는 레인(Q 20, 2026-09-18): (1) `feat/case-memory`(`.worktrees/memory`, 3f43eb4) 가 `ai.ts` draftSession 에 '사례 기억' 요약을 주입해 fact_changes 를 계속 만든다 — **v6 우선**. case-memory 가 먼저 땅에 내리면 이 레인이 rebase 하면서 draftSession 의 기억 주입(`memoryBefore`·`MEMORY_HEADER`)과 fact_changes 를 제거한다. `case_memories` 표·`refreshCaseMemory`·갱신 훅·철회 삭제·감사는 남기되 초안 입력으로 쓰지 않는다(소비자 없는 보류 기능임을 SPEC §15-6 에 한 줄 적는다). 마이그레이션 번호는 0029(main)·0030(case-memory) 다음 → 0031 (case-memory 가 안 내리면 0030). (2) `ui/participant-card`(`.worktrees/DESIGN`, 푸시됨, c359266) 가 `participant-info.tsx` 4구역을 `SeqSection`(`<details>` + tone) 으로 바꾸고 `session-original.tsx`·`app.css`·`ui.tsx`·`date-time.ts` 를 고친다 — 그 브랜치가 내린 뒤 rebase 하고 4구역은 `SeqSection` 위에 얹는다. 둘 다 이 레인이 직접 고치지 않는다"
+  - "규칙 정본: `docs/relayer_v1_handoff.md` 부록 5개(01 구조화된 상담기록, 02 회차별 요약, 04 전사 하이라이트·연결, 별첨 불일치, 공통 HTML)의 규칙을 그대로 따른다. 본문 §3 의 해석 결정(4항목 대조, ① 연속 번호, 전문 보존은 전사 원문 영역, 시간·화자 없으면 null·미확인, 원문 `…` 보존·생성 줄임표 금지, 미확인 불일치는 확정 사실 아님)을 적용한다. 단 표기는 DESIGN §6 이 우선한다(아래)"
+  - "수기 원본 경계(Q 19): 일반 회차 = `sessions.memo` + 그 회차의 `source_type='manual'` 카드 4종(promise·question·judgment·fact) 을 각각 SourceDocument 로, 팝업 수기 열 순서(오늘 상담 내용 → 수행할 과제 → 다음에 물어볼 것 → 실무자 의견 → 확인한 사실) 그대로. `ai_approved` 카드·목표 텍스트는 원문이 아니다. 첫상담(kind=intake) = memo + `detail` 의 자유 글 키 목록(intake-questions.ts 의 text/textarea 항목 이름을 코드에 명시)만, 선택지·배열 값 제외. `sessionParts()` 의 source_type 무필터(ai.ts:215-221)는 고친다"
+  - "원문 보존·span: 서버가 각 SourceDocument 를 문장 단위로 선분할해 안정 ID(`w:<doc>:<n>`, 전사 `t:<transcript_id>:<n>`)와 UTF-16 offset(start/end) 을 준다. 원문 텍스트는 저장소(memo·cards·transcripts)에서만 읽고 LLM 반환 문자열을 화면에 쓰지 않는다. 전사는 segments 가 본문 전체를 덮는지 검증하고 못 덮으면 본문 전체를 문장 분할해 쓰며 `구간 정보 없음` 으로 표시한다(T04). 시간·화자는 있는 값만, 없으면 null·`미확인`(T05). 한글·이모지·줄바꿈·따옴표·`</script>` 원문은 텍스트 노드로만 그린다(T01·T31). hash 는 저장 문자열 그대로(정규화 없음)"
+  - "회차 격리·전사 보조(Q 3·10): LLM 입력은 현재 회차의 마스킹된 SourceDocument 문장(span ID 붙임) + 전체 상담 목표·해당 회차 오늘 목표 텍스트뿐이다. 지난 회차·브리핑·다음 회차 자료를 보내지 않는다(T08·T16·T36). SYSTEM 의 `나중 말` 규칙(ai.ts:53)·`[지난 회차]`·fact_changes(:64-67)를 지운다. 같은 회차 안 자기정정('처음엔 3건, 다시 세니 4건')은 원문 둘 다 보존하고 상태 판정만 최종 서술 기준으로 한다(v6 에 없는 규칙임을 SPEC 에 적는다). 전사만으로 새 사실·변화·완료·색을 만들지 않는다(T19)"
+  - "01 구조(Q 2·6·7): 큰 주제 `01,02…` → 세부 단락 `1-1,1-2…` → 원문 span 목록. 수기 시간순, 뒤 문장을 앞으로 옮기지 않는다. 시간 흐름이 없거나 섞여 순서가 모호한 단락은 목표(전체+회차) 관련 여부로 묶는다. 제목은 원문 핵심 어휘 조합. 상태는 문장(span) 단위로 `change|follow_up|completed|none`, 변화는 같은 회차 안 before/after span 둘 다 필수(T10 예외는 요약 전용 플래그 `summary_only_exception`, 01·04 파랑 전파 금지 T27). 6유형·점수·추론은 저장·노출하지 않는다(T38)"
+  - "02 요약: 최상위 4구역 `이번 상담의 핵심`(1~2문장, 목표 관련성 1순위 → 비중·구체성·상태·반복·후속 영향) · `이번 회차에서 확인된 변화`(하위 의미 순서 약속 이행 여부 → 상담 중 새로 드러난 것 → 이번 상담 후 새로운 가능성, 내용 있는 것만, ①부터 연속 번호는 렌더 시 계산·저장 안 함 T12) · `확인필요` · `완료·해결`. 각 항목은 수기 span 참조 + 연결 목표(`overall`|`session`)를 가진다. 약속 이행 여부는 약속·결과 span 둘 다 같은 회차(T09·T13), 새로 드러난 것은 `변화점:`(전후 있을 때)/`확인된 내용:`(없을 때), 새로운 가능성은 변화 span→후반 합의 span 연결 있을 때만(T11). `실무자:`/`당사자:` 대사는 원문에 직접 발화가 있을 때만(T18). 빈 구역·빈 하위 항목은 숨긴다"
+  - "04 연결·불일치: 전사 문장마다 수기 span 연결 `match|uncertain|none`(억지 연결 금지). 상태 띠는 01 에서 확정된 상태만 상속. 불일치는 같은 회차 수기↔전사 사이에서만, 동일 대상·동일 속성/사건·동일 시기·양립 불가 4조건이 모두 확인된 링크만 `discrepancy` 로 저장(4조건 결과·근거 span 보유, 화면 노출 안 함). 숫자 차이·수기 누락·어휘 차이·더 상세한 쪽은 불일치가 아니다(T20~T22). 기존 `getMismatches` 숫자 경로(record.tsx·session-audio.tsx)는 구버전 표시로 그대로 두고 v6 대조는 팝업에서만"
+  - "키워드·백링크(Q 4·5·11): 결정적 키워드(전체 목표·회차 목표·수기 과제·질문 카드 제목)는 서버가 만들고, LLM 추출 키워드(인물·기관·서비스·사건)는 수기 원문 어휘 그대로여야 하며 서버가 참조 span 안에 그 문자열이 있는지 검증해 없으면 버린다. 키워드는 분석 본문에 `{keyword, spans[]}` 로 저장. 백링크 조회 `GET /cases/:id/backlinks?keyword=` 는 그 사례의 승인 분석(첫상담 포함)을 읽어 `[{session_id, seq, span_id, paragraph_id, text}]` 를 회차순으로 낸다(별도 인덱스 표 없음; ponytail: 회차가 수백이면 인덱스 표). caseAccess 와 `case.detail` 감사를 재사용하고 사례 밖·당사자 열람에는 내지 않는다(T35)"
+  - "저장·버전(Q 9·10·17): additive 마이그레이션 하나 `migrations/<다음번호>_record_analysis_v6.sql`(번호는 착수 시 origin/main·진행 중 브랜치를 보고 정해 보고서 첫 줄에 적는다, 현재 0028 까지; 검증은 `migrations/*_record_analysis_v6.sql` glob). 순수 규칙은 `api/src/domain/*.ts`(DB·HTTP 없음), DB·LLM·원문 조회·저장 오케스트레이션은 `api/src/record-analysis.ts` — 기존 `domain/mismatch.ts` 와 `service.ts` 의 분리 관례 그대로. `record_analyses(id, session_id, status draft|approved|failed, schema_version, rule_version, source_versions jsonb{memo_revision_id, card_ids+hash, transcript_id}, model, mask_hits, body(암호화, 구조·상태·요약·키워드·링크·불일치·summary_override), created_by, approved_by, created_at)` append-only(기존 relayer_forbid_mutation 관례). 마지막 행이 현재 상태. 기존 `ai_drafts` 는 구버전 읽기 전용으로 남긴다. 분석 실패·시간 초과·잘림·스키마/참조 검증 실패는 `failed` 행으로 남기고 화면은 원문만 보인다(T29)"
+  - "API: `POST /sessions/:id/draft` 가 v6 초안을 만든다(동의 게이트 `external_llm_cross_border_processing`·마스킹·감사 `ai.draft` 유지, 감사에 원문 본문 없음). `GET /sessions/:id/draft` 는 v6 초안. `POST /sessions/:id/draft/approve {draft_id, source_versions, summary?, tasks?, questions?}` 는 draft_id 불일치·source_versions 불일치 시 409(T28), 승인 트랜잭션에서 새 approved 행 + `replaceAiCards`(tasks→promise, questions→question, ai_approved) 유지. `GET /sessions/:id/analysis` 는 승인 분석 전체(구조·span·링크·불일치·키워드·stale). `GET /cases/:id/detail` 의 `sessions[].ai_summary` 는 v6 요약(구버전이면 `{legacy:true, summary}`)과 `stale` 을 낸다. zod 로 본문 검증, 오류 매핑은 routes.ts:90-115 관례"
+  - "stale·재분석: v6 분석의 stale 은 `source_versions ≠ 현재(memo 리비전·manual 카드·최신 approved transcript id)` 로 판정한다(전사 승인이 분석 뒤에 와도 잡힌다). 구버전 행은 기존 staleFlags 유지. 자동 재처리 없음, `AI 정리 다시 하기` 는 새 초안 생성. 부분 재생성·부분 승인 없음"
+  - "승인 후 수정(Q 17): `POST /sessions/:id/revisions kind=summary` 는 유지하되 v6 분석이 있으면 새 approved `record_analyses` 행에 `summary_override{text, actor, at}` 를 담아 복사한다. 화면은 override 가 있으면 요약 구역에 그 텍스트를 그대로 보이고 `사람이 고침` 표시, 요약 항목의 span 근거·목표 연결은 해제(원문 이동 없음). 01 구조·상태 띠·전사 연결·키워드는 그대로"
+  - "회차별 요약 화면(Q 6·7·18): 4구역 제목 `이번 상담의 핵심`(라벤더 is-ai) · `이번 회차에서 확인된 변화`(민트) · `확인필요`(코랄) · `완료·해결`(블루 `--badge-blue`, 구 중립을 바꾼다). 이모지 없음, 명사구, 마침표 없음. 내용 없는 구역은 렌더하지 않는다(`…없음` 문구 삭제; `위험 신호`·`기록 상태` 운영 정보는 그대로). 확인필요·완료는 그 회차 v6 승인 분석에서만 채우고 `getBriefing` 분할 채움(participant-info.tsx:169-180)과 `FactChanges` 표를 요약에서 뺀다. v6 분석 없음 + 구버전 승인 요약 있음 → `이번 상담의 핵심` 에 구버전 텍스트 + `구버전 정리` 배지만. 둘 다 없음 → `AI 정리 없음` 한 줄 + `AI 정리 검토`. 카드 하단에 키워드 칩(`Badge`). 하위 3소제목은 ①②③ 을 렌더 시 연속 부여"
+  - "원본 팝업(Q 8·14·15): `session-original.tsx` 수기 열에 `원문 그대로 | 구조화` 토글(승인 v6 분석이 있을 때만 렌더, 기본 원문). 구조화 = 접힘 없는 목차형(큰 주제 제목 → 세부 단락 제목 → 원문 문장 span 텍스트 노드, 상태 띠 왼쪽 색 띠, 키워드 칩). 첫상담 회차는 양식 그대로(토글 없음). 전사 열은 전문(문장 단위, 시각 있으면 seek 버튼 유지) + 상태 띠 + 불일치 배경 + `자동 전사라 틀린 곳 있음` 유지, 없음은 `전사문 없음`, 로딩·403·실패는 각각 다른 상태(T06). 녹음이 여럿이면 `전사 없는 녹음 N건`. 문장 클릭 → 우측(≤767 하단) 패널 `차이점 / 녹음 내용 / 수기 내용 / 연결된 수기 단락` 4항목만 갱신, 일반 연결 문장은 차이점 없이 수기 단락으로 이동·강조, `기록 불일치 모아보기` 토글은 판정 문장만 남기고 해제 시 전문 복원. 키워드 칩 클릭 → 같은 패널 자리에 백링크 목록, 항목 클릭 → 그 회차 팝업의 단락으로 이동. 키보드 선택·Escape·초점 복귀. 3단 아코디언 없음(DESIGN:230 유지)"
+  - "검토 화면(`review.tsx`): v6 초안을 4구역+01 구조+전사 연결 수·불일치 목록으로 보여 주고, 승인 전 편집은 요약 항목 텍스트·tasks·questions 만(근거 span 은 잠금). 버튼은 승인/수정 둘 유지(SPEC §15). 승인 payload 에 draft_id·source_versions"
+  - "색·CSS(Q 6): 새 hue 없음. 상태 띠 민트 `--mint`/코랄 `--badge-coral`/블루 `--blue`, 불일치 배경은 `--discrepancy` 를 color-mix 15% 로 섞은 값(토큰에 `--discrepancy-tint` 로 등재), 선택 문장은 `--blue-tint`. `web/src/styles/app.css` 의 자기 레인 구획 `/* ==== AI-MODULE ==== */` 에만 추가, tokens 값은 바꾸지 않는다. 인쇄·390px·767 분기(하단 패널) 포함"
+  - "어휘 보존 검증: 생성 문구(제목·요약 항목·차이점)는 참조 span 의 원문 어휘로 서버가 검사한다 — 치환 금지어 목록(`시도`, `멘토링`, `회복력`, `효능감`, `역량 강화`, `개입 성과`)이 참조 원문에 없는데 생성문에 있으면 초안 검증 실패(T17), 참조 없는 `실무자:`/`당사자:` 대사는 실패(T18), 현재 회차 밖 span ID 는 실패(T23). 실패한 초안은 `failed`"
+  - "테스트 인프라: `AI_PROVIDER=stub` 를 추가한다 — 동의 게이트·마스킹·검증은 그대로 돌고 `ai.ts:211-212` 의 디스패처 `callModel`(callOpenAi/callGemini 를 고르는 함수)만 고정 파일(fixture) 응답으로 단락한다. relayer-testdata(R2 `https://pub-0acad9da70b54900924fea276388490a.r2.dev/2026-09-17`, 합성) 에서 2~3 회차의 수기+승인 전사 텍스트를 `api/test/fixtures/record-analysis-v6/` 로 발췌해 커밋한다(음성 제외, `records/` 절대 금지). 골든 케이스는 T08~T30 의 논리 구조를 그 fixture 와 짧은 합성 문장으로 만든다. TS 진입점은 레포 관례대로 plain `node`(Node ≥22, `package.json` scripts `migrate`·`dev` 와 동일)로 돈다"
+  - "문서: SPEC.md §15(현재 회차만·v6 계약·승인 후 수정·failed·stale 재정의), §16-4(회차간 불일치는 구버전 숫자 경로만, v6 대조는 같은 회차), §3/§17-4·GLOSSARY §6-4(탭 4 현행·15초 다시보기 삭제 반영)·§6-5(내용 불일치 정의), GLOSSARY 에 `구조화`·`키워드`·`백링크`·`상태 띠`·`구버전 정리` 등재, DESIGN.md §2 색표에 `--discrepancy-tint`·상태 띠 규칙, 회차별 요약·원본 팝업 절에 토글·대조 패널·백링크 패널·빈 구역 숨김을 적고 :206 은 유지. `docs/relayer_v1_handoff.md` 는 규칙 정본으로 커밋하되 §2·§6 의 낡은 코드 설명에 '2026-09-18 UI 개편 이후 실제 파일은 장부 참조' 주석을 단다. README 하단 `AI·STT 범위 밖` 문구 삭제"
+  - "비범위: 다중 녹음 파일별 전사(T07), 사례 넘어 백링크·목표 허브, 단일 HTML 내보내기, 마스킹 전 원문 저장, 자동 재처리, 부분 재생성, 당사자 열람 노출, 실데이터 검증(검증 대기), `stt.ts` 계약 변경, STT 레인 파일과의 충돌 해결(rebase 는 Q 지시로)"
+
+acceptance_criteria:
+  - description: >-
+      순수 규칙 검증기: 01 구조는 span 이 현재 회차 문서 범위 안이고 중복 배치가 없으며 시간순을 어기지 않고, 변화 상태는 before/after span 둘 다 있을 때만 서고,
+      02 요약은 하위 항목 3종의 모든 존재 조합에서 빈 항목을 숨기고 ①부터 연속 번호가 계산되며(T12), 약속만·결과만 있으면 약속 이행 여부가 숨고(T08·T13),
+      전후 없는 새로 드러난 것은 `확인된 내용:` 이고 01/04 에 파랑을 전파하지 않으며(T10·T27), 후속 계획만으로 새로운 가능성이 서지 않고(T11),
+      `신청할 예정` 은 완료가 아니고 `신청을 완료함` 은 완료이며(T14), 치환 금지어·대사 창작·회차 밖 span·잘린 JSON 은 검증 실패이고(T17·T18·T23·T29),
+      전사만의 완료·변화는 색·요약을 만들지 않고(T19), 불일치는 4조건 모두일 때만이며 다른 사람·다른 달 금액·수기 누락·어휘 차이는 아니다(T20~T22)
+    verify_command: "pnpm --dir api exec vitest run test/record-analysis.test.ts test/session-summary.test.ts test/transcript-links.test.ts --reporter=basic"
+    expected_artifacts: ["api/src/domain/record-analysis.ts", "api/src/domain/structured-record.ts", "api/src/domain/session-summary.ts", "api/src/domain/transcript-links.ts", "api/test/record-analysis.test.ts", "api/test/session-summary.test.ts", "api/test/transcript-links.test.ts", "api/test/fixtures/record-analysis-v6/"]
+    output_assertion: "NONE"
+  - description: >-
+      저장·승인 통합: stub 제공자로 초안을 만들면 LLM 요청 payload 에 현재 회차 마스킹 문장과 목표만 있고 지난 회차·원문 개인정보가 없으며(T08·T36),
+      승인은 draft_id·source_versions 가 맞을 때만 새 approved 행과 과제·질문 카드를 한 트랜잭션에 만들고 어긋나면 409 이며(T28·T30),
+      memo 리비전·manual 카드 변경·전사 승인 뒤에는 stale 이 true 이고 다시 하기로 새 초안이 서며, 실패 응답은 failed 행으로 남고 원문 조회는 되고(T29),
+      kind=summary 리비전은 summary_override 를 가진 새 approved 행을 만들고 구조·링크는 그대로이며, 백링크 조회는 사례 밖 403·동의 없음 409 이고 case.detail 감사가 남으며(T35),
+      구버전 ai_drafts 만 있는 회차는 legacy 요약으로 읽히고 마이그레이션이 기존 행을 바꾸지 않는다(T37)
+    verify_command: "RELAYER_INTEGRATION=1 pnpm --dir api exec vitest run test/record-analysis.integration.test.ts --reporter=basic"
+    expected_artifacts: ["api/src/record-analysis.ts", "api/src/ai.ts", "api/src/routes.ts", "api/src/service.ts", "api/src/revisions.ts", "migrations/*_record_analysis_v6.sql", "api/test/record-analysis.integration.test.ts"]
+    output_assertion: "NONE"
+  - description: >-
+      원문 무손실: fixture 의 memo·카드·전사 원문(한글·이모지·빈 줄·따옴표·`…`·`</script>` 포함)을 저장→분석→조회한 뒤 span 텍스트를 이어 붙인 문자열이 원문과 문자 단위로 같고,
+      문서별 hash·raw line count·문자 수·span coverage(누락·중복 0)·생성 줄임표 검출 결과를 보고서로 출력한다(T01~T04·T24)
+    verify_command: "node scripts/record-analysis-coverage.mjs api/test/fixtures/record-analysis-v6 && echo COVERAGE_OK"
+    expected_artifacts: ["scripts/record-analysis-coverage.mjs", "api/src/domain/record-analysis.ts"]
+    output_assertion: "COVERAGE_OK"
+  - description: >-
+      전체 API 스위트가 일회용 DB 에서 통과하고 미적용 마이그레이션이 없다(기존 ai-approval·audio-access·case-access·mismatch·revisions 회귀 포함)
+    verify_command: "node scripts/check-case-access.mjs && RELAYER_INTEGRATION=1 node api/src/migrate.ts --check"
+    expected_artifacts: ["scripts/check-case-access.mjs", "api/src/migrate.ts"]
+    output_assertion: "NONE"
+  - description: >-
+      웹 타입·빌드가 통과한다(api.ts 의 v6 타입, participant-info·session-original·review 의 새 계약)
+    verify_command: "pnpm --dir web exec tsc --noEmit && pnpm --dir web build"
+    expected_artifacts: ["web/src/api.ts", "web/src/screens/participant-info.tsx", "web/src/session-original.tsx", "web/src/screens/review.tsx", "web/src/structured-record.tsx", "web/src/session-summary.tsx", "web/src/transcript-view.tsx", "web/src/styles/app.css", "web/src/styles/tokens.css"]
+    output_assertion: "NONE"
+  - description: >-
+      브라우저(stub 제공자·격리 DB·API 8787·web 5173): 승인 뒤 회차 카드에 4구역이 내용 있는 것만 그려지고 하위 번호가 ①부터 이어지며, 수기 원본 보기의 `구조화` 토글이 주제→단락→원문을 펼치고
+      상태 띠의 계산된 border-color 가 민트/코랄/블루이고, 전사 열에서 불일치 문장 A 클릭 뒤 B 클릭 시 4항목 패널 텍스트가 실제로 바뀌고 연결 단락이 강조되며(T25),
+      `기록 불일치 모아보기` 켜면 판정 문장만·끄면 전문이 복원되고(T26), 키워드 칩 클릭 → 백링크 목록 → 항목 클릭 시 다른 회차 팝업의 그 단락으로 이동하고,
+      요약 `수정` 저장 뒤 `사람이 고침` 이 보이고 원문 이동 링크가 없으며, 원본 수정 뒤 `원본 수정됨, 재정리 필요` 와 `AI 정리 다시 하기` 가 보이고,
+      전사 없음·로딩·403 이 서로 다른 상태로 보이며(T06), 390px 에서 패널이 아래로 가고 Escape·초점 복귀가 되고(T32), 새로고침·회차 전환에 이전 패널 데이터가 남지 않고(T33),
+      인쇄 미리보기에 원문·강조가 잘리지 않으며(T34), 전 과정 pageerror 가 0 이다 — 스크린샷을 docs/record-analysis-v6-evidence/ 에 남긴다
+    verify_command: "AI_PROVIDER=stub pnpm --dir web exec playwright test e2e/record-analysis-v6.spec.ts --reporter=line"
+    expected_artifacts: ["web/e2e/record-analysis-v6.spec.ts", "docs/record-analysis-v6-evidence/"]
+    output_assertion: "NONE"
+  - description: >-
+      기존 e2e 회귀(베타 흐름·음성 시작·실무자 피드백)가 새 요약·팝업 계약에서 통과한다
+    verify_command: "AI_PROVIDER=stub pnpm --dir web exec playwright test e2e/beta-flow.spec.ts e2e/voice-start.spec.ts e2e/user-feedback.spec.ts --reporter=line"
+    expected_artifacts: ["web/e2e/beta-flow.spec.ts", "web/e2e/voice-start.spec.ts", "web/e2e/user-feedback.spec.ts"]
+    output_assertion: "NONE"
+  - description: >-
+      정본 문서가 새 계약을 담고 낡은 문장이 없다: SPEC 에 v6 계약·현재 회차만·summary_override·failed·`/cases/:id/backlinks`, GLOSSARY 에 `백링크`·`구조화`·`구버전 정리`,
+      DESIGN 에 `--discrepancy-tint`·`구조화` 토글, README 에 `AI·STT 범위 밖` 이 없고, SPEC/GLOSSARY 가 `15초 다시보기` 를 현행 탭으로 적지 않는다
+    verify_command: "grep -q 'record_analyses' SPEC.md && grep -q 'summary_override' SPEC.md && grep -q 'backlinks' SPEC.md && grep -q '백링크' GLOSSARY.md && grep -q '구버전 정리' GLOSSARY.md && grep -q 'discrepancy-tint' DESIGN.md && grep -q '구조화' DESIGN.md && ! grep -q 'AI·STT 범위 밖' README.md && ! grep -qE '탭 4:.*15초 다시보기' SPEC.md && ! grep -qE '^\\| 15초 다시보기 \\|' GLOSSARY.md && echo SPEC_OK"
+    expected_artifacts: ["SPEC.md", "GLOSSARY.md", "DESIGN.md", "README.md", "docs/relayer_v1_handoff.md"]
+    output_assertion: "SPEC_OK"
+  - description: >-
+      T-ID 대응표와 수동 검수 보고: `docs/record-analysis-v6-report.md` 에 T01~T38 의 in/out/수정(T07 out 등)·담당 테스트 ID·통과/실패/skip, 원문 coverage 수치, 화면 증거 경로,
+      relayer-testdata 1사례를 실제 LLM 으로 분석한 수동 검수(어휘 치환·이전 회차 참조·전사 단독 확정·대사 창작 위반 건수)와 `검증 대기`(실제 상담 자료) 항목이 있다
+    verify_command: "grep -q 'T07' docs/record-analysis-v6-report.md && grep -q '검증 대기' docs/record-analysis-v6-report.md && grep -q '수동' docs/record-analysis-v6-report.md && echo REPORT_OK"
+    expected_artifacts: ["docs/record-analysis-v6-report.md"]
+    output_assertion: "REPORT_OK"
+
+ontology_schema:
+  name: "RelayerRecordAnalysisV6"
+  description: >-
+    한 회차의 수기 원본을 문장 span 으로 고정하고, 그 위에 01 계층·상태, 02 요약, 04 전사 연결·불일치, 키워드를 한 분석 버전으로 얹어
+    사람이 승인하면 화면이 원문과 분석을 결합해 그리는 모델. 원문은 저장소에서만, 분석은 참조로만.
+  fields:
+    - name: "source_document"
+      type: "object"
+      description: "session_id·kind(memo|card:promise|card:question|card:judgment|card:fact|intake:<key>|transcript)·source_id·revision·hash·원문. 현재 회차 것만"
+    - name: "source_span"
+      type: "object"
+      description: "문서 안 문장 하나. id `w:<doc>:<n>`/`t:<transcript>:<n>`, UTF-16 start/end, 순서. 전사는 offset_ms/duration_ms nullable"
+    - name: "structured_paragraph"
+      type: "object"
+      description: "큰 주제 `01`/세부 단락 `1-1` 노드. 제목(원문 어휘)·span 목록·순서. span 중복 배치 없음, 시간순"
+    - name: "meaning_annotation"
+      type: "object"
+      description: "span 의 상태 change|follow_up|completed. change 는 before/after span 필수. summary_only_exception 은 02 전용 플래그"
+    - name: "evidence_link"
+      type: "object"
+      description: "전사 span ↔ 수기 span/단락. match|uncertain|none. 같은 회차만. 상태 띠는 01 상속"
+    - name: "discrepancy"
+      type: "object"
+      description: "evidence_link 위의 4조건(same_subject·same_attribute·same_time·incompatible) 결과와 근거 span, 차이점 문구(원문 어휘). 화면엔 차이점·녹음 내용·수기 내용·연결된 수기 단락만"
+    - name: "session_summary"
+      type: "object"
+      description: "core[1..2], changes{promise_result[], newly_revealed[], new_possibility[]}, follow_up[], completed[]. 항목마다 span 참조·goal_link(overall|session|null)·형식 필드(약속/실제 결과/변화점/확인된 내용/∴/실무자/당사자)"
+    - name: "keyword"
+      type: "object"
+      description: "{text, source deterministic|llm, spans[]}. llm 키워드는 참조 span 안에 문자열이 있어야 산다"
+    - name: "backlink"
+      type: "object"
+      description: "GET /cases/:id/backlinks?keyword= 결과 행 {session_id, seq, span_id, paragraph_id, text}. 같은 사례 승인 분석에서 모음"
+    - name: "analysis_revision"
+      type: "object"
+      description: "record_analyses 행. status draft|approved|failed, schema_version, rule_version, source_versions, model, body(암호화), 승인자·시각. append-only, 마지막 행이 현재"
+    - name: "summary_override"
+      type: "object"
+      description: "승인 후 사람이 통째 고친 요약 텍스트·행위자·시각. 있으면 요약 근거·목표 연결 해제, 01/04 는 그대로"
+    - name: "stale_flag"
+      type: "boolean"
+      description: "v6: source_versions ≠ 현재(memo 리비전·manual 카드·approved transcript id). 구버전: 기존 staleFlags"
+    - name: "legacy_summary"
+      type: "object"
+      description: "ai_drafts 의 구버전 승인 요약. `구버전 정리` 배지로 핵심 구역에만, 새 분석에 재투입 안 함"
+
+evaluation_principles:
+  - name: "원문은 글자 하나 안 바뀐다"
+    description: "화면·요약·제목·차이점 어디에도 LLM 이 다시 쓴 원문이 없고 span 으로만 가리킨다"
+    weight: 1.0
+  - name: "현재 회차만"
+    description: "LLM 입력·상태·요약·불일치에 지난 회차·다음 회차·브리핑이 섞이지 않고, 후속 회차 완료가 과거 요약을 바꾸지 않는다"
+    weight: 1.0
+  - name: "수기가 사실, 전사는 보조"
+    description: "전사만으로 사실·변화·완료·색이 생기지 않는다"
+    weight: 1.0
+  - name: "표시는 근거 있는 것만"
+    description: "변화는 전후, 완료는 증거, 확인필요는 후속 확인, 불일치는 4조건. 빈 것은 숨긴다"
+    weight: 1.0
+  - name: "어휘 보존"
+    description: "노력→시도, 상담→멘토링 같은 치환이 제목·요약·차이점에 없다"
+    weight: 0.9
+  - name: "한 초안 한 승인, 버전이 맞아야 승인"
+    description: "draft_id·source_versions 가 맞을 때만 승인되고 실패는 failed 로 남는다"
+    weight: 0.9
+  - name: "기존 위에 붙인다"
+    description: "팝업·리비전·stale·카드 반영·동의·마스킹·감사·색 토큰을 재사용하고 새 hue·새 화면·새 드로어를 만들지 않는다"
+    weight: 0.8
+  - name: "정본은 하나"
+    description: "SPEC·GLOSSARY·DESIGN·핸드오프가 서로 다른 화면을 말하지 않는다"
+    weight: 0.8
+
+exit_conditions:
+  - name: "규칙 검증기"
+    description: "단위 테스트 3파일이 통과한다"
+    criteria: "pnpm --dir api exec vitest run test/record-analysis.test.ts test/session-summary.test.ts test/transcript-links.test.ts 의 종료 코드가 0이다"
+  - name: "저장·승인 통합"
+    description: "통합 테스트와 전체 스위트·마이그레이션 검사가 통과한다"
+    criteria: "RELAYER_INTEGRATION=1 pnpm --dir api exec vitest run test/record-analysis.integration.test.ts --reporter=basic, node scripts/check-case-access.mjs, RELAYER_INTEGRATION=1 node api/src/migrate.ts --check 세 명령의 종료 코드가 모두 0이다"
+  - name: "원문 무손실"
+    description: "coverage 스크립트가 통과한다"
+    criteria: "scripts/record-analysis-coverage.mjs 가 COVERAGE_OK 를 출력한다"
+  - name: "웹 빌드"
+    description: "tsc·build 통과"
+    criteria: "pnpm --dir web exec tsc --noEmit && pnpm --dir web build 의 종료 코드가 0이다"
+  - name: "브라우저 증거"
+    description: "새 e2e 와 기존 e2e 3종이 통과하고 스크린샷이 남는다"
+    criteria: "playwright record-analysis-v6.spec.ts 와 beta-flow·voice-start·user-feedback 의 종료 코드가 0이고 docs/record-analysis-v6-evidence/ 에 파일이 있다"
+  - name: "문서·보고"
+    description: "정본 갱신과 보고서"
+    criteria: "SPEC_OK 와 REPORT_OK 가 출력된다"
+
+context_references:
+  - path: "docs/ai-module-ledger-2026-09-18.md"
+    role: "primary"
+    summary: "인터뷰 장부 — 결정 1~19, 게이트 기본값, 코드 사실(file:line), 범위 밖"
+  - path: "docs/relayer_v1_handoff.md"
+    role: "primary"
+    summary: "규칙 정본. §3 해석 결정, §5 데이터 계약 제안, §7 A~E 모듈 요구, §9 T01~T38, §11 완료 기준. §2·§6 의 파일 설명은 70beaaa 기준이라 낡음"
+  - path: "web/src/screens/participant-info.tsx"
+    role: "primary"
+    summary: "TABS :50, Sessions 카드 :120-349(4구역 :244-343, 브리핑 분할 :169-180, 버튼 :216-236), Fulls 탭 :880-930"
+  - path: "web/src/session-original.tsx"
+    role: "primary"
+    summary: "SessionOriginalDialog :352-420, Written :168-220(KIND_ORDER :35-41), Voice :222-349(segments :319-333, 안내문 :318), Revisable :65-166"
+  - path: "web/src/screens/review.tsx"
+    role: "primary"
+    summary: "AI 초안 검토·편집·승인 화면 — v6 구조로 개편"
+  - path: "web/src/dialog.tsx"
+    role: "reference"
+    summary: "size='wide' 하나 :25, 닫기·초점 :36-74"
+  - path: "web/src/api.ts"
+    role: "primary"
+    summary: "CaseDetail·SessionRecord·Draft·Revision·SessionStale 타입 — v6 타입 추가"
+  - path: "web/src/speech-api.ts"
+    role: "reference"
+    summary: "Transcript·TranscriptSegment·MismatchView 타입"
+  - path: "web/src/ui.tsx"
+    role: "reference"
+    summary: "Badge tone mint|lavender|blue|coral :655, Field/Card tone ai|warn :300,:430, Fold, Lines"
+  - path: "web/src/styles/tokens.css"
+    role: "reference"
+    summary: "계열색 :29-40, 배지 면 :48-56, semantic --discrepancy/--risk :76-84"
+  - path: "web/src/styles/app.css"
+    role: "primary"
+    summary: "레인별 구획 관례(`/* ==== L<n> ==== */`), .seq-* 스타일"
+  - path: "api/src/ai.ts"
+    role: "primary"
+    summary: "PROVIDER/MODEL :19-22, SYSTEM :41-68, Shape/SCHEMA :72-124, callGemini/callOpenAi :126-212, sessionParts :215-221, draftSession :229-308, latestDraft :320, approveDraft :335-371"
+  - path: "api/src/service.ts"
+    role: "primary"
+    summary: "getSessionRecord :499-545, staleFlags :614-623, replaceAiCards :648-660, approvedSummaries :666-676, getCaseDetail :859-926, getMismatches :1106-1128"
+  - path: "api/src/revisions.ts"
+    role: "primary"
+    summary: "REVISION_KINDS :17, reviseSession :32-73(summary :55-60), listRevisions :75-81"
+  - path: "api/src/routes.ts"
+    role: "primary"
+    summary: "오류 매핑 :90-115, sessions :412-478, draft :574-598, recordings/transcript :606-690, case detail :519, briefing :807"
+  - path: "api/src/stt.ts"
+    role: "reference"
+    summary: "TranscriptSegment :114, 마스킹·암호화 저장 :529-540, latestTranscript :599, approveTranscript :697-752 — 계약 불변"
+  - path: "api/src/domain/types.ts"
+    role: "primary"
+    summary: "Session·Card·FactChange 타입 — v6 타입과 레거시 구분"
+  - path: "api/src/domain/mismatch.ts"
+    role: "reference"
+    summary: "숫자 후보 비교 — 구버전 경로로 유지"
+  - path: "api/src/audit.ts"
+    role: "reference"
+    summary: "AUDIT_KINDS, 미등록 action 버림"
+  - path: "api/src/consent.ts"
+    role: "reference"
+    summary: "external_llm_cross_border_processing 게이트, AI 제공자 목록 :34-37"
+  - path: "api/src/pii.ts"
+    role: "reference"
+    summary: "encryptText/decryptText — 분석 body 암호화에 재사용"
+  - path: "migrations/0027_ui_plan_api.sql"
+    role: "reference"
+    summary: "session_revisions·append-only 트리거 관례"
+  - path: "migrations/0012_recordings.sql"
+    role: "reference"
+    summary: "transcripts 표 :29-48"
+  - path: "web/src/intake-questions.ts"
+    role: "reference"
+    summary: "인테이크 문항 정본 — 자유 글 키 목록의 근거"
+  - path: "scripts/check-case-access.mjs"
+    role: "reference"
+    summary: "격리 DB 전체 스위트 러너"
+  - path: "scripts/load-dataset.mjs"
+    role: "reference"
+    summary: "relayer-testdata 로더 — fixture 발췌 시 manifest/dialogue 구조 참고"
+  - path: "web/playwright.config.ts"
+    role: "reference"
+    summary: "서버 선기동 전제 :3-9"
+  - path: "SPEC.md"
+    role: "primary"
+    summary: "§3 :90-118, §15 AI 텍스트 경로 :457-565, §16-4 :600-631, §17-4 :679-706, :30 탭 목록"
+  - path: "GLOSSARY.md"
+    role: "primary"
+    summary: "§4 목표 세 층 :105-130, §6-4 당사자 정보 :231-241, §6-5 :242-251, §8 삭제된 말 :349-356"
+  - path: "DESIGN.md"
+    role: "primary"
+    summary: "§2 색 :26-77, 회차별 요약 :187-211(:206 이모지), 원본 팝업 :221-231(:230 아코디언), §6 화면의 말 :385-444"
+
+existing_patterns:
+  - "append-only 표 + relayer_forbid_mutation 트리거, 마지막 행이 현재 상태"
+  - "자유 글·전사·분석 본문은 encryptText 로 암호화 저장, 감사에는 action·id·필드 이름만"
+  - "동의 게이트 assertConsent → 마스킹 maskAll → 외부 LLM → 초안 → 사람 승인 → 같은 트랜잭션에 ai_approved 카드"
+  - "zod 로 본문 검증, 오류 클래스 → HTTP 매핑(routes.ts:90-115), 거절은 사람이 읽는 명사구"
+  - "통합 테스트는 RELAYER_INTEGRATION=1 + 격리 DB 접두어, 외부 HTTP 는 fetch 스텁"
+  - "화면 문구는 명사구·마침표 없음(DESIGN §6), 라벨 색 민트/AI 라벤더/경고 코랄/리스크 핑크"
+  - "팝업은 Dialog size='wide' 2열, 편집은 Revisable + session_revisions, stale 은 배지 + 다시 하기"
+  - "app.css 는 레인 구획 주석 안에만 추가, tokens 값 불변"
+
+existing_dependencies:
+  - "hono"
+  - "zod"
+  - "postgres"
+  - "vitest"
+  - "react 18 / vite 6"
+  - "@playwright/test"
