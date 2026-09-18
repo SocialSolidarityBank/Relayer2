@@ -15,8 +15,10 @@
   .connection-list .wire-form-field > .wire-form-hint { grid-column: 1; }
 }
 
-/* 설정 가이드 팝업. 번호·화살표·색은 전부 여기서 그린다 — 글자는 랜딩 팝업과 같아야 한다. */
-.connection-guide-dialog { width: min(640px, calc(100vw - 32px)); }
+/* 설정 가이드 팝업. 번호·화살표·색은 전부 여기서 그린다 — 글자는 랜딩 팝업과 같아야 한다.
+   폭은 공용 틀(.schedule-date-dialog 420px, date-time-input.css)보다 특이도를 올려 잡는다 —
+   운영 번들은 CSS 순서가 개발과 달라 한 클래스로는 420 이 이겼다(2026-09-18 배포 확인). */
+.schedule-date-dialog.connection-guide-dialog { width: min(640px, calc(100vw - 32px)); }
 .connection-guide-dialog .connection-guide {
   padding: 0;
   gap: 0;
