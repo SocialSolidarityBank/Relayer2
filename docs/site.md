@@ -2,16 +2,22 @@
 
 앱과 분리된 정적 페이지 세 장이다. 빌드 도구가 없고, 파일을 열어 글자만 바꾸면 그대로 반영된다.
 
+**`site/` 에 둔 것은 전부 공개된다.** 앱이 그 폴더를 `relayer.kr` 아래에 그대로 내므로
+(`api/src/routes.ts` 의 정적 마운트) 파일을 하나 놓으면 그 이름으로 누구나 열 수 있다.
+그래서 이 문서와 한글 검수 스크립트는 `site/` 밖에 둔다. 시안이나 메모도 넣지 않는다.
+
 ```
-site/
-  index.html        소개(랜딩)
-  guide-user.html   사용자 가이드, 실무자용
-  guide-admin.html  관리자 가이드
-  site.css          색과 형태. 앱 토큰의 사본이다
-  site.js           펼침 목록과 가이드 목차 표시
-  check-text.mjs    한글 검수
-  fonts/            Chillax, 영문 전용
-  shots/            화면 사진
+site/                 공개되는 것만
+  index.html          소개(랜딩)
+  guide-user.html     사용자 가이드, 실무자용
+  guide-admin.html    관리자 가이드
+  site.css            색과 형태. 앱 토큰의 사본이다
+  site.js             펼침 목록과 가이드 목차 표시
+  fonts/              Chillax, 영문 전용
+  shots/              화면 사진
+
+docs/site.md          이 문서
+scripts/site-check-text.mjs   한글 검수
 ```
 
 ## 보기
@@ -26,7 +32,7 @@ python3 -m http.server 8080 --directory site
 문장은 모두 HTML 안에 그대로 있다. 찾아서 바꾸면 끝이다. 고친 뒤에는 검수를 돌린다.
 
 ```bash
-node site/check-text.mjs
+node scripts/site-check-text.mjs
 ```
 
 가운데점과 긴 대시는 쓰지 않는다. 검수가 막는다. 목록과 구분은 쉼표로 쓴다.
@@ -133,3 +139,12 @@ cd node_modules/.pnpm/@playwright+test@1.63.0/node_modules
 node ~/developer/tools/align-tools/align-check.mjs http://127.0.0.1:8081/index.html \
   '[{"name":"버튼 라벨 중앙","selectors":[".btn .btn-text",".btn"],"axis":"xy","tolerance":1}]'
 ```
+
+## 캐시
+
+`site/` 응답에는 `cache-control: public, max-age=60` 이 붙는다(`api/src/routes.ts` 의 `siteCache`).
+다만 Cloudflare 영역의 Browser Cache TTL 이 4시간으로 잡혀 있어 정적 파일에서는 그 값이
+`max-age=14400` 으로 덮인다(2026-09-18 실측). 그래서 CSS 나 JS 를 고치면 링크의 `?v=` 를
+올려 새 주소로 만든다. HTML 은 덮이지 않으므로 `?v=` 만 바꾸면 브라우저가 새 파일을 받는다.
+
+영역 설정을 `Respect Existing Headers` 로 바꾸면 `?v=` 를 올릴 일이 없어진다.
