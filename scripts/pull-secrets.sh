@@ -11,9 +11,10 @@ opsvc="$HOME/.dotfiles/scripts/opsvc"
 secret_path="${1:-/RELAYER2}"
 refs="$(mktemp -t relayer-infisical-refs)"
 trap 'rm -f "$refs"' EXIT
+# 항목은 ID 로 가리킨다. 제목의 `·` 는 op:// 참조에서 허용되지 않는 문자다.
 cat >"$refs" <<'EOF'
-CLIENT_ID=op://BSS/Infisical · account@ggbss.or.kr/ggbss_client_ID
-CLIENT_SECRET=op://BSS/Infisical · account@ggbss.or.kr/ggbss_client_secret
+CLIENT_ID=op://BSS/l34nxgvhlqrca67cikcdpetsfe/ggbss_client_ID
+CLIENT_SECRET=op://BSS/l34nxgvhlqrca67cikcdpetsfe/ggbss_client_secret
 EOF
 chmod 600 "$refs"
 
