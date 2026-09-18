@@ -3,7 +3,7 @@
 // CCC-new `apps/web/app/components/wire/shell-icons.tsx` 에서 **현재 릴레이어 화면이 쓰는
 // 글리프만** 가져왔다(2026-09-17 Q "지난 CCC-new 레포에서 채용"). path 값은 그대로다 —
 // 아이콘을 새로 그리면 같은 뜻의 글리프가 제품마다 갈린다.
-// 아직 안 쓰는 CCC 글리프(`calendar`·`close`·`updown`·`share`)는 그 파일에 있다.
+// 아직 안 쓰는 CCC 글리프(`calendar`·`updown`·`share`)는 그 파일에 있다.
 // 필요해지면 새로 그리지 말고 거기서 가져온다.
 
 export type ShellIconName =
@@ -18,7 +18,8 @@ export type ShellIconName =
   | 'logout'
   | 'theme-dark'
   | 'theme-light'
-  | 'sidebar';
+  | 'sidebar'
+  | 'close';
 
 export function NavIcon({ name }: { name: ShellIconName }) {
   const common = {
@@ -69,5 +70,8 @@ export function NavIcon({ name }: { name: ShellIconName }) {
     // "원형 버튼 안에 사이드바 아이콘". Infisical 의 panel-left 글리프와 같은 어휘).
     case 'sidebar':
       return <svg {...common}><rect x="2" y="2.5" width="12" height="11" rx="2" /><path d="M6.2 2.5v11" /></svg>;
+    // 모달 닫기 X(CCC 글리프 그대로 — 대각선 두 획).
+    case 'close':
+      return <svg {...common}><path d="M4 4l8 8M12 4l-8 8" /></svg>;
   }
 }

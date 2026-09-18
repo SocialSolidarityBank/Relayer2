@@ -103,14 +103,13 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
   await expect(page.getByText('전사 건너뜀')).toBeVisible();
 
   // ── 회차별 요약 — 수기 미작성·녹음 1건·전사 상태 ────────────
-  // 당사자 정보는 당사자 카드(HERO) + 탭 4개다(2026-09-17 Q). 기본 탭은 `당사자 정보`.
+  // 당사자 정보는 당사자 카드(HERO) + 탭 3개다(2026-09-18 Q). 기본 탭은 `기본 정보`.
   await page.goto(`${base}/app#/cases/${caseId}/info`);
   await expect(page.getByRole('heading', { name: NAME })).toBeVisible();
   await page.getByRole('tab', { name: '회차별 요약' }).click();
-  // 한 회차가 한 접힘 카드다(2026-09-17 Q). 기록 상태는 펼친 본문의 `기록 상태` 구역에 있다.
-  // 회차 카드로 좁힌다 — 펼친 본문 안 구역도 `<details>`(작은 아코디언, 2026-09-18 Q)라 `details` 만으로는
-  // 엉뚱한 것이 먼저 잡힌다. 행동 넷은 본문으로 내려갔으니 머리 어디를 눌러도 펼쳐진다.
-  const fold = page.locator('details.wire-card-details', { hasText: '1회차' }).first();
+  // 한 회차가 한 접힘 카드다(2026-09-17 Q). 기록 상태는 펼친 본문의 `기록 상태` 아코디언 카드에 있다.
+  // 회차 카드(`seq-card`)로 좁힌다 — 펼친 본문 안 구역도 카드라 `details` 만으로는 엉뚱한 것이 먼저 잡힌다.
+  const fold = page.locator('details.seq-card', { hasText: '1회차' }).first();
   await fold.locator(':scope > summary').click();
   await expect(fold).toContainText('수기 미작성');
   // 수를 단위 없이 두지 않는다(2026-09-18 Q 결정 D14 — 녹음·전사는 `건`).
@@ -119,14 +118,10 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
 
   // ── 원본 팝업 — 큰 모달 두 열, 왼쪽 수기·오른쪽 녹음 전사(2026-09-18 Q E2) ──
   // 전용 화면(`/full`)으로 떠나지 않는다. 두 열이 늘 같이 서므로 오가는 탭이 없다.
-  await page.getByRole('tab', { name: '회차별 원본 보기' }).click();
-  await page
-    .locator('.wire-repeat-card', { hasText: '1회차' })
-    .getByRole('button', { name: '원본 보기' })
-    .click();
+  await page.getByRole('tab', { name: '회차별 원본' }).click();
+  await page.getByRole('button', { name: '1회차 원본 보기' }).click();
   const original = page.getByRole('dialog', { name: '1회차 원본' });
-  await expect(original.getByRole('region', { name: '수기 기록' })).toContainText('수기 미작성');
-  const voiceCol = original.getByRole('region', { name: '녹음 전사' });
+  const voiceCol = original.getByRole('region', { name: '녹음 전사 기록' });
   await expect(voiceCol.locator('audio')).toHaveCount(1);
   await expect(voiceCol).toContainText('전사 건너뜀');
   await original.getByRole('button', { name: '닫기' }).click();
@@ -134,7 +129,7 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
 
   // ── 팝업을 닫으면 목록이 그대로 있다 ───────────────────────
   await expect(page.getByRole('heading', { name: NAME })).toBeVisible();
-  await expect(page.getByRole('tab', { name: '회차별 원본 보기' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '회차별 원본' })).toBeVisible();
 
   // ── 미작성 회차 이어 쓰기(2026-09-18 Q D12) ─────────────────
   // 녹음만 하고 나갔다가 다시 들어오면 `이어 쓰기 / 새 회차`를 묻는다. 이어 쓰면 같은 1회차다.

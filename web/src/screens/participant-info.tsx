@@ -1,5 +1,5 @@
-// 당사자 정보 — **당사자 카드(HERO)가 머리**이고 그 아래 탭 4개가 화면을 가른다
-// (2026-09-18 Q): 당사자 정보 · 회차별 요약 · 회차별 원본 보기 · 목표.
+// 당사자 정보 — **당사자 카드(HERO)가 머리**이고 그 아래 탭 3개가 화면을 가른다
+// (2026-09-18 Q): 기본 정보 · 회차별 요약 · 회차별 원본. 상담 목표 기록은 기본 정보 안 아코디언이다.
 // 원본은 큰 팝업 두 열(수기 · 녹음 전사)로 열린다(2026-09-18 Q E2 — 드로어 폐지).
 // 15초 다시보기는 폐지했다(2026-09-17 Q) — 화면·탭·버튼 어디에도 두지 않는다.
 import { useEffect, useState, type ReactNode } from 'react';
@@ -13,7 +13,6 @@ import {
   issueAccess,
   listDocuments,
   recordConsent,
-  reviseSession,
   revokeAccess,
   uploadDocument,
   type AccessState,
@@ -41,10 +40,10 @@ import {
   Chevron,
 } from '../ui.tsx';
 import { ConsentLinkCard } from '../consent-link.tsx';
-import { SessionOriginalDialog, type OriginalPart } from '../session-original.tsx';
+import { SessionOriginalDialog } from '../session-original.tsx';
 import { dateLabel, timeLabel } from '../date-time.ts';
 
-const TABS = ['당사자 정보', '회차별 요약', '회차별 원본 보기', '상담 목표 기록'] as const;
+const TABS = ['기본 정보', '회차별 요약', '회차별 원본'] as const;
 type Tab = (typeof TABS)[number];
 
 // 날짜 표기는 `date-time.ts` 의 `dateLabel` 하나다(2026-09-18 Q — `2026.09.18.(금)`).
@@ -84,30 +83,33 @@ const Lines = ({ text }: { text: string }) => {
 type SeqTone = 'ai' | 'change' | 'warn' | 'state' | 'risk' | 'done';
 
 /**
- * 요약 안 구역 하나 — **작은 아코디언**이다(2026-09-18 Q). 제목은 14px 컬러 텍스트이고
- * 기본은 펼친 상태다: 접어 두면 무엇이 있는지 모른 채 넘어간다. `wide` 는 한 줄을 다 쓴다.
+ * 요약 안 구역 하나 — **아코디언 카드**다(2026-09-18 Q "모두 아코디언 카드로, 1열 여러 행").
+ * 구 테두리 없는 작은 아코디언을 `Fold` 로 바꿨다. 제목은 14px 컬러 텍스트(`data-tone`)이고
+ * 펼치면 카드 머리 반전 규칙(app.css L1)이 그대로 뒤집는다. `open` 은 기본 펼침 여부다:
+ * 핵심만 펼쳐 두고 나머지는 `desc` 한 줄(건수)로 말한다 — 다섯 카드가 다 펼쳐지면 한 회차가 화면 둘을 먹는다.
  */
 function SeqSection({
   title,
   tone,
-  wide = false,
+  desc,
+  open = false,
   children,
 }: {
   title: string;
   tone: SeqTone;
-  wide?: boolean;
+  desc?: ReactNode;
+  open?: boolean;
   children: ReactNode;
 }) {
   return (
-    <details className={wide ? 'seq-section is-wide' : 'seq-section'} open>
-      <summary className="seq-section-title" data-tone={tone}>
-        <span>{title}</span>
-        <span className="seq-section-chevron" aria-hidden="true">
-          <Chevron dir="down" />
-        </span>
-      </summary>
-      <div className="seq-section-body">{children}</div>
-    </details>
+    <Fold
+      className="seq-section"
+      title={<span className="seq-section-title" data-tone={tone}>{title}</span>}
+      desc={desc}
+      open={open}
+    >
+      {children}
+    </Fold>
   );
 }
 
@@ -115,47 +117,20 @@ function SeqSection({
  * 회차별 요약 — **한 회차가 한 접힘 카드**다(2026-09-17 Q). 상단 `위험 신호` 배너는 걷었다:
  * 본문 중심으로 가고, 위험 신호는 그 신호가 나온 회차 카드가 스스로 말한다(`is-crisis`).
  *
- * 접힌 머리는 `N회차`(16/600) + 날짜·종류(13/400, 세로선 없이 여백) + 배지(`AI`·`위험 신호`·
- * `원본 수정됨`) + 행동 넷(`AI 정리 보기`·`수기 원본 보기`·`녹음 전사 기록 보기`·`수정`, F4)이다.
- * 펼친 본문은 **테두리 없는 텍스트 구역**들이고 구역 제목은 배지, 본문은 불렛이다(F2).
- * `수정` 은 요약문 수정이다 — 원본은 팝업에서 고친다.
+ * 접힌 머리는 `N회차`(16/600) + 날짜(13/400) + 표시(`위험 신호`·`원본 수정됨`)이고 둘째 줄이
+ * **이번 상담 목표**다(2026-09-18 Q — 구 `AI` 표시와 행동 넷 `AI 정리 보기`·`수기 원본 보기`·
+ * `녹음 전사 기록 보기`·`수정`, 요약문 편집은 걷었다. 원본은 회차별 원본 탭, AI 정리는 검토 화면 것이다).
+ * 펼친 본문은 **아코디언 카드 1열 여러 행**이다: 핵심 · 변화 · 완료·해결 · 확인필요 · 기록 상태.
  */
-function Sessions({
-  detail,
-  caseId,
-  reload,
-}: {
-  detail: CaseDetail;
-  caseId: number;
-  /** 원본·요약 리비전 뒤 사례 상세를 다시 받는다 — `stale` 배지와 새 요약이 서버 값이다. */
-  reload: () => Promise<void>;
-}) {
+function Sessions({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
   const [brief, setBrief] = useState<Briefing | null>(null);
-  const [original, setOriginal] = useState<{ sessionId: number; seq: number; focus: OriginalPart } | null>(null);
-  const [editing, setEditing] = useState<number | null>(null);
-  const [draft, setDraft] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
   useEffect(() => {
     void getBriefing(caseId).then(setBrief);
   }, [caseId]);
   const risk = brief?.risk_signals ?? null;
 
   const done = detail.sessions.filter((s) => s.status === 'done');
-
-  const saveSummary = async (sessionId: number) => {
-    setSaving(true);
-    setSaveError(null);
-    try {
-      await reviseSession(sessionId, 'summary', draft);
-      setEditing(null);
-      await reload();
-    } catch (e) {
-      setSaveError(`저장 실패, ${e instanceof Error ? e.message : '다시 시도'}`);
-    } finally {
-      setSaving(false);
-    }
-  };
+  const count = (n: number, unit: string) => (n === 0 ? '없음' : `${n}${unit}`);
 
   // 아직 아무 기록이 없으면 **여기서 바로 시작할 수 있어야 한다.**
   // 빈 화면만 보여 주고 어디로 가라는 말이 없으면 위 메뉴를 뒤지게 된다.
@@ -185,7 +160,7 @@ function Sessions({
   return (
     <>
       <Card title="회차별 요약">
-        {/* 최신순이다(2026-09-17 Q) — 회차 정보 표와 같은 순서다. */}
+        {/* 최신순이다(2026-09-17 Q) — 상담 참여 내역 표와 같은 순서다. */}
         {[...done].reverse().map((s) => {
           const risks = (risk?.items ?? []).filter((r) => r.source_session_seq === s.seq);
           const transcriptLabel =
@@ -210,63 +185,31 @@ function Sessions({
           ];
           const summary = s.ai_summary?.summary ?? null;
           const isStale = s.stale.ai_summary || s.stale.mismatch;
-          const openOriginal = (focus: OriginalPart) => (event: React.MouseEvent) => {
-            event.stopPropagation();
-            setOriginal({ sessionId: s.id, seq: s.seq, focus });
-          };
+          const changes = (s.ai_summary?.changes.length ?? 0) + (s.ai_summary?.fact_changes.length ?? 0);
           return (
             <Fold
               key={s.id}
+              className="seq-card"
               group="sessions"
               crisis={risks.length > 0}
-              open={editing === s.id ? true : undefined}
               title={
                 <>
                   <span className="seq-head-no">{s.seq}회차</span>
                   <span className="seq-head-meta">{dateLabel(s.held_at)}</span>
                   {s.kind === 'intake' && <span className="seq-head-meta">인테이크</span>}
                   {/* 배지 면을 걷고 14px 컬러 텍스트로 붙인다(2026-09-18 Q) — 채운 면이 줄을 밀었다. */}
-                  {s.ai_summary && <span className="seq-flag" data-tone="ai">AI</span>}
                   {risks.length > 0 && <span className="seq-flag" data-tone="risk">위험 신호 {risks.length}</span>}
                   {isStale && <span className="seq-flag" data-tone="warn">원본 수정됨, 재정리 필요</span>}
                 </>
               }
-              // 접힌 머리에도 내용 한 줄을 둔다(2026-09-18) — 펼치기 전에 무슨 회차인지 안다.
-              // AI 요약이 있으면 그것, 없으면 회차 한 줄(`s.line`)이다.
-              desc={summary ?? s.line}
+              // 접힌 머리의 둘째 줄은 **이번 상담 목표**다(2026-09-18 Q) — 기록 당시의 오늘 상담 목표.
+              desc={s.today_goal_text ? `이번 상담 목표, ${s.today_goal_text}` : '이번 상담 목표 없음'}
             >
-              {/* 행동 넷은 머리에서 **본문 첫 줄**로 내렸다(2026-09-18 Q) — 접힌 줄에 버튼 넷이
-                  서면 390 에서 세 줄로 쏟아졌다. 꺽쇠로 펼친 사람만 본다. */}
-              <div className="seq-actions">
-                {/* 이름이 상태를 말한다(2026-09-17 Q): 승인 전에는 검토, 승인 뒤에는 보기,
-                    원본이 바뀐 뒤에는 다시 하기(D3 — 자동 재처리는 없다). */}
-                <Button
-                  onClick={() => {
-                    window.location.hash = `#/cases/${caseId}/sessions/${s.id}/review`;
-                  }}
-                >
-                  {isStale ? 'AI 정리 다시 하기' : s.ai_summary ? 'AI 정리 보기' : 'AI 정리 검토'}
-                </Button>
-                <Button onClick={openOriginal('written')}>수기 원본 보기</Button>
-                <Button onClick={openOriginal('voice')}>녹음 전사 기록 보기</Button>
-                <Button
-                  disabled={summary === null}
-                  onClick={() => {
-                    setDraft(summary ?? '');
-                    setSaveError(null);
-                    setEditing(s.id);
-                  }}
-                >
-                  수정
-                </Button>
-              </div>
-              {/* 팀 목업 넷(2026-09-18 검토)이 공통으로 쓰는 **네 구역**이다: 핵심 · 변화 ·
-                  확인필요 · 완료·해결. 폭이 되면 2열, 좁아지면 한 열이다.
-                  구역 제목은 **배지 면이 아니라 14px 컬러 텍스트**이고 구역마다 작은
-                  아코디언이다(2026-09-18 Q — 채운 배지가 줄을 밀고 구분이 약했다). */}
-              <div className="seq-sections" data-cols="2">
+              {/* 팀 목업 넷(2026-09-18 검토)이 공통으로 쓰는 구역들이다: 핵심 · 변화 · 완료·해결 ·
+                  확인필요 · 기록 상태. 전부 **아코디언 카드**이고 1열 여러 행이다(2026-09-18 Q). */}
+              <div className="seq-sections">
                 {risks.length > 0 && (
-                  <SeqSection title="위험 신호" tone="risk" wide>
+                  <SeqSection title="위험 신호" tone="risk" open>
                     <ul className="seq-list">
                       {risks.map((r) => (
                         <li key={r.card_id}>
@@ -280,33 +223,8 @@ function Sessions({
                     </p>
                   </SeqSection>
                 )}
-                <SeqSection title="이번 상담의 핵심" tone="ai">
-                  {editing === s.id ? (
-                    <>
-                      <div className="wire-input-box" data-control="textarea">
-                        <textarea
-                          aria-label="이번 상담의 핵심"
-                          rows={6}
-                          value={draft}
-                          disabled={saving}
-                          onChange={(e) => setDraft(e.target.value)}
-                        />
-                      </div>
-                      <FormActions>
-                        {saveError && <ErrorText>{saveError}</ErrorText>}
-                        <Button disabled={saving} onClick={() => setEditing(null)}>
-                          취소
-                        </Button>
-                        <Button
-                          variant="primary"
-                          disabled={saving || draft.trim() === '' || draft === summary}
-                          onClick={() => void saveSummary(s.id)}
-                        >
-                          {saving ? '저장 중…' : '저장'}
-                        </Button>
-                      </FormActions>
-                    </>
-                  ) : summary !== null ? (
+                <SeqSection title="이번 상담의 핵심" tone="ai" open>
+                  {summary !== null ? (
                     <>
                       {isStale && <p className="seq-section-note">원본 수정됨, 재정리 필요</p>}
                       <Lines text={summary} />
@@ -315,7 +233,7 @@ function Sessions({
                     <p className="seq-section-note">AI 정리 없음</p>
                   )}
                 </SeqSection>
-                <SeqSection title="확인된 변화" tone="change">
+                <SeqSection title="확인된 변화" tone="change" desc={s.ai_summary ? count(changes, '건') : 'AI 정리 없음'}>
                   {isStale && <p className="seq-section-note">원본 수정됨, 재정리 필요</p>}
                   {s.ai_summary && s.ai_summary.changes.length > 0 && (
                     <ul className="seq-list">
@@ -332,7 +250,7 @@ function Sessions({
                   )}
                   {!s.ai_summary && <p className="seq-section-note">AI 정리 없음</p>}
                 </SeqSection>
-                <SeqSection title="확인필요" tone="warn">
+                <SeqSection title="확인필요" tone="warn" desc={count(pending.length, '건')}>
                   {pending.length === 0 ? (
                     <p className="seq-section-note">확인할 것 없음</p>
                   ) : (
@@ -348,7 +266,7 @@ function Sessions({
                     </ul>
                   )}
                 </SeqSection>
-                <SeqSection title="완료·해결" tone="done">
+                <SeqSection title="완료·해결" tone="done" desc={count(settled.length, '건')}>
                   {settled.length === 0 ? (
                     <p className="seq-section-note">완료된 것 없음</p>
                   ) : (
@@ -360,7 +278,7 @@ function Sessions({
                   )}
                 </SeqSection>
                 {state.some(Boolean) && (
-                  <SeqSection title="기록 상태" tone="state" wide>
+                  <SeqSection title="기록 상태" tone="state" desc={<Meta parts={state} />}>
                     <p className="seq-text"><Meta parts={state} /></p>
                   </SeqSection>
                 )}
@@ -379,24 +297,14 @@ function Sessions({
           />
         </Card>
       )}
-      {original && (
-        <SessionOriginalDialog
-          caseId={caseId}
-          sessionId={original.sessionId}
-          seq={original.seq}
-          focus={original.focus}
-          onClose={() => setOriginal(null)}
-          onRevised={() => void reload()}
-        />
-      )}
     </>
   );
 }
 
 /**
- * 상담 목표 기록 — **읽기만 한다**(2026-09-18 Q). 전체 상담 목표는 HERO 2행이 보여 주고 여기서는
- * 노출하지 않는다. 고치거나 더하는 자리가 아니다(구 `목표` 탭의 전체 목표 칸·다음 목표 줄·
- * `지난 목표 보기`·`저장` 은 걷었다). 두 카드다:
+ * 상담 목표 기록 — **읽기만 하는 아코디언**이다(2026-09-18 Q — 구 넷째 탭을 걷고 기본 정보 탭의
+ * `상담 참여 내역` 아래로 내렸다. 로그뿐이라 탭 하나를 차지할 일이 아니다). 전체 상담 목표는
+ * HERO 2행이 보여 주고 고치는 자리는 인테이크뿐이다. 두 묶음이다:
  *   - 지난 상담 목표: 회차마다 기록 당시의 오늘 상담 목표(`today_goal_text`), 최신순
  *   - 변경 기록: 전체 상담 목표 리비전(`goal_revisions`), 최신순 — 원래 순서의 첫 줄만 `승인`
  */
@@ -404,39 +312,46 @@ function GoalHistory({ detail }: { detail: CaseDetail }) {
   const withGoal = detail.sessions.filter((s) => s.today_goal_text);
   const history = detail.goal_revisions;
   return (
-    <div className="card-grid two-col">
-      <Card title="지난 상담 목표">
-        {withGoal.length === 0 ? (
-          <Empty>기록된 상담 목표 없음</Empty>
-        ) : (
-          [...withGoal].reverse().map((s) => (
-            <Item
-              key={s.id}
-              title={s.today_goal_text ?? ''}
-              desc={
-                <>
-                  <span className="seq-head-no">{s.seq}회차</span>
-                  <span className="seq-head-meta">{dateLabel(s.held_at)}</span>
-                </>
-              }
-            />
-          ))
-        )}
-      </Card>
-      <Card title="변경 기록">
-        {history.length === 0 ? (
-          <Empty>변경 기록 없음</Empty>
-        ) : (
-          [...history].reverse().map((r, j) => (
-            <Item
-              key={`${r.created_at}-${j}`}
-              title={r.text ?? '(비움)'}
-              desc={`${dateLabel(r.created_at)}, ${j === history.length - 1 ? '승인' : '수정'}`}
-            />
-          ))
-        )}
-      </Card>
-    </div>
+    <Fold
+      title="상담 목표 기록"
+      desc={<Meta parts={[`지난 상담 목표 ${withGoal.length}회`, `변경 기록 ${history.length}건`]} />}
+    >
+      <div className="goal-history">
+        <section>
+          <h3 className="wire-subhead">지난 상담 목표</h3>
+          {withGoal.length === 0 ? (
+            <Empty>기록된 상담 목표 없음</Empty>
+          ) : (
+            [...withGoal].reverse().map((s) => (
+              <Item
+                key={s.id}
+                title={s.today_goal_text ?? ''}
+                desc={
+                  <>
+                    <span className="seq-head-no">{s.seq}회차</span>
+                    <span className="seq-head-meta">{dateLabel(s.held_at)}</span>
+                  </>
+                }
+              />
+            ))
+          )}
+        </section>
+        <section>
+          <h3 className="wire-subhead">변경 기록</h3>
+          {history.length === 0 ? (
+            <Empty>변경 기록 없음</Empty>
+          ) : (
+            [...history].reverse().map((r, j) => (
+              <Item
+                key={`${r.created_at}-${j}`}
+                title={r.text ?? '(비움)'}
+                desc={`${dateLabel(r.created_at)}, ${j === history.length - 1 ? '승인' : '수정'}`}
+              />
+            ))
+          )}
+        </section>
+      </div>
+    </Fold>
   );
 }
 
@@ -674,7 +589,7 @@ function Documents({ caseId }: { caseId: number }) {
 }
 
 /**
- * 회차 정보(2026-09-17 Q). 구 `기본 정보` 카드는 걷었다 — 이름·연락처·이메일·가명·사업이
+ * 상담 참여 내역(2026-09-18 Q — 구 `회차 정보`). 구 `기본 정보` 카드는 걷었다 — 이름·연락처·이메일·가명·사업이
  * 당사자 카드(HERO)와 글자 하나까지 같은 값이었다.
  *
  * 카드는 **접힘 카드**이고 본문은 회차×상태 표다(C안 확정, 2026-09-17 Q). 표는 **최신순**으로
@@ -732,7 +647,7 @@ function SessionStatus({ detail }: { detail: CaseDetail }) {
   ];
 
   return (
-    <Fold title="회차 정보" desc={<Meta parts={head} />}>
+    <Fold title="상담 참여 내역" desc={<Meta parts={head} />}>
       {/* 좁은 화면에서는 표가 카드 안에서만 가로로 넘어간다 — 페이지 폭을 밀지 않는다
           (390 실측: 표 최소폭 385px 가 문서를 401px 로 늘렸다). */}
       <div className="seq-scroll" role="region" aria-label="회차별 상태" tabIndex={0}>
@@ -795,8 +710,8 @@ const closeWarnings = (detail: CaseDetail): string[] => {
 };
 
 /**
- * 회차별 원본 보기 탭 — 회차 목록과 `원본 보기` 버튼뿐이다(2026-09-18 Q F5). 회차를 고르면
- * 큰 팝업 두 열(수기 · 녹음 전사)이 열리고 거기서 고친다(리비전 로그, 삭제 불가).
+ * 회차별 원본 탭 — 회차 한 줄이 한 행이고 **행 전체가 누를 자리**다(2026-09-18 Q — 구 `원본 보기`
+ * 버튼 대신 오른쪽 끝 꺽쇠). 누르면 큰 팝업(수기 · 녹음 전사)이 열리고 수기는 거기서 고친다.
  */
 function Fulls({
   detail,
@@ -811,25 +726,27 @@ function Fulls({
   const done = detail.sessions.filter((x) => x.status === 'done');
   if (done.length === 0) {
     return (
-      <Card title="회차별 원본 보기">
+      <Card title="회차별 원본">
         <Empty>기록한 상담 없음</Empty>
       </Card>
     );
   }
   return (
-    <Card title="회차별 원본 보기">
-      {/* 최신순이다. 머리 타이포는 회차별 요약과 같다: 회차 크게, 날짜·종류는 작게. */}
-      {[...done].reverse().map((x) => (
-        <div className="wire-repeat-card" key={x.id}>
-          <Item
-            title={
-              <>
-                <span className="seq-head-no">{x.seq}회차</span>
-                <span className="seq-head-meta">{dateLabel(x.held_at)}</span>
-                {x.kind === 'intake' && <span className="seq-head-meta">인테이크</span>}
-              </>
-            }
-            desc={
+    <Card title="회차별 원본">
+      {/* 최신순이다. 한 행에 회차·날짜·종류·상태를 다 싣는다. 머리 타이포는 회차별 요약과 같다. */}
+      <div className="seq-rows">
+        {[...done].reverse().map((x) => (
+          <button
+            type="button"
+            className="seq-row"
+            key={x.id}
+            aria-label={`${x.seq}회차 원본 보기`}
+            onClick={() => setOpen({ sessionId: x.id, seq: x.seq })}
+          >
+            <span className="seq-head-no">{x.seq}회차</span>
+            <span className="seq-head-meta">{dateLabel(x.held_at)}</span>
+            {x.kind === 'intake' && <span className="seq-head-meta">인테이크</span>}
+            <span className="seq-row-state">
               <Meta
                 parts={[
                   x.written ? '수기 있음' : '수기 미작성',
@@ -837,51 +754,51 @@ function Fulls({
                   x.voice.recordings > 0 ? TRANSCRIPT_LABEL[x.voice.transcript] : undefined,
                 ]}
               />
-            }
-            action={<Button onClick={() => setOpen({ sessionId: x.id, seq: x.seq })}>원본 보기</Button>}
-          />
-        </div>
-      ))}
+            </span>
+            <span className="wire-chevron-button seq-row-chevron" aria-hidden="true">
+              <Chevron dir="right" />
+            </span>
+          </button>
+        ))}
+      </div>
       {open && (
         <SessionOriginalDialog
           caseId={caseId}
           sessionId={open.sessionId}
           seq={open.seq}
           onClose={() => setOpen(null)}
-          onRevised={() => void reload()}
+          onSaved={() => void reload()}
         />
       )}
     </Card>
   );
 }
 
-/** 정보 — 회차 현황과 동의·문서·열람·종결. */
+/** 기본 정보 — 상담 참여 내역·목표 기록과 동의·문서·열람·종결. */
 function Info({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
   const [asking, setAsking] = useState(false);
   return (
     <>
-      {/* 회차 정보가 한 줄을 다 쓴다(2026-09-18 Q E1 — 구 `첫상담 기록` 카드는 걷었다, 인테이크
-          원본은 회차별 원본 보기 팝업의 것이다). 아래 순서: 동의 → 열람 링크 → 파일(E9). */}
+      {/* 상담 참여 내역이 한 줄을 다 쓰고 바로 아래가 상담 목표 기록 아코디언이다(2026-09-18 Q —
+          구 넷째 탭). 아래 순서: 동의 → 열람 링크 → 파일(E9). */}
       <SessionStatus detail={detail} />
+      <GoalHistory detail={detail} />
       <Consents caseId={caseId} />
 
       <Access caseId={caseId} />
 
       <Documents caseId={caseId} />
 
-      {/* 한 행이다(2026-09-17 Q): 제목, 짧은 메시지, 버튼. 자세한 경고는 확인 창이 말한다. */}
-      <Card>
-        <Item
-          title="상담 종결"
-          desc={
-            detail.closure
-              ? `${dateLabel(detail.closure.closed_at)} 종결, ${detail.closure.close_reason}`
-              : `미완료 ${detail.open_cards.filter((c) => c.kind === 'promise').length}건, 상담 종결시 기록 작성 필요`
-          }
-          action={
-            detail.closure ? undefined : <Button onClick={() => setAsking(true)}>상담 종결</Button>
-          }
-        />
+      {/* 제목은 카드 제목 `h2` 16px 이다(2026-09-18 Q — 구 항목 제목 14px). 버튼은 제목 줄 오른쪽 끝. */}
+      <Card
+        title="상담 종결"
+        action={detail.closure ? undefined : <Button onClick={() => setAsking(true)}>상담 종결</Button>}
+      >
+        <p className="seq-text">
+          {detail.closure
+            ? `${dateLabel(detail.closure.closed_at)} 종결, ${detail.closure.close_reason}`
+            : `미완료 ${detail.open_cards.filter((c) => c.kind === 'promise').length}건, 상담 종결시 기록 작성 필요`}
+        </p>
         <Confirm
           open={asking}
           title="사례 종결 확인"
@@ -898,7 +815,7 @@ function Info({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
   );
 }
 
-export function ParticipantInfoScreen({ caseId, initialTab = '당사자 정보' }: { caseId: number; initialTab?: Tab }) {
+export function ParticipantInfoScreen({ caseId, initialTab = '기본 정보' }: { caseId: number; initialTab?: Tab }) {
   const [detail, setDetail] = useState<CaseDetail | null>(null);
   const [tab, setTab] = useState<Tab>(initialTab);
   // 원본·요약 리비전 뒤에는 사례 상세를 다시 받는다 — `stale`(D3)·새 요약은 서버 값이다.
@@ -951,7 +868,7 @@ export function ParticipantInfoScreen({ caseId, initialTab = '당사자 정보' 
       />
       {/* 탭·본문의 열 수는 창 폭이 아니라 **이 열의 폭**이 정한다(2026-09-18 Q 7). */}
       <div className="wire-container info-screen">
-        {/* 탭은 카드 아래에서 이 사람의 화면을 가른다(2026-09-17 Q 최종 4탭). */}
+        {/* 탭은 카드 아래에서 이 사람의 화면을 가른다(2026-09-18 Q 3탭 — 목표는 기본 정보 안 아코디언). */}
         <div className="info-tabs" role="tablist">
           {TABS.map((t) => (
             <button
@@ -967,10 +884,9 @@ export function ParticipantInfoScreen({ caseId, initialTab = '당사자 정보' 
           ))}
         </div>
 
-        {tab === '당사자 정보' && <Info detail={detail} caseId={caseId} />}
-        {tab === '회차별 요약' && <Sessions detail={detail} caseId={caseId} reload={reload} />}
-        {tab === '회차별 원본 보기' && <Fulls detail={detail} caseId={caseId} reload={reload} />}
-        {tab === '상담 목표 기록' && <GoalHistory detail={detail} />}
+        {tab === '기본 정보' && <Info detail={detail} caseId={caseId} />}
+        {tab === '회차별 요약' && <Sessions detail={detail} caseId={caseId} />}
+        {tab === '회차별 원본' && <Fulls detail={detail} caseId={caseId} reload={reload} />}
       </div>
     </>
   );

@@ -154,7 +154,7 @@ test('월간이 기본이고 기간 이동·주간·일간·다시보기가 실�
     .toHaveAttribute('href', new RegExp(`cases/${caseA}/record$`));
   await review.click();
   await expect(page).toHaveURL(new RegExp(`/cases/${caseA}/info`));
-  await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '기본 정보' })).toBeVisible();
 
   // ── 주간: 같은 시각대의 두 일정이 모두 살아 있다 ─────────────
   await page.goto('/#/schedule');

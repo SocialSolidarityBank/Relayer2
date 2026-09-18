@@ -83,7 +83,7 @@ test('이름 중심 목록에서 정보를 바로 보고 상세와 기록·일�
   // 카드 행동 둘(A2). `당사자 정보`는 상세로, `상담 기록하기`는 **일정 예약을 지나** 기록으로 간다(D1).
   await card.getByRole('link', { name: `${name}, ${program}, 당사자 정보`, exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/cases/${caseId}/info$`));
-  await expect(page.getByRole('tab', { name: '당사자 정보', exact: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '기본 정보', exact: true })).toBeVisible();
 
   await page.goto('/#/participants');
   await page.locator('#q').fill(name);
