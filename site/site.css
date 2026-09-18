@@ -16,8 +16,16 @@
  * 그림자는 쓰지 않는다. 앱이 2026-08-05 에 본문 카드 그림자를 폐지하고 아웃라인 카드로 갔다.
  */
 
-/* Chillax 는 워드마크 Relayer 한 곳에만 쓴다. 글과 제목은 앱과 같은 서체 스택이다.
- * 출처: Fontshare(Indian Type Foundry). 파일은 site/fonts 에 같이 둔다. */
+/* Chillax 는 영문 세 자리에만 쓴다: 워드마크, 순서 번호와 제목 안 약어, 영문 서브타이틀.
+ * 한글에는 쓰지 않는다. 이 서체에 한글 글리프가 없어 한 줄 안에 폴백 서체가 섞인다.
+ * 글과 제목은 앱과 같은 서체 스택이다. 출처: Fontshare(Indian Type Foundry). */
+@font-face {
+  font-family: 'Chillax';
+  src: url('fonts/Chillax-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
 @font-face {
   font-family: 'Chillax';
   src: url('fonts/Chillax-Semibold.woff2') format('woff2');
@@ -52,6 +60,12 @@
   --gradient-brand: linear-gradient(90deg, #8ED9B8 0%, #CBA8E2 100%);
   --gradient-action: linear-gradient(135deg, #A8E3C6 0%, #D1B3E3 100%);
   --gradient-hover: linear-gradient(90deg, #E7EEF8 0%, #F2E7F7 100%);
+  /* 영문 글자에 입히는 3색 축. base 가 아니라 deep 값이다: base 는 캔버스 위에서
+   * 글자로 서지 않는다. 워드마크, 순서 번호, 제목 안 약어가 같은 값을 쓴다. */
+  --gradient-mark: linear-gradient(96deg, #486997 0%, #56CC99 52%, #7D4E9B 100%);
+  /* 세로로 긴 글리프(순서 번호)는 같은 축을 위아래로 쓴다. 가로로 쓰면 좁은 상자에서
+   * 3색이 눌려 파랑에서 민트까지만 보인다. 앱도 세로선용 변형을 따로 둔다. */
+  --gradient-mark-v: linear-gradient(176deg, #486997 0%, #56CC99 52%, #7D4E9B 100%);
   --on-action: #3D3445;
   --line-on-action: rgba(61, 52, 69, 0.5);
 
@@ -196,29 +210,51 @@ summary:focus-visible,
   gap: var(--space-6);
 }
 
-/* 홈으로 가는 워드마크. 앱 머리줄의 3색 축을 글자에 그대로 입힌다.
- * base 값(#93C1F5 등)이 아니라 deep 값을 쓴다: base 는 캔버스 위에서 글자로 서지 않는다.
+/* ── 그라데이션 영문 ── 워드마크, 순서 번호, 제목 안 약어가 같은 규칙을 쓴다.
  * 로고타입은 WCAG 1.4.3 의 글자 대비 대상이 아니지만 그 예외에 기대지 않고, 가장 옅은
  * 지점(민트)을 가운데로 보내 글자 모양은 양 끝의 진한 값이 잡게 둔다.
  * 그라데이션을 못 그리는 환경에서는 color 로 잉크가 남는다. */
-.mark {
+.mark,
+.en,
+.steps li::before {
   font-family: var(--font-mark);
   font-weight: 600;
+  color: var(--ink);
+  background: var(--gradient-mark);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+@supports not ((background-clip: text) or (-webkit-background-clip: text)) {
+  .mark, .en, .steps li::before { -webkit-text-fill-color: currentColor; background: none; }
+}
+
+/* 홈으로 가는 워드마크. */
+.mark {
   font-size: var(--text-xl);
   letter-spacing: -0.005em;
   line-height: normal;
   text-decoration: none;
   margin-right: auto;
-  color: var(--ink);
-  background: linear-gradient(96deg, #486997 0%, #56CC99 52%, #7D4E9B 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
   /* 글리프가 상자를 꽉 채우면 배경이 잘려 첫 글자와 끝 글자 색이 죽는다. */
   padding-right: 2px;
 }
-@supports not ((background-clip: text) or (-webkit-background-clip: text)) {
-  .mark { -webkit-text-fill-color: currentColor; background: none; }
+
+/* 제목 안 약어. 한글 제목보다 한 단 크게 세운다. */
+.en { letter-spacing: -0.01em; }
+.section-title .en,
+.doc-body h2 .en { font-size: 1.3em; line-height: 1; }
+
+/* 설명문 아래 영문 서브타이틀. 작고 조용하다. 여기서는 그라데이션을 쓰지 않는다.
+ * 대문자로 늘려 쓰지 않는다. */
+.en-sub {
+  margin: var(--space-2) 0 0;
+  font-family: var(--font-mark);
+  font-weight: 500;
+  font-size: var(--text-detail);
+  line-height: var(--leading-snug);
+  letter-spacing: 0.01em;
+  color: var(--sub);
 }
 
 .top-nav {
@@ -551,23 +587,50 @@ summary:focus-visible,
 .steps li {
   counter-increment: step;
   background: var(--canvas);
-  padding: var(--space-6) 0;
+  padding: var(--space-5) 0;
   display: grid;
-  grid-template-columns: var(--space-10) minmax(0, 1fr);
-  align-items: baseline;
+  grid-template-columns: 64px minmax(0, 1fr);
+  /* 번호와 글 덩어리를 세로 가운데로 맞춘다. baseline 으로 두면 두 줄 글에서 번호가 위로 뜬다. */
+  align-items: center;
   gap: var(--space-4);
 }
 /* 번호를 쓰는 이유는 순서가 실제로 있기 때문이다. 세 단계를 건너뛰면 다음이 열리지 않는다.
- * 민트 deep 글자는 앱의 폼 묶음 제목(legend)이 쓰는 값과 같다. */
+ * 크기는 눈대중이 아니라 실측이다. 글 덩어리(제목 16/1.35 + 설명 14/1.35)의 높이는 40.5px 이고,
+ * 캔버스 TextMetrics 로 잰 이 서체 숫자의 잉크 높이(0.686em)가 40.5 가 되는 지점이 59px 이다.
+ * optical: 잉크 중심이 줄상자 중심보다 0.018em 위에 앉는다(A 0.98, D 0.33, 잉크 0.686em 실측).
+ * align-items:center 는 줄상자를 맞추므로 그만큼 내려 잉크 중심을 글 덩어리 중심에 세운다. */
 .steps li::before {
   content: counter(step);
-  font-size: var(--text-lg);
-  font-weight: 600;
-  color: var(--mint-deep);
+  font-size: 59px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  align-self: center;
+  /* background 단축은 background-clip 을 border-box 로 되돌린다. 글자에 입힌 그라데이션이
+   * 사각형으로 칠해지므로 이미지만 바꾼다. */
+  background-image: var(--gradient-mark-v);
+  transform: translateY(0.018em);
 }
-/* 번호가 1열, 글이 2열이다. 두 줄 모두 2열에 두지 않으면 설명이 번호 칸으로 내려간다. */
-.steps b { grid-column: 2; font-weight: 600; }
-.steps span { grid-column: 2; color: var(--sub); }
+/* 좁은 화면에서는 설명이 두 줄로 접혀 글 덩어리가 59.4px 가 된다. 그 높이를 숫자로 따라가면
+ * 번호가 화면을 잡아먹으므로, 이 폭에서는 높이를 맞추지 않고 번호를 한 단 줄인다. */
+@media (max-width: 599px) {
+  .steps li { grid-template-columns: 44px minmax(0, 1fr); gap: var(--space-3); }
+  .steps li::before { font-size: 40px; }
+}
+/* 주제 문장과 설명 문장은 한 덩어리다. 행간을 본문 1.55 에서 1.35 로 줄여 두 줄이
+ * 번호 하나의 높이 안에 든다. */
+.steps-text { grid-column: 2; }
+.steps-text b {
+  display: block;
+  font-size: var(--text-md);
+  font-weight: 600;
+  line-height: var(--leading-snug);
+}
+.steps-text span {
+  display: block;
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+  color: var(--sub);
+}
 
 /* ───────── 문 안내 ───────── */
 
@@ -641,10 +704,13 @@ summary:focus-visible,
   font-size: var(--text-sm);
   color: var(--sub);
 }
-.foot-row { display: flex; flex-wrap: wrap; gap: var(--space-6); align-items: baseline; }
+.foot-row { display: flex; flex-wrap: wrap; gap: var(--space-6); align-items: flex-end; }
 .foot-row nav { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-left: auto; }
 .foot p { margin: 0; max-width: var(--measure); }
-.foot-note { margin-top: var(--space-4) !important; }
+/* 꼬리줄 워드마크. 머리줄과 같은 글자이고 크기만 한 단 크다. */
+.foot-mark { font-size: var(--text-2xl); margin-right: 0 !important; }
+.foot .en-sub { margin-top: var(--space-1); }
+.foot-note { margin-top: var(--space-5) !important; }
 
 /* ───────── 가이드 본문 ───────── */
 
