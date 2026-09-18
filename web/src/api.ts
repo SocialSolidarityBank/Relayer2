@@ -765,3 +765,139 @@ export type ConsentCopyInput = {
 };
 export const putConsentCopy = (domain: ConsentDomain, body: ConsentCopyInput) =>
   json<ConsentCopy>(`/consent-copy/${domain}`, { method: 'PUT', body: JSON.stringify(body) });
+
+// ─── v6 상담기록 분석 (2026-09-18 Q, 계약 정본 api/src/domain/record-analysis.ts) ───
+// 서버 타입을 손으로 옮긴 사본이다(FactChange 와 같은 관례). 필드를 바꾸면 양쪽을 같이 고친다.
+// span ID: 수기 `w:<doc>:<n>`(doc = memo | card:<id> | intake:<key>), 전사 `t:<transcriptId>:<n>`. 화면 번호가 아니다.
+
+export type SourceKind = 'memo' | 'card:promise' | 'card:question' | 'card:judgment' | 'card:fact' | 'intake' | 'transcript';
+export type SourceDocument = { id: string; kind: SourceKind; label: string; text: string; hash: string; order: number };
+export type SourceSpan = {
+  id: string;
+  doc: string;
+  start: number;
+  end: number;
+  order: number;
+  offset_ms?: number | null;
+  duration_ms?: number | null;
+};
+export const isTranscriptSpan = (id: string): boolean => id.startsWith('t:');
+
+export type AnalysisStatusKind = 'change' | 'follow_up' | 'completed';
+export type Annotation = { span: string; status: AnalysisStatusKind; before?: string[]; after?: string[] };
+export type Paragraph = { id: string; title: string; spans: string[] };
+export type Topic = { id: string; title: string; paragraph_ids: string[] };
+export type StructuredRecord = { topics: Topic[]; paragraphs: Paragraph[]; annotations: Annotation[] };
+
+export type GoalLink = 'overall' | 'session' | null;
+export type SummaryItem = { text: string; spans: string[]; goal: GoalLink };
+export type Dialogue = { worker?: string; participant?: string };
+export type PromiseResultItem = {
+  promise: string;
+  result: string;
+  promise_spans: string[];
+  result_spans: string[];
+  changes: Array<{ before: string; after: string; meaning?: string }>;
+  conclusion?: string;
+  goal: GoalLink;
+};
+export type NewlyRevealedItem = {
+  dialogue?: Dialogue;
+  mode: 'change' | 'confirmed';
+  lines: string[];
+  spans: string[];
+  summary_only_exception: boolean;
+  goal: GoalLink;
+};
+export type NewPossibilityItem = { dialogue?: Dialogue; lines: string[]; change_spans: string[]; plan_spans: string[]; goal: GoalLink };
+export type SessionSummary = {
+  core: SummaryItem[];
+  changes: { promise_result: PromiseResultItem[]; newly_revealed: NewlyRevealedItem[]; new_possibility: NewPossibilityItem[] };
+  follow_up: SummaryItem[];
+  completed: SummaryItem[];
+};
+/** 하위 항목 의미 순서. 화면 번호 ①②③ 은 내용 있는 것만 세어 렌더 시 매긴다. */
+export const CHANGE_SUBSECTIONS = ['promise_result', 'newly_revealed', 'new_possibility'] as const;
+export const CHANGE_SUBSECTION_LABEL: Record<(typeof CHANGE_SUBSECTIONS)[number], string> = {
+  promise_result: '약속 이행 여부',
+  newly_revealed: '상담 중 새로 드러난 것',
+  new_possibility: '이번 상담 후 새로운 가능성',
+};
+
+export type EvidenceLink = { transcript_span: string; written_spans: string[]; match: 'match' | 'uncertain' };
+export type Discrepancy = {
+  transcript_span: string;
+  written_spans: string[];
+  paragraph_id: string;
+  difference: string;
+  conditions: { same_subject: boolean; same_attribute: boolean; same_time: boolean; incompatible: boolean };
+};
+export type Keyword = { text: string; source: 'deterministic' | 'llm'; spans: string[] };
+
+export type AnalysisStatus = 'draft' | 'approved' | 'failed';
+export type SourceVersions = {
+  memo_hash: string | null;
+  cards: Array<{ id: number; hash: string }>;
+  intake_hash: string | null;
+  transcript_id: number | null;
+};
+export type SummaryOverride = { text: string; actor_id: number; at: string };
+export type AnalysisBody = {
+  schema_version: number;
+  rule_version: string;
+  documents: Array<Omit<SourceDocument, 'text'>>;
+  spans: SourceSpan[];
+  record: StructuredRecord;
+  summary: SessionSummary;
+  links: EvidenceLink[];
+  discrepancies: Discrepancy[];
+  keywords: Keyword[];
+  tasks: string[];
+  questions: string[];
+  summary_override: SummaryOverride | null;
+};
+export type AnalysisRevision = {
+  id: number;
+  session_id: number;
+  status: AnalysisStatus;
+  schema_version: number;
+  rule_version: string;
+  source_versions: SourceVersions;
+  model: string | null;
+  mask_hits: Record<string, number>;
+  body: AnalysisBody | null;
+  error: string | null;
+  created_by: number | null;
+  approved_by: number | null;
+  created_at: string;
+};
+export type ApproveBody = {
+  draft_id: number;
+  source_versions: SourceVersions;
+  edits?: { summary?: SessionSummary; tasks?: string[]; questions?: string[] };
+};
+/** 회차 카드의 요약. v6 가 없고 구버전 승인만 있으면 legacy. 2차 파도에서 CaseDetail.sessions[].ai_summary 가 이 타입이 된다. */
+export type SessionAiSummary =
+  | { kind: 'v6'; analysis_id: number; summary: SessionSummary; keywords: Keyword[]; override: SummaryOverride | null }
+  | { kind: 'legacy'; summary: string };
+export type AnalysisView = {
+  session_id: number;
+  analysis: AnalysisRevision | null;
+  documents: SourceDocument[];
+  spans: SourceSpan[];
+  transcript: { id: number; status: 'draft' | 'approved'; recordings_without_transcript: number } | null;
+  stale: boolean;
+};
+export type Backlink = { session_id: number; seq: number; span_id: string; paragraph_id: string | null; text: string };
+
+export const getAnalysisDraft = async (sessionId: number): Promise<AnalysisRevision | 'none'> => {
+  const found = await json<AnalysisRevision | { status: 'none' }>(`/sessions/${sessionId}/draft`);
+  return found.status === 'none' ? 'none' : (found as AnalysisRevision);
+};
+export const makeAnalysisDraft = (sessionId: number) =>
+  json<AnalysisRevision>(`/sessions/${sessionId}/draft`, { method: 'POST' });
+export const approveAnalysis = (sessionId: number, body: ApproveBody) =>
+  json<AnalysisRevision>(`/sessions/${sessionId}/draft/approve`, { method: 'POST', body: JSON.stringify(body) });
+export const getAnalysis = (sessionId: number) => json<AnalysisView>(`/sessions/${sessionId}/analysis`);
+export const getBacklinks = (caseId: number, keyword: string) =>
+  json<Backlink[]>(`/cases/${caseId}/backlinks?keyword=${encodeURIComponent(keyword)}`);
