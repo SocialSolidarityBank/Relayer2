@@ -79,6 +79,8 @@ for expected in \
   '9. Storage Blob Data Contributor' \
   '10. node api/src/migrate.ts --check' \
   '11. GET /auth/signup open:true' \
+  '12. Cloudflare DNS test2.relayer.kr: CNAME(프록시 없음) + TXT asuid.test2.relayer.kr' \
+  '13. custom hostname test2.relayer.kr' \
   '가입 URL: https://test2.relayer.kr/#/signup'
 do
   case "$rest" in
@@ -86,5 +88,45 @@ do
     *) fail "DRY-RUN 순서/항목 누락: $expected" ;;
   esac
 done
+
+# cloudflare_dns.py — 토큰·Cloudflare 를 가짜 서버로 바꿔 세 경우를 본다: 없음→생성, 같음→건너뜀, 다름→멈춤.
+dns_out="$(python3 - "$ROOT" <<'PY'
+import io, json, os, sys, types, urllib.request
+sys.path.insert(0, sys.argv[1] + "/scripts")
+os.environ["PROJECT_ID"] = "p1"
+fake = types.ModuleType("infisical_get"); fake.API = "http://infisical.test"; fake.login = lambda: "t"
+sys.modules["infisical_get"] = fake
+import cloudflare_dns as m
+records = []   # 가짜 zone 의 현재 레코드
+calls = []
+def opener(req, timeout=30):
+    url, method = req.full_url, req.get_method(); calls.append(method)
+    if "infisical" in url: body = {"secrets": [{"secretKey": "CLOUDFLARE_DNS_API_TOKEN", "secretValue": "cf-secret-marker"}]}
+    elif "/zones?" in url: body = {"success": True, "result": [{"id": "z1"}]}
+    elif method == "GET":
+        q = dict(p.split("=") for p in url.split("?")[1].split("&"))
+        body = {"success": True, "result": [r for r in records if r["type"] == q["type"] and r["name"] == q["name"]]}
+    else:
+        records.append(json.loads(req.data)); body = {"success": True, "result": {}}
+    return io.BytesIO(json.dumps(body).encode())
+urllib.request.urlopen = opener
+sys.argv = ["x", "test2.relayer.kr", "app.example.azurecontainerapps.io", "ABC"]
+out = io.StringIO(); sys.stdout = out
+m.main(); m.main()                      # 1회: 생성 둘, 2회: 있음 둘
+records[0]["content"] = "other.target"  # CNAME 이 다른 곳을 가리키면
+try: m.main(); status = "덮음"
+except SystemExit as e: status = str(e)
+sys.stdout = sys.__stdout__
+print(out.getvalue()); print("STATUS:", status)
+print("PROXIED:", [r.get("proxied") for r in records if r["type"] == "CNAME"])
+print("POSTS:", calls.count("POST"))
+PY
+)"
+[[ "$dns_out" == *"생성: CNAME test2.relayer.kr"* && "$dns_out" == *"생성: TXT asuid.test2.relayer.kr"* ]] || fail "DNS 레코드 생성 없음"
+[[ "$dns_out" == *"있음: CNAME test2.relayer.kr"* ]] || fail "같은 레코드를 건너뛰지 않음"
+[[ "$dns_out" == *"STATUS: 오류: CNAME test2.relayer.kr 가 다른 값으로"* ]] || fail "다른 값의 레코드를 덮어씀"
+[[ "$dns_out" == *"PROXIED: [False]"* ]] || fail "CNAME 이 프록시 없음이 아님"
+[[ "$dns_out" == *"POSTS: 2"* ]] || fail "레코드 생성 횟수가 2가 아님"
+[[ "$dns_out" != *"cf-secret-marker"* ]] || fail "DNS 출력에 토큰 노출"
 
 printf 'PROVISION_OK\n'

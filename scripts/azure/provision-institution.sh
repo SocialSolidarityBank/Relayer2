@@ -34,6 +34,8 @@ app_name="relayer2-${slug}"
 public_url="${RELAYER_PUBLIC_URL:-https://${slug}.relayer.kr}"
 [[ "$public_url" =~ ^https://[^/[:space:]]+/?$ ]] || fail "RELAYER_PUBLIC_URL은 경로 없는 https URL이어야 합니다."
 public_url="${public_url%/}"
+public_host="${public_url#https://}"
+[[ "$public_host" == *.*.* ]] || fail "RELAYER_PUBLIC_URL 은 <이름>.<zone> 꼴의 하위 도메인이어야 합니다(DNS 는 zone 안에 만든다)."
 pgschema="${PGSCHEMA:-}"
 if [ -n "$pgschema" ]; then
   [[ "$pgschema" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || fail "PGSCHEMA는 PostgreSQL 식별자 형식이어야 합니다."
@@ -102,8 +104,10 @@ ${schema_plan}
 9. Storage Blob Data Contributor: ${storage_account} scope
 10. node api/src/migrate.ts --check
 11. GET /auth/signup open:true
+12. Cloudflare DNS ${public_host}: CNAME(프록시 없음) + TXT asuid.${public_host}
+13. custom hostname ${public_host}: 관리형 인증서(CNAME 검증), GET ${public_url}/health
 가입 URL: ${public_url}/#/signup
-APPLY=1일 때만 위 계획을 실행합니다. DNS는 이 스크립트가 변경하지 않습니다.
+APPLY=1일 때만 위 계획을 실행합니다. DNS 토큰은 Infisical prod:/ CLOUDFLARE_DNS_API_TOKEN 이다.
 EOF
   exit 0
 fi
@@ -340,4 +344,26 @@ curl -fsS --retry 5 --retry-delay 2 --retry-all-errors "https://${fqdn}/auth/sig
   python3 -c 'import json,sys; raise SystemExit(0 if json.load(sys.stdin).get("open") is True else 1)' || \
   fail "/auth/signup이 open:true가 아닙니다."
 
+printf '12. Cloudflare DNS %s\n' "$public_host"
+verification_id="$(az containerapp show --name "$app_name" --resource-group "$RG" \
+  --query properties.customDomainVerificationId --output tsv)"
+[ -n "$verification_id" ] || fail "customDomainVerificationId 를 확인하지 못했습니다."
+OP_BIOMETRIC_UNLOCK_ENABLED=false "$OPSVC" run --env-file="$op_refs" -- \
+  env PROJECT_ID="$INFISICAL_PROJECT_ID" PYTHONPATH=scripts \
+  python3 scripts/cloudflare_dns.py "$public_host" "$fqdn" "$verification_id"
+
+printf '13. custom hostname %s\n' "$public_host"
+bound="$(az containerapp hostname list --name "$app_name" --resource-group "$RG" \
+  --query "[?name=='${public_host}'] | length(@)" --output tsv)"
+if [ "$bound" = "0" ]; then
+  az containerapp hostname add --name "$app_name" --resource-group "$RG" --hostname "$public_host" --output none
+  # 관리형 인증서 발급은 DNS 전파 뒤 수 분 걸린다. bind 가 끝까지 기다린다.
+  az containerapp hostname bind --name "$app_name" --resource-group "$RG" --hostname "$public_host" \
+    --environment "$ACA_ENV" --validation-method CNAME --output none
+  printf '  생성: %s (관리형 인증서)\n' "$public_host"
+else
+  printf '  있음: %s\n' "$public_host"
+fi
+curl -fsS --retry 12 --retry-delay 10 --retry-all-errors "${public_url}/health" >/dev/null || \
+  fail "${public_url}/health 응답 없음 — DNS 전파나 인증서 상태를 확인하세요."
 printf '가입 URL: %s/#/signup\n' "$public_url"
