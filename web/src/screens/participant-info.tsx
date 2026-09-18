@@ -15,8 +15,6 @@ import {
   recordConsent,
   reviseSession,
   revokeAccess,
-  updateNextGoalLines,
-  updateOverallGoal,
   uploadDocument,
   type AccessState,
   type Briefing,
@@ -34,7 +32,6 @@ import {
   Empty,
   ErrorText,
   FactChanges,
-  Field,
   Fold,
   FormActions,
   Item,
@@ -45,10 +42,9 @@ import {
 } from '../ui.tsx';
 import { ConsentLinkCard } from '../consent-link.tsx';
 import { SessionOriginalDialog, type OriginalPart } from '../session-original.tsx';
-import { Dialog } from '../dialog.tsx';
 import { dateLabel, timeLabel } from '../date-time.ts';
 
-const TABS = ['당사자 정보', '회차별 요약', '회차별 원본 보기', '목표'] as const;
+const TABS = ['당사자 정보', '회차별 요약', '회차별 원본 보기', '상담 목표 기록'] as const;
 type Tab = (typeof TABS)[number];
 
 // 날짜 표기는 `date-time.ts` 의 `dateLabel` 하나다(2026-09-18 Q — `2026.09.18.(금)`).
@@ -398,144 +394,49 @@ function Sessions({
 }
 
 /**
- * 목표 — 카드 하나다(2026-09-18 Q G1). 고칠 수 있는 건 둘뿐이다: 전체 상담 목표(이력 남김,
- * 그라데이션 아웃라인으로 강조 — G2)와 아직 이어받지 않은 다음 상담 목표(줄 단위 여러 개 — D5,
- * 기존 텍스트 컬럼에 줄바꿈으로 보관). 두 구획은 라벨 색으로 가른다(전체=민트, 다음=블루 시간 축).
- * 지난 회차의 오늘 상담 목표는 그 회차 기록 당시 기준이라 읽기만 한다 — `지난 목표 보기` 모달.
+ * 상담 목표 기록 — **읽기만 한다**(2026-09-18 Q). 전체 상담 목표는 HERO 2행이 보여 주고 여기서는
+ * 노출하지 않는다. 고치거나 더하는 자리가 아니다(구 `목표` 탭의 전체 목표 칸·다음 목표 줄·
+ * `지난 목표 보기`·`저장` 은 걷었다). 두 카드다:
+ *   - 지난 상담 목표: 회차마다 기록 당시의 오늘 상담 목표(`today_goal_text`), 최신순
+ *   - 변경 기록: 전체 상담 목표 리비전(`goal_revisions`), 최신순 — 원래 순서의 첫 줄만 `승인`
  */
-function Goals({ detail, reload }: { detail: CaseDetail; reload: () => Promise<void> }) {
-  const [overall, setOverall] = useState(detail.case.overall_goal ?? '');
-  const pending = detail.pending_next_goal;
-  const pendingLines = (pending?.text ?? '').split('\n').filter((l) => l.trim() !== '');
-  const [lines, setLines] = useState<string[]>(pendingLines.length > 0 ? pendingLines : ['']);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+function GoalHistory({ detail }: { detail: CaseDetail }) {
   const withGoal = detail.sessions.filter((s) => s.today_goal_text);
   const history = detail.goal_revisions;
-
-  const nextLines = lines.map((l) => l.trim()).filter(Boolean);
-  const overallChanged = overall.trim() !== (detail.case.overall_goal ?? '').trim();
-  const nextChanged = pending !== null && nextLines.join('\n') !== pendingLines.join('\n');
-
-  const save = async () => {
-    setSaving(true);
-    setError(null);
-    try {
-      if (overallChanged) await updateOverallGoal(detail.case.id, overall.trim() || null);
-      if (nextChanged) await updateNextGoalLines(detail.case.id, nextLines);
-      await reload();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '저장 실패');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
-    <Card title="목표" hint="전체 상담 목표 수정 시 이전 문구는 이력에 남음">
-      <div className="goal-overall">
-        <Field label="전체 상담 목표" htmlFor="goal-overall" control="textarea">
-          <textarea
-            id="goal-overall"
-            rows={3}
-            value={overall}
-            disabled={saving}
-            onChange={(e) => setOverall(e.target.value)}
-          />
-        </Field>
-      </div>
-      <div className="goal-next">
-        <Field
-          label="다음 상담 목표"
-          htmlFor="goal-next-0"
-          hint={pending ? `${pending.session_seq}회차에서 정함, 다음 회차 기록 시 오늘 상담 목표로 잠김` : '마지막 회차 기록 시 작성'}
-        >
-          {pending ? (
-            <div className="next-goal-list">
-              {/* 줄마다 칸 하나다(G3). +는 아래에 줄을 더하고 −는 그 줄을 지운다. 마지막 한 줄은
-                  비울 수만 있다. 스테퍼는 칸의 **위쪽**에 선다(AC-G3). */}
-              {lines.map((line, i) => (
-                <div className="wire-input-box next-goal-row" data-control="textarea" key={i}>
-                  <textarea
-                    id={`goal-next-${i}`}
-                    aria-label={i === 0 ? '다음 상담 목표' : `다음 상담 목표 ${i + 1}`}
-                    rows={1}
-                    value={line}
-                    disabled={saving}
-                    onChange={(e) =>
-                      setLines((prev) => prev.map((l, j) => (j === i ? e.target.value.replace(/\n/g, ' ') : l)))
-                    }
-                  />
-                  <span className="number-stepper">
-                    <button
-                      type="button"
-                      aria-label="다음 상담 목표 줄 추가"
-                      disabled={saving}
-                      onClick={() => setLines((prev) => [...prev.slice(0, i + 1), '', ...prev.slice(i + 1)])}
-                    >
-                      <Chevron dir="up" />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="다음 상담 목표 줄 삭제"
-                      disabled={saving}
-                      onClick={() =>
-                        setLines((prev) => (prev.length === 1 ? [''] : prev.filter((_, j) => j !== i)))
-                      }
-                    >
-                      <Chevron dir="down" />
-                    </button>
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <input id="goal-next-0" type="text" disabled aria-label="다음 상담 목표" placeholder="없음" />
-          )}
-        </Field>
-      </div>
-      <FormActions>
-        {error && <ErrorText>{error}</ErrorText>}
-        <Dialog id="goal-history" title="지난 목표" trigger="지난 목표 보기">
-          {/* 최신순이다(2026-09-17 Q — 회차 정보 표·회차별 요약과 같은 순서).
-              `승인`/`수정` 라벨은 원래 순서의 첫 줄(처음 적은 목표)에만 `승인`이 붙는다. */}
-          <Card title="전체 상담 목표 이력">
-            {history.length === 0 ? (
-              <Empty>이력 없음</Empty>
-            ) : (
-              [...history].reverse().map((r, j) => (
-                <Item
-                  key={`${r.created_at}-${j}`}
-                  title={r.text ?? '(비움)'}
-                  desc={`${dateLabel(r.created_at)}, ${j === history.length - 1 ? '승인' : '수정'}`}
-                />
-              ))
-            )}
-          </Card>
-          <Card title="회차별 오늘 상담 목표">
-            {withGoal.length === 0 ? (
-              <Empty>이어받은 목표 없음</Empty>
-            ) : (
-              [...withGoal].reverse().map((s) => (
-                <Item
-                  key={s.id}
-                  title={s.today_goal_text ?? ''}
-                  desc={
-                    <>
-                      <span className="seq-head-no">{s.seq}회차</span>
-                      <span className="seq-head-meta">{dateLabel(s.held_at)}</span>
-                    </>
-                  }
-                />
-              ))
-            )}
-          </Card>
-        </Dialog>
-        <Button variant="primary" disabled={saving || !(overallChanged || nextChanged)} onClick={() => void save()}>
-          {saving ? '저장 중…' : '저장'}
-        </Button>
-      </FormActions>
-    </Card>
+    <div className="card-grid two-col">
+      <Card title="지난 상담 목표">
+        {withGoal.length === 0 ? (
+          <Empty>기록된 상담 목표 없음</Empty>
+        ) : (
+          [...withGoal].reverse().map((s) => (
+            <Item
+              key={s.id}
+              title={s.today_goal_text ?? ''}
+              desc={
+                <>
+                  <span className="seq-head-no">{s.seq}회차</span>
+                  <span className="seq-head-meta">{dateLabel(s.held_at)}</span>
+                </>
+              }
+            />
+          ))
+        )}
+      </Card>
+      <Card title="변경 기록">
+        {history.length === 0 ? (
+          <Empty>변경 기록 없음</Empty>
+        ) : (
+          [...history].reverse().map((r, j) => (
+            <Item
+              key={`${r.created_at}-${j}`}
+              title={r.text ?? '(비움)'}
+              desc={`${dateLabel(r.created_at)}, ${j === history.length - 1 ? '승인' : '수정'}`}
+            />
+          ))
+        )}
+      </Card>
+    </div>
   );
 }
 
@@ -1013,16 +914,17 @@ export function ParticipantInfoScreen({ caseId, initialTab = '당사자 정보' 
   if (!detail) return <p className="empty">불러오는 중</p>;
 
   const done = detail.sessions.filter((s) => s.status === 'done');
-  // 당사자 카드 정보 넷(2026-09-17 Q): ID · 사업과 회차 · 연락처 · 이메일. 없는 값은 빠진다.
-  // 실무자가 동명이인을 구분하는 단서가 연락처·이메일이라 머리에 올린다.
+  // 당사자 정보 다섯 칸(2026-09-18 Q): ID · 참여중인 사업(회차) · 연락처 · 이메일이 1행,
+  // **전체 상담 목표**가 2행 전폭이다. 없는 값은 빠진다. 동명이인 단서(연락처·이메일)를 머리에 올린다.
   const heroDetails: Array<[string, string]> = [
-    ['당사자 ID', detail.pseudonym],
+    ['ID', detail.pseudonym],
     [
-      '참여 사업',
+      '참여중인 사업',
       `${detail.case.program_name}${done.length > 0 ? `, ${Math.max(...done.map((s) => s.seq))}회차까지 기록` : ', 기록 없음'}`,
     ],
     ['연락처', detail.participant.phone ?? ''],
     ['이메일', detail.participant.email ?? ''],
+    ['전체 상담 목표', detail.case.overall_goal ?? ''],
   ];
 
 
@@ -1030,7 +932,7 @@ export function ParticipantInfoScreen({ caseId, initialTab = '당사자 정보' 
     <>
       {/* 페이지 제목은 HERO 바로 위 `h1` 이다(2026-09-18 Q). 머리 카드는 사람을 말하고
           화면 이름은 이 줄이 말한다. */}
-      <PageHeader title="당사자 카드" />
+      <PageHeader title="당사자 정보" />
       {/* 여기가 이 사람의 카드다(CCC D38). 화면 용도는 아래 탭이 말한다. */}
       <ParticipantHero
         name={detail.participant.name}
@@ -1068,13 +970,7 @@ export function ParticipantInfoScreen({ caseId, initialTab = '당사자 정보' 
         {tab === '당사자 정보' && <Info detail={detail} caseId={caseId} />}
         {tab === '회차별 요약' && <Sessions detail={detail} caseId={caseId} reload={reload} />}
         {tab === '회차별 원본 보기' && <Fulls detail={detail} caseId={caseId} reload={reload} />}
-        {tab === '목표' && (
-          <Goals
-            key={`${detail.case.overall_goal ?? ''}|${detail.pending_next_goal?.text ?? ''}`}
-            detail={detail}
-            reload={reload}
-          />
-        )}
+        {tab === '상담 목표 기록' && <GoalHistory detail={detail} />}
       </div>
     </>
   );

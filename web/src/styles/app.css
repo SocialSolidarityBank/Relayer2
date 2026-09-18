@@ -678,6 +678,9 @@ body { margin: 0; }
    좁아지면 한 칸으로 접는 이식 규칙은 그대로 유지해야 해서 같은 컨테이너 쿼리를 다시 선언한다
    (app.css 가 뒤 파일이라 조건 없는 선언 하나만 두면 좁은 화면에서도 네 칸이 남는다). */
 .participant-hero-details { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+/* 다섯째 칸부터는 2행 전폭이다(2026-09-18 Q — 당사자 정보의 `전체 상담 목표`). 네 칸 격자에
+   긴 글이 한 칸에 갇히면 세로로 늘어난다. 한 열로 접힌 폭에서는 어차피 전폭이다. */
+.participant-hero-details > .wire-field-row:nth-child(n + 5) { grid-column: 1 / -1; }
 @container (max-width: 760px) {
   .participant-hero-details { grid-template-columns: minmax(0, 1fr); }
 }
@@ -723,21 +726,8 @@ body { margin: 0; }
   .seq-sections[data-cols='2'] { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
 }
 
-/* 목표 탭(G1~G3). 카드 하나 안에서 두 구획은 라벨 색으로 갈린다 — 전체 목표는 기본(민트),
-   다음 상담 목표는 블루(시간 축). 전체 목표 칸은 그라데이션 아웃라인 2px 로 강조한다(G2 —
-   캘린더 외곽선과 같은 `--gradient-brand`). */
-.goal-overall { margin-block-end: var(--space-5); }
-.goal-overall .wire-input-box {
-  border: 2px solid transparent;
-  background: linear-gradient(var(--panel), var(--panel)) padding-box, var(--gradient-brand) border-box;
-}
-.goal-next .wire-form-label { color: var(--blue-deep); }
-.next-goal-list { display: grid; gap: var(--space-2); width: 100%; }
-/* 줄마다 칸 하나 + 위쪽에 선 +/- 스테퍼(AC-G3: 스테퍼 top = 칸 top). 스테퍼 어휘는 등록 화면의
-   `.number-stepper` 그대로이고 여기서는 세로 자리만 칸의 윗선에 못박는다. */
-.next-goal-row { position: relative; }
-.next-goal-row > textarea { padding-inline-end: var(--space-6); resize: none; }
-.next-goal-row > .number-stepper { top: var(--control-pad); }
+/* 구 목표 탭(G1~G3)의 편집 칸·스테퍼 CSS 는 2026-09-18 Q 로 걷었다 — 탭이 `상담 목표 기록`
+   읽기 전용 두 카드가 되면서 마크업이 사라졌다. 전체 상담 목표는 HERO 2행이 보여 준다. */
 
 /* 당사자 등록(H1): 동의 접힘 카드 사이 여백 8. */
 .consent-folds { display: grid; gap: var(--space-2); }

@@ -285,8 +285,8 @@ export const participantHeroDetails = ({
   phone?: string | null;
   email?: string | null;
 }): ReadonlyArray<[string, ReactNode]> => [
-  ['당사자 ID', pseudonym],
-  ['참여 사업', seqLabel ? `${program}, ${seqLabel}` : program],
+  ['ID', pseudonym],
+  ['참여중인 사업', seqLabel ? `${program}, ${seqLabel}` : program],
   ['연락처', phone ?? ''],
   ['이메일', email ?? ''],
 ];

@@ -217,7 +217,7 @@ export function Routes() {
 
     // 목표 탭 직행(2026-09-18 UI-9). 기록 화면의 목표 카드 `수정`이 여기로 온다.
     const goals = path.match(/^#\/cases\/(\d+)\/info\/goals$/);
-    if (goals) return <ParticipantInfoScreen caseId={Number(goals[1])} initialTab="목표" />;
+    if (goals) return <ParticipantInfoScreen caseId={Number(goals[1])} initialTab="상담 목표 기록" />;
 
     const byCase = path.match(/^#\/cases\/(\d+)\/(record|schedule|intake|info|close)$/);
     if (byCase) {
