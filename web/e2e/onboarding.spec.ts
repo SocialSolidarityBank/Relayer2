@@ -33,19 +33,6 @@ test.afterAll(async () => {
 test.setTimeout(180_000);
 
 test('첫 가입에서 마법사, 당사자 등록, 배정, 사업별 필터까지 한 바퀴', async ({ page, browser }) => {
-  // S1 API가 아직 main에 없으므로 UI 계약만 실제 응답 모양으로 가로챈다. 성공을 만드는 production shim은 두지 않는다.
-  await page.route('**/settings/connections', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        ai: { connected: false, provider: 'openai', model: 'gpt-4.1-mini', env: 'OPENAI_API_KEY', source: null },
-        stt: { connected: false, provider: 'azure', region: 'koreacentral', source: null },
-        voice: { enabled: false, source: null },
-        db: { connected: true, checked_at: '2026-09-18T00:00:00.000Z', env: 'DATABASE_URL' },
-      }),
-    }),
-  );
   // ── 랜딩 = 로그인 화면 → 가입하기 ─────────────────────────────
   await page.goto(`${base}/app#/login`);
   await expect(page.locator('#email')).toBeVisible();

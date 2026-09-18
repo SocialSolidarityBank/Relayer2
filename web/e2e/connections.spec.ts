@@ -1,94 +1,70 @@
-import { createServer, type Server } from 'node:http';
-import { readFileSync } from 'node:fs';
-import { extname, join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { expect, test, type Page, type Route } from '@playwright/test';
-import type { Connections, Me } from '../src/api.ts';
+import { expect, test, type Page } from '@playwright/test';
+import { scratchDb, startServer, type Scratch } from '../../api/test/scratch-db.ts';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
-const appBase = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5173';
-const appRoot = `${appBase.replace(/\/$/, '')}${process.env.PLAYWRIGHT_API_PREFIX === '' ? '/app#' : '/#'}`;
-const admin: Me = {
-  id: 1,
-  name: '연결 관리자',
-  role: 'admin',
-  onboarded: true,
-  onboarding_step: 4,
-  workspace: { name: '연결 기관', slug: 'connections', public_address: 'connections.example' },
-};
+const SPEECH_KEY = 'e2e-valid-speech-key';
+const INVALID_SPEECH_KEY = 'e2e-invalid-speech-key';
+const PII_ENC_KEY = Buffer.alloc(32).toString('base64');
+const speechFixture = new URL('./speech-fetch-fixture.ts', import.meta.url).href;
 
-const initialConnections = (): Connections => ({
-  ai: { connected: true, provider: 'openai', model: 'gpt-4.1-mini', env: 'OPENAI_API_KEY', source: 'env' },
-  stt: { connected: false, provider: 'azure', region: 'koreacentral', source: null },
-  voice: { enabled: false, source: null },
-  db: { connected: true, checked_at: '2026-09-18T00:00:00.000Z', env: 'DATABASE_URL' },
-});
+let scratch: Scratch;
+let base: string;
+let stop: () => void;
 
-const json = (route: Route, body: unknown, status = 200) =>
-  route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
-
-async function stubSettings(page: Page, start = initialConnections(), me: Me = admin) {
-  let connections = start;
-  await page.route((url) => ['/me', '/settings/connections', '/settings/stt-key', '/settings/voice'].includes(url.pathname.replace(/^\/api/, '')), async (route) => {
-    const request = route.request();
-    const path = new URL(request.url()).pathname.replace(/^\/api/, '');
-    if (path === '/me' && request.method() === 'GET') return json(route, me);
-    if (path === '/settings/connections' && request.method() === 'GET') return json(route, connections);
-    if (path === '/settings/stt-key' && request.method() === 'PUT') {
-      const body = request.postDataJSON() as { key?: unknown };
-      if (body.key === 'invalid') return json(route, { error: '한국 중부 Azure Speech 키를 확인하세요' }, 400);
-      if (body.key !== null && body.key !== 'valid-speech-key') return json(route, { error: '요청 형식 오류: key' }, 400);
-      connections = {
-        ...connections,
-        stt: { ...connections.stt, connected: body.key !== null, source: body.key === null ? null : 'db' },
-      };
-      return json(route, { ok: true });
-    }
-    if (path === '/settings/voice' && request.method() === 'PUT') {
-      const body = request.postDataJSON() as { enabled?: unknown };
-      if (typeof body.enabled !== 'boolean') return json(route, { error: '요청 형식 오류: enabled' }, 400);
-      connections = { ...connections, voice: { enabled: body.enabled, source: 'db' } };
-      return json(route, { ok: true });
-    }
-    return json(route, { error: `unhandled ${request.method()} ${path}` }, 404);
-  });
-}
-
-let siteServer: Server;
-let siteBase: string;
+test.setTimeout(120_000);
 
 test.beforeAll(async () => {
-  const types: Record<string, string> = {
-    '.css': 'text/css; charset=utf-8',
-    '.html': 'text/html; charset=utf-8',
-    '.js': 'text/javascript; charset=utf-8',
-    '.png': 'image/png',
-    '.woff2': 'font/woff2',
-  };
-  siteServer = createServer((request, response) => {
-    const pathname = new URL(request.url ?? '/', 'http://local').pathname;
-    const relative = pathname === '/' ? 'index.html' : pathname.slice(1);
-    try {
-      const bytes = readFileSync(join(root, 'site', relative));
-      response.writeHead(200, { 'content-type': types[extname(relative)] ?? 'application/octet-stream' });
-      response.end(bytes);
-    } catch {
-      response.writeHead(404).end();
-    }
+  execFileSync('pnpm', ['--dir', 'web', 'build'], { cwd: root, stdio: 'ignore' });
+  scratch = await scratchDb();
+  await scratch.migrate();
+  execFileSync(process.execPath, ['api/src/seed.ts'], {
+    cwd: root,
+    env: { ...process.env, DATABASE_URL: scratch.url, PGSCHEMA: '', PII_ENC_KEY },
+    stdio: 'ignore',
   });
-  await new Promise<void>((resolve) => siteServer.listen(0, '127.0.0.1', resolve));
-  const address = siteServer.address();
-  if (!address || typeof address === 'string') throw new Error('site server address missing');
-  siteBase = `http://127.0.0.1:${address.port}`;
+
+  const voiceEnabled = process.env.VOICE_ENABLED;
+  delete process.env.VOICE_ENABLED;
+  try {
+    ({ base, stop } = await startServer(scratch.url, {
+      PII_ENC_KEY,
+      AZURE_SPEECH_KEY: '',
+      AZURE_SPEECH_REGION: '',
+      AZURE_SPEECH_ENDPOINT: '',
+      RELAYER_E2E_SPEECH_KEY: SPEECH_KEY,
+      NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${speechFixture}`.trim(),
+    }));
+  } finally {
+    if (voiceEnabled === undefined) delete process.env.VOICE_ENABLED;
+    else process.env.VOICE_ENABLED = voiceEnabled;
+  }
+});
+
+test.beforeEach(async () => {
+  await scratch.db`
+    update organization
+    set enc_speech_key = null, voice_enabled = null, onboarded_at = now(), onboarding_step = 4
+    where id = 1`;
 });
 
 test.afterAll(async () => {
-  await new Promise<void>((resolve, reject) => siteServer.close((error) => (error ? reject(error) : resolve())));
+  stop?.();
+  await scratch?.drop();
 });
 
-test('Speech 키와 녹음 토글을 각각 저장하고 상태를 다시 읽는다', async ({ page }) => {
-  await stubSettings(page);
-  await page.goto(`${appRoot}/settings/connections`);
+async function login(page: Page, email = 'test1') {
+  await page.goto(`${base}/app#/login`);
+  await page.locator('#email').fill(email);
+  await page.locator('#password').fill(email);
+  await page.getByRole('button', { name: '로그인' }).click();
+  await expect(page.locator('.app-nav-me')).toBeVisible();
+}
+
+test('실제 API로 Speech 키와 녹음 토글의 전체 생명주기를 저장한다', async ({ page }) => {
+  await login(page);
+  await page.goto(`${base}/app#/settings/connections`);
 
   const speech = page.locator('details.connection-stt-card');
   await expect(speech.locator('summary')).toContainText('연결 안 됨');
@@ -99,37 +75,120 @@ test('Speech 키와 녹음 토글을 각각 저장하고 상태를 다시 읽는
   const key = speech.getByLabel('Azure Speech 키');
   await expect(key).toHaveAttribute('type', 'password');
   await expect(speech.locator('input[type="password"]')).toHaveCount(1);
-  await key.fill('invalid');
+  await key.fill(INVALID_SPEECH_KEY);
+  const invalidPending = page.waitForResponse(
+    (response) => response.url().endsWith('/settings/stt-key') && response.request().method() === 'PUT',
+  );
   await speech.getByRole('button', { name: '저장', exact: true }).click();
-  await expect(speech.getByRole('alert')).toHaveText('한국 중부 Azure Speech 키를 확인하세요');
-  await expect(key).toHaveValue('invalid');
+  const invalid = await invalidPending;
+  expect(invalid.status()).toBe(400);
+  expect(await invalid.text()).not.toContain(INVALID_SPEECH_KEY);
+  await expect(speech.getByRole('alert')).toHaveText(
+    'Azure Speech가 이 키를 받지 않았어요. 한국 중부 리전 키인지 확인해 주세요.',
+  );
+  await expect(key).toHaveValue(INVALID_SPEECH_KEY);
+  const [afterInvalid] = await scratch.db<Array<{ enc_speech_key: string | null }>>`
+    select enc_speech_key from organization where id = 1`;
+  expect(afterInvalid.enc_speech_key).toBeNull();
 
-  await key.fill('valid-speech-key');
+  await key.fill(SPEECH_KEY);
+  const validPending = page.waitForResponse(
+    (response) => response.url().endsWith('/settings/stt-key') && response.request().method() === 'PUT',
+  );
   await speech.getByRole('button', { name: '저장', exact: true }).click();
+  const valid = await validPending;
+  expect(valid.status()).toBe(200);
+  expect(await valid.text()).not.toContain(SPEECH_KEY);
   await expect(key).toHaveValue('');
   await expect(speech.locator('summary')).toContainText('연결됨');
-  await expect(page.locator('body')).not.toContainText('valid-speech-key');
+  await expect(speech.locator('summary')).toContainText('저장된 키 ••••••••');
+  await expect(page.locator('body')).not.toContainText(SPEECH_KEY);
 
-  await speech.getByRole('button', { name: '키 지우기' }).click();
-  await expect(speech.locator('summary')).toContainText('연결 안 됨');
+  const [stored] = await scratch.db<Array<{ enc_speech_key: string | null }>>`
+    select enc_speech_key from organization where id = 1`;
+  expect(stored.enc_speech_key).not.toBeNull();
+  expect(stored.enc_speech_key).not.toContain(SPEECH_KEY);
+  const connected = await page.request.get(`${base}/settings/connections`);
+  const connectedText = await connected.text();
+  expect(connected.status()).toBe(200);
+  expect(connectedText).not.toContain(SPEECH_KEY);
+  expect(JSON.parse(connectedText).stt).toEqual({
+    connected: true,
+    provider: 'azure',
+    region: 'koreacentral',
+    source: 'db',
+  });
+
 
   const voice = page.locator('details.connection-voice-card');
   await expect(voice.locator('summary')).toContainText('녹음 끔');
   await voice.locator('summary').click();
+  const onPending = page.waitForResponse(
+    (response) => response.url().endsWith('/settings/voice') && response.request().method() === 'PUT',
+  );
   await voice.getByRole('checkbox', { name: '상담 녹음' }).check();
+  expect((await onPending).status()).toBe(200);
   await expect(voice.locator('summary')).toContainText('녹음 켬');
-  await expect(speech.locator('summary')).toContainText('연결 안 됨');
+  expect((await (await page.request.get(`${base}/settings/connections`)).json()).voice).toEqual({
+    enabled: true,
+    source: 'db',
+  });
+  expect(await (await page.request.get(`${base}/speech/status`)).json()).toMatchObject({
+    enabled: true,
+    transcription_ready: true,
+  });
+
+  const offPending = page.waitForResponse(
+    (response) => response.url().endsWith('/settings/voice') && response.request().method() === 'PUT',
+  );
   await voice.getByRole('checkbox', { name: '상담 녹음' }).uncheck();
+  expect((await offPending).status()).toBe(200);
   await expect(voice.locator('summary')).toContainText('녹음 끔');
+  expect((await (await page.request.get(`${base}/settings/connections`)).json()).voice).toEqual({
+    enabled: false,
+    source: 'db',
+  });
+  await speech.locator('summary').click();
+  const deletePending = page.waitForResponse(
+    (response) => response.url().endsWith('/settings/stt-key') && response.request().method() === 'PUT',
+  );
+  await speech.getByRole('button', { name: '키 지우기' }).click();
+  expect((await deletePending).status()).toBe(200);
+  await expect(speech.locator('summary')).toContainText('연결 안 됨');
+  const removed = await (await page.request.get(`${base}/settings/connections`)).json();
+  expect(removed.stt).toEqual({
+    connected: false,
+    provider: 'azure',
+    region: 'koreacentral',
+    source: null,
+  });
+  await expect(speech.locator('summary')).toContainText('연결 안 됨');
 
   const database = page.locator('details.connection-db-card');
   await database.locator('summary').click();
   await expect(database.locator('input')).toHaveCount(0);
 });
 
-test('온보딩 연결 단계와 설정이 같은 ConnectionsPane 상태를 쓴다', async ({ page }) => {
-  await stubSettings(page, initialConnections(), { ...admin, onboarded: false });
-  await page.goto(`${appRoot}/onboarding`);
+test('실무자는 실제 연결 API를 읽거나 바꾸지 못한다', async ({ browser }) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await login(page, 'test2');
+
+  const speech = await context.request.put(`${base}/settings/stt-key`, { data: { key: SPEECH_KEY } });
+  expect(speech.status()).toBe(403);
+  expect(await speech.text()).not.toContain(SPEECH_KEY);
+  expect((await context.request.put(`${base}/settings/voice`, { data: { enabled: true } })).status()).toBe(403);
+  expect((await context.request.get(`${base}/settings/connections`)).status()).toBe(403);
+
+  const [organization] = await scratch.db<Array<{ enc_speech_key: string | null; voice_enabled: boolean | null }>>`
+    select enc_speech_key, voice_enabled from organization where id = 1`;
+  expect(organization).toEqual({ enc_speech_key: null, voice_enabled: null });
+  await context.close();
+});
+
+test('온보딩 연결 단계와 설정이 같은 실제 연결 상태를 쓴다', async ({ page }) => {
+  await scratch.db`update organization set onboarded_at = null, onboarding_step = 4 where id = 1`;
+  await login(page);
   await expect(page.getByRole('tab', { name: '5. 외부 서비스 연결', selected: true })).toBeVisible();
   await expect(page.locator('details.connection-stt-card summary')).toContainText('연결 안 됨');
   await expect(page.locator('details.connection-voice-card summary')).toContainText('녹음 끔');
@@ -137,8 +196,8 @@ test('온보딩 연결 단계와 설정이 같은 ConnectionsPane 상태를 쓴�
 });
 
 test('연결 카드는 right, width, top을 boundingBox로 직접 맞춘다', async ({ page }) => {
-  await stubSettings(page);
-  await page.goto(`${appRoot}/settings/connections`);
+  await login(page);
+  await page.goto(`${base}/app#/settings/connections`);
   const list = page.locator('.connection-list');
   const listBox = await list.boundingBox();
   const cards = list.locator(':scope > details');
@@ -165,7 +224,7 @@ test('연결 카드는 right, width, top을 boundingBox로 직접 맞춘다', as
 });
 
 test('랜딩과 설정이 같은 Speech 설정 가이드 문안을 연다', async ({ page }) => {
-  await page.goto(`${siteBase}/`);
+  await page.goto(`${base}/`);
   await page.getByRole('button', { name: '외부 서비스 설정 가이드' }).click();
   const landingGuide = page.getByRole('dialog', { name: '외부 서비스 설정 가이드' });
   const landingSpeech = landingGuide.locator('.setup-guide-steps[data-guide-id="stt"]');
@@ -173,8 +232,8 @@ test('랜딩과 설정이 같은 Speech 설정 가이드 문안을 연다', asyn
   const landingText = (await landingSpeech.innerText()).replace(/\s+/g, ' ').trim();
   await landingGuide.getByRole('button', { name: '닫기' }).click();
 
-  await stubSettings(page);
-  await page.goto(`${appRoot}/settings/connections`);
+  await login(page);
+  await page.goto(`${base}/app#/settings/connections`);
   const speech = page.locator('details.connection-stt-card');
   await speech.locator('summary').click();
   await speech.getByRole('button', { name: '설정 가이드' }).click();
@@ -184,30 +243,9 @@ test('랜딩과 설정이 같은 Speech 설정 가이드 문안을 연다', asyn
   expect((await settingsSpeech.innerText()).replace(/\s+/g, ' ').trim()).toBe(landingText);
 });
 
-test('동의 문안 저장 전에 v4 재동의 경고를 유지한다', async ({ page }) => {
-  await page.route((url) => ['/me', '/consent-copy'].includes(url.pathname.replace(/^\/api/, '')), async (route) => {
-    const request = route.request();
-    const path = new URL(request.url()).pathname.replace(/^\/api/, '');
-    if (path === '/me') return json(route, admin);
-    if (path === '/consent-copy') {
-      return json(route, [{
-        domain: 'privacy',
-        label: '개인정보 수집·이용',
-        body: '연결 기관이 개인정보를 처리합니다.',
-        items: ['이름'],
-        purpose_text: '상담 제공',
-        retention_text: '종료 후 5년',
-        refusal_text: '거부 시 상담 기록 기능을 이용할 수 없습니다.',
-        recipient: null,
-        version: 'consent-standard-form-v4',
-        hash: 'v4-hash',
-        required: true,
-        editable: true,
-      }]);
-    }
-    return json(route, { error: `unhandled ${request.method()} ${path}` }, 404);
-  });
-  await page.goto(`${appRoot}/settings/consent`);
+test('실제 v4 동의 문안 저장 전에 재동의 경고를 유지한다', async ({ page }) => {
+  await login(page);
+  await page.goto(`${base}/app#/settings/consent`);
   const consent = page.locator('details.wire-card-details', { hasText: '개인정보 수집·이용' });
   await consent.locator('summary').click();
   await consent.getByRole('button', { name: '개인정보 수집·이용 문안 수정' }).click();
