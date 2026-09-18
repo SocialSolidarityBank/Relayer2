@@ -1192,3 +1192,429 @@ STT·DB 는 가이드 팝업만) → `완료`.** 설정의 부품을 그대로 �
 - `seed.ts` 는 `test4`(둘째 관리자)를 더하고 기관 이름·`onboarded_at`·`bootstrap_closed_at` 과 사업 하나를 심어 `createCase` 에 `program_id` 를 넘긴다. 가입 문은 seed 없는 새 DB 에서 검증한다.
 - 통합 테스트: `signup`·`role-change`·`migration-0025`·`program-lifecycle`·`program-filter`·`ai-key`. 새 DB 가 필요한 둘(가입·역할, 0024 백필)은 `api/test/scratch-db.ts` 로
   `relayer_shared_check_scratch_*` DB 를 만들어 쓰고 끝나면 지운다. E2E `web/e2e/onboarding.spec.ts` 도 같은 헬퍼로 새 DB·서버를 띄운다.
+
+---
+
+## 25. 기관 주소·다기관 이행 (초안, 구현 전)
+
+> 상태: M6 설계 초안. 이 절은 현재 `organization` 단일 행 계약(§24)을 아직 바꾸지 않는다.
+> 구현은 `.ouroboros/seed-institution-addressing.yaml`의 관문을 통과한 별도 레인에서만 한다.
+
+### 25-1. 두 단계
+
+| 단계 | 기관 격리 단위 | 주소 해석 | 데이터 격리 |
+|---|---|---|---|
+| **1단계: 배포 단위 기관** | ACA 앱 하나 = 기관 하나 | 배포 설정 `RELAYER_SLUG` | 기관별 PostgreSQL 스키마·암호화 키·세션 키·Blob 접두 또는 컨테이너 |
+| **2단계: 단일 배포 다기관** | 앱 하나 안 `organizations` 여러 행 | 신뢰한 Host → slug → `org_id` | 모든 기관 소유 행의 `org_id` + PostgreSQL RLS |
+
+오늘 필요한 것은 1단계다. 가입 화면이 DNS를 만들지 않는다. 배포자가 주소를 먼저 예약하고 앱은 읽기 전용으로 보여 준다.
+2단계는 기관 수 때문에 독립 배포 운영이 병목이 된 뒤 전환한다. 중간 단계로 일부 표에만 `org_id`를 붙이지 않는다.
+
+### 25-2. slug 계약
+
+slug는 기관명이 아니라 주소 식별자다.
+
+- ASCII 소문자·숫자·하이픈만 쓴다.
+- 길이는 3~20자다.
+- 첫 글자와 끝 글자는 소문자 또는 숫자다.
+- 정규식: `^[a-z0-9](?:[a-z0-9-]{1,18}[a-z0-9])$`
+- 예약어:
+  `www`, `api`, `app`, `admin`, `auth`, `login`, `signup`, `static`, `assets`, `cdn`,
+  `docs`, `help`, `status`, `health`, `test`, `staging`, `dev`, `preview`, `mail`,
+  `support`, `relayer`.
+- 오늘 스테이징 주소인 `test2`는 허용하고 운영자가 먼저 선점한다.
+
+기본 주소는 `https://<slug>.relayer.kr`다. 가입 1단계의 라벨은 GLOSSARY 정본대로 `주소`다.
+`RELAYER_PUBLIC_URL`이 있으면 그 URL을, 없으면 `RELAYER_SLUG`에서 만든 주소를 표시한다.
+변경은 DNS·프록시·배포 설정·쿠키 원점을 함께 다루는 운영 작업이며 일반 기관 설정 수정이 아니다.
+
+서브디렉터리 `https://relayer.kr/<slug>`는 대안으로만 남긴다. 현재 화면 자산(`/assets`), API(`/api`),
+해시 라우트, 로그인 쿠키가 루트를 전제로 하므로 base path·프록시 path strip·쿠키 Path를 함께 바꿔야 한다.
+기관별 origin 격리도 약해진다. 1단계 기본안으로 채택하지 않는다.
+
+### 25-3. 1단계 격리
+
+기관 배포마다 다음을 가른다.
+
+1. ACA 앱 이름과 배포 주소.
+2. `PGSCHEMA`. 같은 Supabase 프로젝트를 써도 표와 `schema_migrations`는 별도 스키마다.
+3. `PII_ENC_KEY`와 `SESSION_SECRET`. test1 값을 test2에 재사용하지 않는다.
+4. 음성·문서 Blob의 접두 또는 컨테이너와 앱 수준 암호화 키.
+5. Infisical의 기관별 하위 경로. 정본은 계속 `prod:/RELAYER2` 아래다.
+
+앱은 Host를 읽어 다른 기관으로 전환하지 않는다. Host를 바꿔 같은 ACA 앱을 가리켜도 `RELAYER_SLUG`와
+한 DB 스키마의 기관만 나온다. 이 제약이 1단계의 격리 장치다.
+
+### 25-4. test2 스테이징 — M3 실행 계약
+
+목표 상태:
+
+| 항목 | 값 |
+|---|---|
+| 리전 | `koreacentral` |
+| ACA 환경 | `relayer2-env` |
+| ACA 앱 | `relayer2-test2` |
+| 이미지 | `ghcr.io/socialsolidaritybank/relayer2:v0.2.0` |
+| 공개 주소 | `https://test2.relayer.kr` |
+| DB 스키마 | `relayer_test2` |
+| 초기 자료 | 없음 — `seed.ts` 실행 금지 |
+| AI·녹음 글로 옮기기 | 꺼짐 — 키 미주입, `VOICE_ENABLED=0` |
+| 파일 저장 | 합성 파일도 올리지 않음 — 영속 저장 백엔드가 붙기 전 문서 업로드 검증 금지 |
+
+운영 체크아웃 `~/services/relayer2`는 쓰지 않는다. M3 워크트리에서 아래 비밀값 없는 명령을 실행한다.
+
+```bash
+export RG=relayer2-prod
+export LOCATION=koreacentral
+export ACA_ENV=relayer2-env
+export ACA_APP=relayer2-test2
+export SLUG=test2
+export PGSCHEMA=relayer_test2
+export IMAGE=ghcr.io/socialsolidaritybank/relayer2:v0.2.0
+
+az account show --query '{subscription:id,tenant:tenantId}' -o json
+az containerapp env show -g "$RG" -n "$ACA_ENV" --query '{name:name,location:location}' -o json
+
+# 앱 이름만 먼저 확보한다. 실제 이미지는 secretref 배선 뒤 넣는다.
+az containerapp create \
+  -g "$RG" -n "$ACA_APP" --environment "$ACA_ENV" \
+  --image mcr.microsoft.com/k8se/quickstart:latest \
+  --target-port 80 --ingress external --min-replicas 0 --max-replicas 1
+```
+
+다음 세 값은 M3의 승인된 secret injector가 Infisical `prod:/RELAYER2/<test2 전용 경로>`에서 읽어
+ACA 앱 비밀 `database-url`, `pii-enc-key`, `session-secret`로 만든다.
+
+- `DATABASE_URL`: test1과 같은 서버를 쓸 수 있으나 `PGSCHEMA=relayer_test2`가 반드시 함께 선다.
+- `PII_ENC_KEY`: test2 전용.
+- `SESSION_SECRET`: test2 전용.
+
+값을 `az ... --secrets name=value` argv에 직접 넣지 않는다. PR 증거에는 비밀 이름과 성공/실패만 남긴다.
+현재 `scripts/pull-secrets.sh`는 `SECRET_PATH=/RELAYER2`를 고정하므로 test2 주입에 그대로 쓰지 않는다.
+M3가 `SECRET_PATH`를 인자로 받게 바꾸고 `/RELAYER2/<test2 전용 경로>`를 명시한 경우만 쓴다.
+경로를 생략했을 때 test1 정본으로 떨어지는 fallback은 두지 않는다.
+secretref가 생긴 뒤 앱을 실제 이미지로 바꾼다.
+
+```bash
+az containerapp ingress update \
+  -g "$RG" -n "$ACA_APP" --target-port 8787
+
+az containerapp update \
+  -g "$RG" -n "$ACA_APP" --image "$IMAGE" \
+  --set-env-vars \
+    PORT=8787 \
+    PGSCHEMA="$PGSCHEMA" \
+    RELAYER_SLUG="$SLUG" \
+    RELAYER_PUBLIC_URL="https://test2.relayer.kr" \
+    VOICE_ENABLED=0 \
+    DATABASE_URL=secretref:database-url \
+    PII_ENC_KEY=secretref:pii-enc-key \
+    SESSION_SECRET=secretref:session-secret
+
+ACA_FQDN="$(az containerapp show -g "$RG" -n "$ACA_APP" --query properties.configuration.ingress.fqdn -o tsv)"
+printf '%s\n' "$ACA_FQDN"
+az containerapp revision list -g "$RG" -n "$ACA_APP" \
+  --query '[].{name:name,active:properties.active,health:properties.healthState}' -o table
+```
+
+기존 Cloudflare Tunnel을 유지한다면 M3가 `test2.relayer.kr` ingress를 추가하고 origin을
+`https://$ACA_FQDN`으로 둔다. ACA 인증서와 Host 검증을 위해 origin request의 HTTP Host도
+`$ACA_FQDN`으로 둔다. 터널 식별자·토큰은 문서와 PR에 적지 않는다.
+
+이미지의 `CMD`가 `node api/src/migrate.ts && node api/src/index.ts`이므로 `PGSCHEMA`가
+`relayer_test2`를 만들고 마이그레이션한다. **`node api/src/seed.ts`는 실행하지 않는다.**
+
+```bash
+az containerapp logs show -g "$RG" -n "$ACA_APP" --type console --tail 100
+curl -fsS "https://test2.relayer.kr/health"
+curl -fsS "https://test2.relayer.kr/auth/signup" |
+  jq -e '.open == true and .workspace == null'
+```
+
+마지막 응답은 빈 기관·첫 관리자 가입 가능 상태의 관문이다. AI/STT 자격증명 상태나 비밀값을 상태 증거로 출력하지 않는다.
+
+### 25-5. 2단계 데이터 모델
+
+2단계는 `organization` 단일 행을 `organizations(id, slug, name, ...)`로 바꾸고,
+`users.org_id`를 포함해 모든 기관 소유 표에 `org_id NOT NULL references organizations(id)`를 둔다.
+유일 제약은 기관 범위를 포함한다. 예: 사용자 아이디 `(org_id, email)`, 가명 `(org_id, pseudonym)`,
+사업 이름 `(org_id, name)`, 회차 `(org_id, case_id, seq)`.
+
+기관 소유 표는 현재의 `users`, `participants`, `participant_pii`, `programs`, `support_cases`,
+`sessions`, `cards`, `card_outcomes`, `goal_revisions`, `case_closures`, `consent_events`,
+`participant_access`, `ai_drafts`, `recordings`, `transcripts`, `documents`, `invites`,
+`assignment_requests`, `case_assignments`, `session_revisions`, `consent_copy`, `audit_log` 전부다.
+`schema_migrations`만 배포 전역이다.
+
+로그인은 주소가 가리킨 기관 안에서만 사용자를 찾는다. 2단계에서도 중앙 계정·기관 전환기는 만들지 않는다.
+런타임 DB 역할은 테이블 소유자나 `BYPASSRLS`가 아니어야 한다. 각 요청 트랜잭션은 인증 뒤
+`SET LOCAL app.org_id = '<id>'`를 먼저 실행하고, RLS는 `org_id = current_setting('app.org_id')::bigint`를
+`USING`과 `WITH CHECK`에 모두 적용한다. 그 뒤 기존 `case_assignments` 검사를 적용한다.
+
+### 25-6. 2단계 이행
+
+1. 현재 단일 기관의 slug와 이름으로 `organizations` 한 행을 만든다.
+2. 모든 기관 소유 표에 nullable `org_id`를 추가하고 외래키 방향으로 백필한다.
+3. 표마다 `org_id is null`·고아 FK·기관이 다른 부모/자식 조합이 0인지 검사한다.
+4. 기관 범위를 포함한 복합 유일 제약과 복합 FK를 만든다.
+5. 런타임 role·요청 트랜잭션·RLS를 일회용 복원 DB에서 먼저 검증한다.
+6. 쓰기를 멈춘 짧은 전환 구간에 최종 백필 차이를 확인하고 `NOT NULL`·RLS를 켠다.
+7. 다른 `org_id`로 같은 숫자 id를 조회·수정·삭제하는 음성 테스트가 모두 0행/403인지 확인한다.
+8. 전환 전 덤프, 전환 후 표별 행 수, 외래키, 자유 글 한 건 복호화를 영수증으로 남긴다.
+
+롤백은 새 기관을 만들기 전까지만 허용한다. 기존 한 기관만 있을 때 전환 전 덤프로 되돌린다.
+두 기관의 쓰기가 시작된 뒤 `org_id`를 버리는 역마이그레이션은 자료를 합치므로 제공하지 않는다.
+
+---
+
+## 26. 외부 서비스 연결 마법사 (D11 초안, 구현 전)
+
+> 상태: M6 설계 초안. 현재 §24-3은 AI 키만 입력하고 STT·DB는 안내만 한다.
+> 이 절의 구현은 `.ouroboros/seed-api-connection-wizard.yaml`을 따른다.
+
+### 26-1. 부트스트랩 DB와 기관 데이터 DB
+
+데이터베이스 연결 문자열을 그 데이터베이스의 `organization` 행에만 저장하면 앱은 재부팅 때 그 행을 읽을 길이 없다.
+이를 숨기지 않고 두 역할을 가른다.
+
+- **기반 DB**: 현재 `organization`(2단계 `organizations`), `users`, `programs`, `invites`,
+  연결 설정 암호문, `audit_log`가 사는 control plane 저장소. 배포자가 `BOOTSTRAP_DATABASE_URL`로 주입한다.
+  organization을 읽기 전에 필요한 유일한 DB 연결이다. 기관 데이터 DB가 꺼져 있을 때의 가입·기관 정보·사업·초대·연결 감사도 여기에 남는다.
+- **기관 데이터 DB**: 상담 자료가 사는 Supabase 연결. 관리자가 마법사에서 입력하고
+  `organization.enc_database_config`에 암호화해 저장한다.
+
+새 기관은 기관 데이터 DB가 꺼져 있어도 가입·기관 정보·사업·초대·외부 서비스 연결 화면까지 쓸 수 있다.
+당사자·상담 자료 API는 `409 ConnectionDisabled(database)`로 막고 설정 화면으로 갈 행동을 함께 돌려준다.
+기반 DB를 마법사의 `데이터베이스`라고 표시하지 않는다.
+
+### 26-2. 저장 모델
+
+`organization`에 다음을 둔다.
+
+```text
+enc_ai_config          text null
+enc_stt_config         text null
+enc_database_config    text null
+ai_enabled             boolean not null default false
+stt_enabled            boolean not null default false
+database_enabled       boolean not null default false
+ai_checked_at          timestamptz null
+stt_checked_at         timestamptz null
+database_checked_at    timestamptz null
+```
+
+암호문 평문은 버전이 붙은 JSON이다.
+
+```ts
+type AiConfig = { v: 1; provider: 'openai'; api_key: string; model?: string };
+type SttConfig = { v: 1; provider: 'azure'; key: string; region?: string; endpoint?: string };
+type DatabaseConfig = { v: 1; provider: 'supabase'; url: string; schema: string };
+```
+
+세 JSON은 `encryptPii`와 같은 AES-256-GCM 포맷으로 저장한다. 기존 `enc_openai_key`는
+새 AI config로 한 번 옮기고 제거한다. 같은 배포에서 `api/src/db.ts`·`scripts/infisical_get.py`·배포 문서의
+환경 이름을 `DATABASE_URL`에서 `BOOTSTRAP_DATABASE_URL`로 원자적으로 바꾼다.
+ACA 비밀 이름 `database-url`은 유지하되 env 배선만 `BOOTSTRAP_DATABASE_URL=secretref:database-url`로 바꾼다.
+두 환경 이름을 함께 읽는 fallback은 두지 않는다. clean cutover 뒤 AI·STT·기관 데이터 호출부도 환경 변수 키로 우회하지 않는다.
+기반 DB 자격만 Infisical→ACA secretref에 남는다.
+
+`ConnectionRegistry` module의 interface는 `status`, `test`, `save`, `setEnabled`, `remove` 다섯 동작이다.
+호출부는 컬럼·환경 변수·복호화를 직접 알지 않는다.
+
+### 26-3. API
+
+모두 관리자 전용이다.
+
+```text
+GET    /settings/connections
+POST   /settings/connections/:kind/test
+PUT    /settings/connections/:kind
+PATCH  /settings/connections/:kind/enabled
+DELETE /settings/connections/:kind
+```
+
+`:kind`는 `ai | stt | database`다.
+
+`GET`은 종류마다 아래만 돌려준다.
+
+```ts
+type ConnectionStatus = {
+  kind: 'ai' | 'stt' | 'database';
+  provider: 'openai' | 'azure' | 'supabase';
+  configured: boolean;
+  enabled: boolean;
+  state: 'not_configured' | 'disabled' | 'connected' | 'failed';
+  checked_at: string | null;
+  region?: string | null;
+  model?: string | null;
+};
+```
+
+원문·암호문·일부 마스킹 값·지문은 응답하지 않는다.
+
+`POST .../test`는 저장하지 않고 입력을 실제 제공자에 확인한다.
+
+- AI: OpenAI 인증 요청. 응답 본문은 버리고 인증·모델 접근만 판정한다.
+- STT: Azure 키와 region/endpoint로 무내용 인증 요청을 한다. 실제 사람 음성을 보내지 않는다.
+- DB: TLS 연결 → `select 1` → 트랜잭션 안 임시 테이블 생성·삭제 → rollback.
+  지정 schema 이름도 slug와 같은 안전한 식별자 검증을 거친다.
+
+`PUT`은 서버에서 같은 테스트를 다시 통과한 뒤 암호문과 `checked_at`을 저장한다.
+실패한 입력은 저장하지 않는다. `PATCH .../enabled`는 저장된 설정이 있고 마지막 테스트가 성공해야 true를 받는다.
+false는 암호문을 유지하고 외부 호출만 막는다. `DELETE`는 확인 뒤 암호문·enabled·checked_at을 모두 지운다.
+
+안전한 오류는 `ConnectionInvalid`, `ConnectionUnauthorized`, `ConnectionUnavailable`,
+`ConnectionDisabled`, `ConnectionMigrationRequired`다. 제공자 원문 오류와 URL 사용자 정보는 로그에 남기지 않는다.
+
+### 26-4. 화면
+
+마법사 5단계와 설정 › 시스템 › 외부 서비스 연결은 같은 `ConnectionsPane`을 쓴다.
+아코디언은 `AI 정리`·`녹음 글로 옮기기`·`데이터베이스` 셋이다.
+
+각 머리에는 `연결 안 됨`·`꺼짐`·`연결됨`·`확인 실패` 상태, 제공자, 마지막 확인 시각만 보인다.
+펼치면 `설정 가이드`, 입력, `연결 테스트`, `저장`, `사용` 조작이 선다.
+
+- AI 정리: OpenAI 키, 선택 모델.
+- 녹음 글로 옮기기: Azure Speech 키, 리전 또는 엔드포인트.
+- 데이터베이스: Supabase 연결 문자열, schema.
+
+입력은 `type=password` 또는 동등한 가림 입력이고 저장 뒤 빈칸으로 돌아간다.
+저장된 값을 `••••••••`로 재구성해 편집값처럼 보내지 않는다. 설정 가이드는 계정·리소스 준비와 입력 위치만 말하고
+비밀값을 채팅·문서·CLI argv에 붙이는 절차를 안내하지 않는다.
+
+새 기관은 셋 모두 꺼짐이다. 마법사 완료는 연결을 강제하지 않는다.
+`test1` 인계 배포만 별도 운영 절차로 세 설정을 암호화 저장하고 모두 켠다.
+증거는 상태·provider·region·checked_at과 합성 요청 성공만 남긴다.
+
+### 26-5. 감사와 검증
+
+감사 종류는 `connection.<kind>.test|set|enable|remove`다.
+fields는 `provider`, `result`, `enabled`만 허용한다. 키·URL·schema·오류 본문은 넣지 않는다.
+
+필수 검증은 seed의 default-off, registry, disable 통합 테스트와 connection-wizard E2E,
+그리고 `scripts/check-encryption.sh`다. test1 운영 관문은 합성 OpenAI 요청·합성 무음 전사·DB 임시 쓰기/rollback만 한다.
+
+---
+
+## 27. 하이라이터·백링크 (D10 초안, 구현 전)
+
+> 상태: M6 설계 초안. 현재 회차별 요약의 네 구역과 원본 팝업은 유지한다.
+> 구현은 `.ouroboros/seed-highlighter-backlinks.yaml`을 따른다.
+
+### 27-1. 신호와 색
+
+| 식별자 | 회차별 요약 표시명 | 원본/작성 표면 표시명 | 색 |
+|---|---|---|---|
+| `risk` | 위험 신호 | 위험 신호 | 코랄 |
+| `change` | 확인된 변화 | 달라진 사실의 원문 | 민트 |
+| `task` | 확인할 과제 | 수행할 과제 | 라벤더 |
+| `question` | 오늘 물어볼 것 | 다음에 물어볼 것 | 블루 |
+
+색은 읽기 보조다. 각 강조에는 종류 이름을 접근 이름으로 붙이고 종류마다 밑줄 모양도 다르게 한다.
+AI가 만들었다는 사실은 별도 `AI` 배지가 말한다.
+
+회차별 요약 위에는 `전체`, `위험 신호`, `확인된 변화`, `확인할 과제`, `오늘 물어볼 것` 필터를 둔다.
+필터는 해당 강조와 신호 목록만 접고 원문 자체를 숨기지 않는다. 선택은 DB·URL에 저장하지 않는다.
+회차 원본 팝업의 두 열 구조와 수정 흐름은 바꾸지 않고 현재 본문 위에 `<mark>`만 그린다.
+
+### 27-2. 파생 인덱스
+
+```text
+signal_indexes(
+  id, session_id, source_kind, source_record_id, source_fingerprint,
+  model, created_by, created_at
+)
+signal_spans(
+  id, index_id, signal_type, start_utf16, end_utf16, enc_context
+)
+keyword_mentions(
+  id, index_id, participant_id, keyword_hmac, enc_keyword, enc_context,
+  start_utf16, end_utf16
+)
+```
+
+세 표는 append-only다. `source_kind`는 `memo | transcript | summary`다.
+`source_record_id`는 현재 sessions/transcripts/ai_drafts의 실제 행을 가리킨다.
+브라우저 문자열과 같은 UTF-16 offset을 쓴다.
+
+`source_fingerprint`는 평문 SHA가 아니라 PII 열쇠에서 HKDF로 분리한 키의 HMAC다.
+현재 본문의 fingerprint가 다르면 옛 span과 backlink를 렌더하지 않는다. 위치를 추정해 옮기지 않는다.
+원본 수정 뒤 자동 재처리하지 않는 §17-4 규칙대로 `재정리 필요`와 사람이 누르는 다시 만들기만 둔다.
+
+키워드는 Unicode NFKC → 앞뒤 공백 제거 → 연속 공백 하나 → ASCII 영문 소문자화만 한다.
+조사 제거·어간 추출·동의어 확장을 하지 않는다.
+비교키는 `HMAC(derived_key, participant_id + NUL + normalized_keyword)`다.
+표시 키워드와 문맥은 `encryptText`로 암호화한다. 다른 당사자의 같은 말은 HMAC도 달라 연결되지 않는다.
+
+### 27-3. 생성 규칙
+
+승인 전 AI 초안은 인덱스를 만들지 않는다. 사람이 승인한 AI 정리의 구조화 결과만 index로 발행한다.
+기존 card·risk·fact_change에서 이미 아는 신호는 AI 없이도 색과 필터를 적용한다.
+새 키워드 백링크는 승인된 AI 정리 또는 사람이 누른 `백링크 다시 만들기`에서만 만든다.
+
+AI 연결이나 `external_llm_cross_border_processing` 동의가 없으면 외부 요청 없이 409로 멈춘다.
+기존 기록과 구조화 신호는 계속 읽힌다. LLM 요청은 기존 마스킹과 `store:false`를 유지하고,
+감사에는 모델·신호 수·키워드 수만 남긴다.
+
+### 27-4. API와 접근
+
+```text
+GET  /sessions/:id/signals?types=risk,change,task,question
+POST /sessions/:id/signal-index/rebuild
+GET  /cases/:id/backlinks?keyword=<opaque mention id>
+```
+
+`GET /sessions/:id/signals`는 현재 fingerprint와 맞는 최신 index만 돌려준다.
+`rebuild`는 기존 index를 고치지 않고 새 버전을 쌓는다.
+
+백링크는 anchor case로 당사자를 찾되, 같은 `participants.id`의 mention만 후보로 삼는다.
+후보의 각 사례마다 요청자의 `case_assignments`를 다시 검사한다.
+관리자도 배정되지 않은 사례의 결과·건수·키워드를 받지 않는다.
+응답은 키워드, 회차, 날짜, 참여 사업, 표면 종류, 짧은 문맥, 이동 target만 담는다.
+
+화면에서 키워드를 누르면 같은 당사자의 접근 가능한 backlink 목록을 연다.
+항목을 누르면 해당 회차별 요약을 펼치거나 원본 팝업의 해당 열을 열고 span으로 스크롤한다.
+현재 원본이 바뀐 항목은 목록에서 제외한다.
+
+범위 밖은 기관 전체 검색, 다른 당사자 추천, 자동 진단, 벡터 DB·embedding,
+지식 그래프 시각화, 원본 자동 수정, 승인 전 AI 결과 공개다.
+
+---
+
+## 28. 랜딩 설정 가이드 팝업 (초안, 구현 전)
+
+> 상태: M6 설계 초안. 로그인 화면이 곧 랜딩이라는 §24-1 계약은 그대로다.
+> 구현은 `.ouroboros/seed-landing-setup-guide.yaml`을 따른다.
+
+로그인 카드 아래에 보조 알약 `설정 가이드`를 둔다. 누르면 공용 `Dialog`로
+`릴레이어 설정 가이드` 팝업을 연다. 별도 랜딩 라우트·마케팅 홈·대시보드를 만들지 않는다.
+
+본문은 두 구획이다.
+
+### 새 기관 시작
+
+1. **주소 확인** — 배포자가 정한 기관 주소. 화면에서 변경하지 않음.
+2. **첫 관리자 가입** — `가입하기`에서 관리자 계정 생성.
+3. **기관 워크스페이스 설정** — 기관 정보·사업·실무자 초대.
+4. **외부 서비스 연결** — AI 정리·녹음 글로 옮기기·데이터베이스. 기본 꺼짐.
+5. **실무자 초대** — 마법사 또는 설정하기에서 초대 링크 생성.
+
+팝업의 `가입하기` 행동은 기존 `#/signup`으로만 간다.
+가입 문이 닫혀 있으면 기존 가입 화면이 기관 이름과 초대 전용 안내를 보여 준다.
+
+### 초대받은 실무자
+
+1. 받은 초대 링크 열기.
+2. 계정 만들기 또는 기존 계정 로그인.
+3. 기관 준비 중이면 `다시 확인하기`.
+4. 준비 완료 뒤 `상담 일정으로 이동하기`.
+
+당사자는 이 로그인 안내의 대상이 아니다. 기존처럼 실무자가 준 링크와 코드로 연다.
+
+이 팝업은 정적 공개 문구다. API·DB·쿠키·localStorage·분석 이벤트를 추가하지 않는다.
+키 발급·결제·환경 변수 이름·연결 문자열·실제 연결 상태·상담 자료를 싣지 않는다.
+제공자별 상세 입력은 로그인 뒤 외부 서비스 연결의 `설정 가이드`가 맡는다.
+
+Escape·백드롭·`닫기`로 닫히고 열었던 버튼으로 초점을 돌린다.
+390px에서는 팝업이 뷰포트 안에 있고 본문만 세로로 스크롤된다.
+팝업을 열고 닫아도 로그인 입력과 오류 상태를 보존한다.

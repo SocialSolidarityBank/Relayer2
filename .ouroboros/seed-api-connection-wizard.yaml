@@ -1,0 +1,160 @@
+goal: >-
+  기관 관리자가 기관 워크스페이스 설정하기와 설정 › 시스템 › 외부 서비스 연결의 같은 화면에서
+  AI 정리(OpenAI), 녹음 글로 옮기기(Azure Speech), 데이터베이스(Supabase)를 가이드·입력·연결 테스트로 설정한다.
+  세 연결은 새 기관에서 모두 꺼져 있고, 비밀값은 organization의 앱 수준 암호화 컬럼에만 저장되며,
+  test1 기관만 세 연결을 켠 상태로 인계할 수 있다.
+
+task_type: code
+
+project_type: brownfield
+
+metadata:
+  version: "0.1.0-draft"
+  target_release: "post-v0.2.0"
+  ambiguity_score: 0.16
+  status: "design-only"
+
+constraints:
+  - "표시명은 GLOSSARY.md §15의 외부 서비스 연결·AI 정리·녹음 글로 옮기기·데이터베이스를 쓴다. 화면에 API·STT·DB를 제목으로 쓰지 않는다"
+  - "화면 seam은 ConnectionsPane 하나다. 마법사 5단계와 설정 › 시스템 › 외부 서비스 연결이 같은 폼·상태·가이드 팝업을 재사용한다"
+  - "새 기관 기본값은 ai_enabled=false, stt_enabled=false, database_enabled=false이며 암호화 설정 컬럼은 null이다. 연결하지 않아도 기관·사업·실무자 설정은 마칠 수 있다"
+  - "저장 모델: organization.enc_ai_config·enc_stt_config·enc_database_config에 버전이 붙은 JSON을 encryptPii와 같은 AES-256-GCM 포맷으로 저장한다. API 응답에는 원문·암호문·지문을 싣지 않는다"
+  - "AI 설정은 provider=openai·api_key·model을 담고, 기본 모델은 배포 시점 지원 모델로 서버가 정한다. STT 설정은 provider=azure·key·region 또는 endpoint를 담는다. 데이터베이스 설정은 provider=supabase·url·schema를 담는다"
+  - "DB 부트스트랩 역설을 숨기지 않는다: 현재 organization(2단계 organizations)·users·programs·invites·연결 암호문·audit_log를 저장하는 기반 DB는 BOOTSTRAP_DATABASE_URL로 배포자가 먼저 제공한다. 마법사의 데이터베이스는 상담 자료가 사는 기관 데이터 DB이며, 꺼져 있으면 상담 자료 화면과 쓰기만 막힌다"
+  - "BOOTSTRAP_DATABASE_URL은 organization 안에 둘 수 없다. organization을 읽기 전에 필요한 유일한 배포 비밀값이며 Infisical에서 ACA secretref로 주입한다. 이를 화면에서 설정 가능한 DATABASE_URL인 것처럼 표시하지 않는다"
+  - "깨끗한 전환: api/src/db.ts·scripts/infisical_get.py·배포 문서를 DATABASE_URL에서 BOOTSTRAP_DATABASE_URL로 한 배포에서 바꾸고 이름 fallback을 남기지 않는다. 기관 데이터 질의는 ConnectionRegistry가 돌려주는 org data pool 한 seam을 지나며 AI·STT도 같은 레지스트리에서 enabled 상태와 복호화 설정을 읽는다"
+  - "연결 테스트 버튼은 저장 전 입력값을 실제 제공자에 검증한다. AI는 OpenAI 인증 요청, STT는 Azure 토큰 발급 또는 동등한 무내용 인증 요청, DB는 TLS 연결·select 1·트랜잭션 안 임시 테이블 생성/롤백으로 읽기·쓰기 권한을 확인한다"
+  - "저장은 같은 검증을 서버에서 다시 통과한 뒤 한 트랜잭션으로 암호문·enabled·checked_at을 갱신한다. 테스트에 실패한 입력은 저장하지 않는다"
+  - "연결 끄기는 enabled만 false로 바꾸고 암호문은 유지한다. 저장값 삭제는 별도 확인 뒤 암호문과 상태를 지운다. 비활성 연결은 외부 요청을 절대 보내지 않는다"
+  - "오류 응답은 provider·단계·안전한 코드만 보낸다. 키·접속 문자열·Azure 원문 응답·Supabase 호스트의 사용자 정보는 로그·감사·브라우저 오류에 싣지 않는다"
+  - "감사는 connection.ai.test/set/enable/remove, connection.stt.test/set/enable/remove, connection.database.test/set/enable/remove를 남기되 fields에는 provider·result·enabled만 둔다"
+  - "test1 인계는 별도 운영 절차가 세 연결을 organization 암호화 컬럼에 넣고 enabled=true로 만든 뒤 상태 API와 합성 요청으로 검증한다. 실제 키 값은 브라우저 자동화·터미널 출력·PR 증거에 남기지 않는다"
+  - "범위 밖: OpenAI·Azure·Supabase 계정 생성 대행, 결제, 키 발급 자동화, Gemini 전환, 임의 PostgreSQL 제공자, 운영 데이터 복사, 키 값을 다시 보여 주기"
+
+acceptance_criteria:
+  - description: >-
+      새 기관의 연결 상태가 셋 모두 enabled:false·configured:false이고, 마법사는 연결을 건너뛰어도 완료되며,
+      비활성 연결에 대해 OpenAI·Azure·기관 데이터 DB 네트워크 요청이 발생하지 않는다
+    verify_command: "RELAYER_INTEGRATION=1 pnpm --dir api exec vitest run test/connections-default-off.integration.test.ts --reporter=basic"
+    expected_artifacts: ["api/test/connections-default-off.integration.test.ts", "migrations/00xx_organization_connections.sql"]
+    output_assertion: "NONE"
+  - description: >-
+      AI·STT·DB 연결 테스트가 유효한 자격과 잘못된 자격을 구분하고, 실패한 입력은 저장하지 않으며,
+      성공 저장 뒤 DB에는 평문이 없고 상태 응답은 configured·enabled·provider·checked_at만 돌려준다
+    verify_command: "RELAYER_INTEGRATION=1 pnpm --dir api exec vitest run test/connection-registry.integration.test.ts --reporter=basic"
+    expected_artifacts: ["api/src/connections.ts", "api/test/connection-registry.integration.test.ts"]
+    output_assertion: "NONE"
+  - description: >-
+      설정을 끄면 저장값은 유지되지만 외부 호출이 409 ConnectionDisabled로 막히고, 저장값 삭제 뒤에는
+      configured:false가 되며 어떤 API·감사·로그에도 입력 비밀값이나 암호문이 없다
+    verify_command: "RELAYER_INTEGRATION=1 pnpm --dir api exec vitest run test/connections-disable.integration.test.ts --reporter=basic"
+    expected_artifacts: ["api/test/connections-disable.integration.test.ts", "api/src/audit.ts"]
+    output_assertion: "NONE"
+  - description: >-
+      브라우저에서 마법사와 설정 화면 양쪽이 같은 세 아코디언·설정 가이드·입력·연결 테스트·저장·사용 상태를 보이고,
+      새 기관은 모두 꺼짐이며 연결 테스트 실패가 입력을 지우지 않는다
+    verify_command: "pnpm --dir web exec playwright test e2e/connection-wizard.spec.ts --reporter=line"
+    expected_artifacts: ["web/e2e/connection-wizard.spec.ts", "web/src/screens/settings.tsx", "web/src/screens/onboarding.tsx"]
+    output_assertion: "NONE"
+  - description: >-
+      test1 인계 점검이 AI 상태·합성 OpenAI 요청, STT 상태·합성 무음 전사, 기관 데이터 DB 읽기·쓰기를 통과하고
+      증거에는 HTTP 상태·provider·region·checked_at만 남는다
+    verify_command: "node scripts/verify-test1-connections.mjs --redact"
+    verify_exemption_reason: "외부 서비스 자격과 test1 기관 데이터가 필요한 운영 관문이다. 합성 입력만 사용하고 출력 redaction 검사를 함께 통과해야 한다"
+    expected_artifacts: ["scripts/verify-test1-connections.mjs"]
+    output_assertion: "CONNECTIONS_OK test1 ai stt database"
+  - description: >-
+      설계 문서가 기반 DB와 기관 데이터 DB를 구분하고 organization 암호화 컬럼·기본 꺼짐·연결 테스트·삭제·감사·test1 예외를 명시한다
+    verify_command: "ruby -e 'require %q{yaml}; YAML.load_file(ARGV[0]); s=File.read(%q{SPEC.md}); abort unless s.include?(%q{## 26. 외부 서비스 연결 마법사}); puts %q{DESIGN_OK api-connection-wizard}' .ouroboros/seed-api-connection-wizard.yaml"
+    expected_artifacts: [".ouroboros/seed-api-connection-wizard.yaml", "SPEC.md"]
+    output_assertion: "DESIGN_OK api-connection-wizard"
+
+ontology_schema:
+  name: "RelayerOrganizationConnections"
+  description: >-
+    기관별 외부 연결의 암호화 설정·사용 여부·최근 검증 상태를 한 레지스트리가 소유하고,
+    AI·STT·상담 데이터 모듈은 그 작은 interface만 사용하는 모델.
+  fields:
+    - name: "bootstrap_database"
+      type: "object"
+      description: "현재 organization(2단계 organizations)·users·programs·invites·연결 암호문·audit_log를 가진 control plane DB. BOOTSTRAP_DATABASE_URL로만 연결"
+    - name: "connection_registry"
+      type: "module"
+      description: "status(kind)·test(kind,draft)·save(kind,draft)·setEnabled(kind,bool)·remove(kind)의 기관 연결 seam"
+    - name: "ai_connection"
+      type: "object"
+      description: "OpenAI 키·모델의 암호화 설정과 configured·enabled·checked_at"
+    - name: "stt_connection"
+      type: "object"
+      description: "Azure Speech 키·리전 또는 엔드포인트의 암호화 설정과 상태"
+    - name: "database_connection"
+      type: "object"
+      description: "Supabase URL·schema의 암호화 설정. 상담 자료 pool을 만드는 기관 데이터 연결"
+    - name: "connection_test"
+      type: "object"
+      description: "저장 전 실제 제공자 확인 결과. secret-free code·provider·checked_at만 반환"
+    - name: "connection_state"
+      type: "enum"
+      description: "API·저장 상태는 not_configured | disabled | connected | failed. checking은 저장하지 않는 클라이언트 진행 상태"
+
+evaluation_principles:
+  - name: "열쇠는 보이지 않는다"
+    description: "비밀값은 입력 순간과 복호화 호출 안에서만 평문이고 응답·감사·로그에는 없다"
+    weight: 1.0
+  - name: "꺼짐이 기본"
+    description: "명시적으로 검증·저장·사용을 켜기 전에는 외부 제공자에 아무것도 보내지 않는다"
+    weight: 1.0
+  - name: "연결은 하나의 module"
+    description: "환경 변수·화면·호출부마다 다른 우회로를 두지 않고 ConnectionRegistry interface로 모은다"
+    weight: 0.9
+  - name: "부트스트랩을 정직하게 구분"
+    description: "앱이 organization을 읽기 전에 필요한 DB와 기관이 마법사에서 고르는 상담 데이터 DB를 같은 것으로 속이지 않는다"
+    weight: 1.0
+
+exit_conditions:
+  - name: "기본 꺼짐"
+    description: "새 기관의 외부 요청이 0이다"
+    criteria: "connections-default-off 통합 테스트와 connection-wizard E2E가 통과한다"
+  - name: "암호화 저장"
+    description: "세 연결의 평문이 DB·API·감사·로그에 없다"
+    criteria: "connection-registry·disable 통합 테스트와 scripts/check-encryption.sh가 통과한다"
+  - name: "test1 인계"
+    description: "test1만 세 연결이 실제로 동작한다"
+    criteria: "redacted 운영 점검이 CONNECTIONS_OK test1 ai stt database를 출력한다"
+
+context_references:
+  - path: "GLOSSARY.md"
+    role: "primary"
+    summary: "§15 외부 서비스 연결·AI 정리·녹음 글로 옮기기·데이터베이스 표시명"
+  - path: "SPEC.md"
+    role: "primary"
+    summary: "§24-3 현행 AI 키 입력과 STT·DB 안내, §26 이 설계 초안"
+  - path: "web/src/screens/settings.tsx"
+    role: "primary"
+    summary: "ConnectionsPane과 설정 가이드 팝업의 현행 UI seam"
+  - path: "api/src/routes.ts"
+    role: "primary"
+    summary: "PUT /settings/ai-key와 GET /settings/connections 현행 계약"
+  - path: "api/src/ai.ts"
+    role: "reference"
+    summary: "현재 DB 키→환경 변수 fallback. clean cutover에서 ConnectionRegistry로 대체"
+  - path: "api/src/db.ts"
+    role: "primary"
+    summary: "현행 전역 sql 연결. 기반 DB와 기관 데이터 pool 분리 때 바뀌는 seam"
+  - path: "docs/secrets.md"
+    role: "primary"
+    summary: "Infisical prod:/RELAYER2와 비밀값 비출력 규칙"
+
+existing_patterns:
+  - "encryptPii AES-256-GCM 포맷을 설정 암호문에도 재사용하고 PII_ENC_KEY는 DB와 분리한다"
+  - "관리자 전용은 화면 숨김이 아니라 라우트마다 다시 확인한다"
+  - "외부 LLM은 store:false와 동의 게이트를 유지한다"
+  - "설정 가이드는 Dialog 팝업이며 마법사와 설정 화면이 같은 ConnectionsPane을 쓴다"
+
+existing_dependencies:
+  - "postgres"
+  - "hono"
+  - "zod"
+  - "OpenAI Responses API"
+  - "Azure Speech"
+  - "Supabase Postgres"
