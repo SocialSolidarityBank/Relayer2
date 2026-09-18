@@ -789,7 +789,7 @@ summary:focus-visible,
   .doc-toc ol { columns: 2; column-gap: var(--space-5); }
 }
 
-.doc-head { max-width: var(--measure); }
+.doc-head { max-width: none; }
 .doc-head h1 {
   margin: 0;
   font-size: var(--text-2xl);
@@ -817,7 +817,10 @@ summary:focus-visible,
   font-weight: 600;
   line-height: var(--leading-snug);
 }
-.doc-body p, .doc-body li { max-width: var(--measure); }
+/* 가이드 본문은 읽기 폭 제한을 두지 않는다. 글이 608 에서 끊기고 화면 사진과 순서 목록만
+ * 본문 칼럼(1440 에서 876)을 다 쓰면 오른쪽에 268 짜리 빈 띠가 남는다(실측, 2026-09-18 Q).
+ * 줄 길이는 이제 `--page-max` 가 정한다: 1200 장폭에서 목차 220 과 간격 40 을 뺀 876 이 상한이다. */
+.doc-body p, .doc-body li { max-width: none; }
 /* 순서 목록은 자기 폭을 쓴다. 읽기 폭 제한을 그대로 받으면 칸 배경이 오른쪽에 남는다. */
 .doc-body .steps { max-width: none; padding-left: 0; margin: var(--space-8) 0 var(--space-4); }
 .doc-body .steps li { max-width: none; margin-bottom: 0; }
@@ -836,7 +839,7 @@ summary:focus-visible,
 /* 안내줄 안 조각. 제목 16/600 --ink, 본문 14 --sub 는 앱의 notice 짝과 같다. */
 .callout {
   margin: 0 0 var(--space-4);
-  max-width: var(--measure);
+  max-width: none;
   padding: var(--space-5) var(--space-6);
 }
 .callout b {
@@ -850,7 +853,7 @@ summary:focus-visible,
 
 .faq {
   margin-top: var(--space-4);
-  max-width: var(--measure);
+  max-width: none;
   border-top: 1px solid var(--line);
 }
 .faq details { border-bottom: 1px solid var(--line); }
