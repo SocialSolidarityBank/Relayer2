@@ -1,5 +1,6 @@
 // 라우터 하나, 검증 한 곳. 베타 API 6개(PLAN §5).
 import { Hono } from 'hono';
+import { serveStatic } from '@hono/node-server/serve-static';
 import { z } from 'zod';
 import { actorFromCookie, clearCookie, issueCookie, login, type Actor } from './auth.ts';
 import {
@@ -116,6 +117,18 @@ app.onError((err, c) => {
 app.get('/health', (c) => c.json({ ok: true }));
 
 /**
+ * 소개와 가이드(`site/`). **로그인 앞에 선다.** 공개 페이지다.
+ * 루트는 이 페이지가 갖고 앱은 `/app` 으로 들어간다(아래 `WEB_ENTRIES`).
+ * `site/` 에 실제로 있는 파일만 응답하고, 없으면 그대로 다음으로 넘긴다. 그래서
+ * `/assets/*`, `/test`, API 경로는 전부 지금까지와 같다.
+ * 확장자나 정규식으로 판정하지 않으므로 아래 허용 목록 규율(§isWebAsset)과 부딪히지 않는다:
+ * 공개되는 것은 그 폴더에 **파일로 놓인 것**뿐이다.
+ * 캐시 금지 미들웨어보다 앞이라 이 파일들에는 `no-store` 가 붙지 않는다(공개 페이지다).
+ */
+app.get('/', serveStatic({ root: './site', path: './index.html' }));
+app.get('/*', serveStatic({ root: './site' }));
+
+/**
  * API 응답은 저장하지 않는다. 이름·연락처·상담 내용이 실려 나가므로
  * 브라우저 디스크 캐시나 중간 프록시에 남으면 안 된다(P1). 화면 파일은 해당 없다.
  */
@@ -195,8 +208,13 @@ const isParticipantGate = (path: string): boolean => path === '/access/open';
 /**
  * 화면으로 들어오는 주소. 로그인 전에도 받아야 로그인 화면이 뜬다.
  * `/test` 는 관문 2 측정용 입구다 — 참가자에게 `relayer.kr/test` 한 줄만 주면 된다.
+ * `/app` 은 소개 페이지에서 앱으로 들어오는 문이다(2026-09-18). 루트를 소개 페이지가
+ * 가져가면서 생겼다. 셸 한 장(`index.html`)만 나가고 해시는 브라우저가 갖는다.
+ * `/app#/login`, `/app#/signup` 이 그래서 서버에는 똑같이 `/app` 으로 온다.
+ * `/` 는 루트를 소개 페이지가 먼저 가져가므로 이제 이 목록에서는 쓰이지 않지만,
+ * `site/` 가 없는 배포(개발, 시험)에서 앱이 그대로 루트에 서도록 남겨 둔다.
  */
-const WEB_ENTRIES = new Set(['/', '/test']);
+const WEB_ENTRIES = new Set(['/', '/test', '/app']);
 
 /**
  * 빌드가 루트에 내놓는 파일. `web/dist` 에는 `index.html` 과 `assets/` 뿐이다.
