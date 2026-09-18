@@ -1,6 +1,6 @@
 # 디자인 레인 인계 (2026-09-18 갱신)
 
-워크트리 `RELAYER2/.worktrees/DESIGN`. 캘린더 레인은 착지해서 끝났다(`HANDOFF-CALENDAR.md`).
+디자인 워크트리에서 진행한 인계다. 캘린더 레인은 착지해서 끝났다(`HANDOFF-CALENDAR.md`).
 
 ## 이 레인이 맡는 것
 
@@ -56,13 +56,16 @@ PLAYWRIGHT_BASE_URL=http://localhost:8798 PLAYWRIGHT_API_PREFIX= VOICE_ENABLED=1
 
 ## 배포 (요청받았을 때만)
 
+공개 릴리스 절차와 환경별 승인 절차를 따른다. 배포 전에는 합성 데이터로 마이그레이션과
+화면을 확인하고, 배포 후에는 공개 `/health`와 로그인 상태를 확인한다. 운영 호스트·
+사용자 경로·비밀값은 이 문서에 기록하지 않는다.
+
 ```bash
-gh pr merge --repo SocialSolidarityBank/Relayer2 <branch> --squash --match-head-commit "$(git rev-parse HEAD)"
-ssh mini '~/services/relayer2/scripts/backup.sh | head -n 1 && git -C ~/services/relayer2 pull -q --ff-only origin main && env PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin pnpm --dir ~/services/relayer2/web build 2>&1 | tail -n 1 && launchctl kickstart -k gui/501/or.bss.relayer && sleep 4 && git -C ~/services/relayer2 rev-parse --short HEAD && /opt/homebrew/bin/node --env-file=/Users/barq/services/relayer2/.env /Users/barq/services/relayer2/api/src/migrate.ts --check'
-curl -s https://relayer.kr/health
+curl -fsS https://relayer.kr/health
 ```
 
-스쿼시 머지 뒤 브랜치는 `main` 과 갈라진다. 다음 작업 전에 `git reset --hard origin/main`.
+스쿼시 머지 뒤 브랜치는 `main` 과 갈라진다. 다음 작업 전에 작업 브랜치를 최신 `main`과
+동기화한다.
 
 ## 정본
 
@@ -123,6 +126,6 @@ curl -s https://relayer.kr/health
 
 ## 운영
 
-- 주소 `https://relayer.kr`, 대비 `https://mac-mini.tail79fba7.ts.net`
+- 주소 `https://relayer.kr`
 - 계정 `test1`(관리자) `test2`(실무자), 비밀번호 = 아이디
 - 실무자 실사 일정이 잡히면 그 앞뒤로 배포하지 않는다

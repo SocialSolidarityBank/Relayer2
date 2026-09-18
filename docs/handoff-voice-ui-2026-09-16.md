@@ -1,7 +1,6 @@
 # 인계 — 녹음 시작·전문 보기 화면 (DESIGN 레인, 2026-09-16)
 
-시드: `.ouroboros/seed-voice-start.yaml`. 서버는 루트 워크트리 `feat/voice-start-server`, 화면은 `.worktrees/DESIGN`
-의 `design/voice-start-ui`. 이 문서가 둘의 계약이다. 서버가 착지하기 전에는 아래 모양대로 코딩하고,
+시드: `.ouroboros/seed-voice-start.yaml`. 서버 레인과 디자인 레인이 함께 따르는 계약이다.
 마지막에 루트 서버를 띄워 통합 검증한다.
 
 ## 원칙 (Q 확정)

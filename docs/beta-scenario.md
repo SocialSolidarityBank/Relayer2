@@ -37,7 +37,7 @@
 ## 0-B. 준비 (진행자가 미리)
 
 ```bash
-cd ~/DEVELOPER/PROJECTS/RELAYER2
+cd <repository-directory>
 docker compose up -d
 set -a && . ./.env && set +a
 node api/src/index.ts &                    # API  :8787
