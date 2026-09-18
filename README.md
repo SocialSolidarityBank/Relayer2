@@ -186,6 +186,7 @@ pnpm --dir web exec playwright test e2e/beta-flow.spec.ts
   설정 점검표
 - [`docs/secrets.md`](docs/secrets.md) — 환경 변수 이름, 생성, 교체, 보관
 - [`docs/deploy.md`](docs/deploy.md) — 컨테이너, 주소, 백업, 복구 안내
+- [`SPEC.md`](SPEC.md) §15·§16 — AI 정리(v6 분석)와 음성·전사의 동작 계약
 
 ## 라이선스
 
