@@ -11,7 +11,7 @@ APPLY="${APPLY:-0}"
 RG="${AZURE_RESOURCE_GROUP:-relayer2-prod}"
 LOCATION="${AZURE_LOCATION:-koreacentral}"
 ACA_ENV="${AZURE_CONTAINERAPPS_ENV:-relayer2-env}"
-IMAGE="${RELAYER_IMAGE:-ghcr.io/socialsolidaritybank/relayer:0.2.0}"
+IMAGE="${RELAYER_IMAGE:-ghcr.io/socialsolidaritybank/relayer:0.2.1}"
 INFISICAL_PROJECT_ID="${INFISICAL_PROJECT_ID:-a7c44b37-a885-4c62-98cd-cbc8a9810de9}"
 OPSVC="${OPSVC:-$HOME/.dotfiles/scripts/opsvc}"
 

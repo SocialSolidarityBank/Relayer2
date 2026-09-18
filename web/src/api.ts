@@ -765,9 +765,13 @@ export type Topic = { id: string; title: string; paragraph_ids: string[] };
 export type StructuredRecord = { topics: Topic[]; paragraphs: Paragraph[]; annotations: Annotation[] };
 
 export type GoalLink = 'overall' | 'session' | null;
-export type SummaryItem = { text: string; spans: string[]; goal: GoalLink };
+/** #102 를 v6 에 흡수 — 항목별 근거 등급·변환. 서버 EVIDENCE_GRADES/EVIDENCE_TRANSFORMS 와 같다. 없으면 화면이 비운다. */
+export type EvidenceGrade = '완전' | '부분' | '정황' | '과잉' | '모순' | '없음';
+export type EvidenceTransform = '일반화' | '감정 라벨링' | '집계·경향화' | '해석·판단' | '압축' | '화자 전환';
+export type Evidence = { grade?: EvidenceGrade; transforms?: EvidenceTransform[] };
+export type SummaryItem = Evidence & { text: string; spans: string[]; goal: GoalLink };
 export type Dialogue = { worker?: string; participant?: string };
-export type PromiseResultItem = {
+export type PromiseResultItem = Evidence & {
   promise: string;
   result: string;
   promise_spans: string[];
@@ -776,7 +780,7 @@ export type PromiseResultItem = {
   conclusion?: string;
   goal: GoalLink;
 };
-export type NewlyRevealedItem = {
+export type NewlyRevealedItem = Evidence & {
   dialogue?: Dialogue;
   mode: 'change' | 'confirmed';
   lines: string[];
@@ -784,7 +788,7 @@ export type NewlyRevealedItem = {
   summary_only_exception: boolean;
   goal: GoalLink;
 };
-export type NewPossibilityItem = { dialogue?: Dialogue; lines: string[]; change_spans: string[]; plan_spans: string[]; goal: GoalLink };
+export type NewPossibilityItem = Evidence & { dialogue?: Dialogue; lines: string[]; change_spans: string[]; plan_spans: string[]; goal: GoalLink };
 export type SessionSummary = {
   core: SummaryItem[];
   changes: { promise_result: PromiseResultItem[]; newly_revealed: NewlyRevealedItem[]; new_possibility: NewPossibilityItem[] };
@@ -829,8 +833,11 @@ export type AnalysisBody = {
   keywords: Keyword[];
   tasks: string[];
   questions: string[];
+  /** 놓친 구간 — 어떤 요약 항목도 참조하지 않은 수기 단락(서버 계산). */
+  omissions: Omission[];
   summary_override: SummaryOverride | null;
 };
+export type Omission = { paragraph_id: string; spans: string[] };
 export type AnalysisRevision = {
   id: number;
   session_id: number;

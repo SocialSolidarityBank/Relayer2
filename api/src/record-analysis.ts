@@ -27,6 +27,7 @@ import {
   INTAKE_FREE_TEXT_KEYS,
   LLM_ANALYSIS_JSON_SCHEMA_NAME,
   LlmAnalysisSchema,
+  omissionsOf,
   spansOf,
   type AnalysisBody,
   type AnalysisRevision,
@@ -41,7 +42,7 @@ import {
   type SourceSpan,
   type SourceVersions,
 } from './domain/record-analysis.ts';
-import type { Card, Session } from './domain/types.ts';
+import { EVIDENCE_GRADES, EVIDENCE_TRANSFORMS, type Card, type Session } from './domain/types.ts';
 
 /** 승인 시점의 초안·원본이 화면이 본 것과 다르다. 라우트는 409 로 답한다(T28). */
 export class AnalysisConflict extends Error {}
@@ -230,15 +231,25 @@ const SYSTEM_V6 = [
   '- span ID 만 참조하고 원문을 통째로 복제하지 않는다(짧은 인용은 허용).',
   '- 대괄호 자리표([otter-001], [연락처])는 그대로 둔다. 추측해 채우지 않는다.',
   '- 모르면 비운다. 없는 것을 지어내지 않는다.',
+  '- 요약 항목마다 근거 등급(grade)을 매긴다: 완전(span 이 명시적으로 말함) · 부분 · 정황 · 과잉(span 보다 세게 말함) ·',
+  '  모순(span 과 어긋남) · 없음. 애매하면 낮은 등급. 원문에서 항목으로 오며 생긴 변환(transforms)이 있으면 적는다:',
+  '  일반화 · 감정 라벨링 · 집계·경향화 · 해석·판단 · 압축 · 화자 전환. 없으면 빈 배열.',
   '',
   '무엇이 먼저인가: `이번 상담의 핵심` 은 목표(전체·이번 회차)와의 관련성이 1순위다.',
   '시간 흐름이 모호한 단락을 묶을 때도 목표 관련성으로 묶는다.',
 ].join('\n');
 
+/** #102 흡수 — 항목별 등급·변환. strict 스키마라 필수이되 nullable 이고, null 은 파싱 전에 지운다. */
+const EVIDENCE_PROPS = {
+  grade: { type: ['string', 'null'], enum: [...EVIDENCE_GRADES, null] },
+  transforms: { type: ['array', 'null'], items: { type: 'string', enum: [...EVIDENCE_TRANSFORMS] } },
+} as const;
+
 /**
  * OpenAI json_schema(strict) 용 스키마. LlmAnalysisSchema 와 같은 모양이어야 한다 —
  * strict 는 모든 필드를 required 로 요구하므로 선택 필드는 nullable 로 둔다(서버가 zod 로 다시 검증한다).
  */
+
 const LLM_ANALYSIS_JSON_SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -307,8 +318,9 @@ const LLM_ANALYSIS_JSON_SCHEMA = {
               items: {
                 type: 'object',
                 additionalProperties: false,
-                required: ['promise', 'result', 'promise_spans', 'result_spans', 'changes', 'conclusion', 'goal'],
+                required: ['promise', 'result', 'promise_spans', 'result_spans', 'changes', 'conclusion', 'goal', 'grade', 'transforms'],
                 properties: {
+                  ...EVIDENCE_PROPS,
                   promise: { type: 'string' },
                   result: { type: 'string' },
                   promise_spans: { type: 'array', items: { type: 'string' } },
@@ -336,8 +348,9 @@ const LLM_ANALYSIS_JSON_SCHEMA = {
               items: {
                 type: 'object',
                 additionalProperties: false,
-                required: ['dialogue', 'mode', 'lines', 'spans', 'summary_only_exception', 'goal'],
+                required: ['dialogue', 'mode', 'lines', 'spans', 'summary_only_exception', 'goal', 'grade', 'transforms'],
                 properties: {
+                  ...EVIDENCE_PROPS,
                   dialogue: {
                     type: ['object', 'null'],
                     additionalProperties: false,
@@ -360,8 +373,9 @@ const LLM_ANALYSIS_JSON_SCHEMA = {
               items: {
                 type: 'object',
                 additionalProperties: false,
-                required: ['dialogue', 'lines', 'change_spans', 'plan_spans', 'goal'],
+                required: ['dialogue', 'lines', 'change_spans', 'plan_spans', 'goal', 'grade', 'transforms'],
                 properties: {
+                  ...EVIDENCE_PROPS,
                   dialogue: {
                     type: ['object', 'null'],
                     additionalProperties: false,
@@ -443,8 +457,9 @@ const LLM_ANALYSIS_JSON_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['text', 'spans', 'goal'],
+        required: ['text', 'spans', 'goal', 'grade', 'transforms'],
         properties: {
+          ...EVIDENCE_PROPS,
           text: { type: 'string' },
           spans: { type: 'array', items: { type: 'string' } },
           goal: { type: ['string', 'null'], enum: ['overall', 'session', null] },
@@ -458,6 +473,7 @@ const LLM_ANALYSIS_JSON_SCHEMA = {
 // zod 의 optional 과 어긋나므로 파싱 전에 지운다. `goal` 은 진짜 nullable 이라 건드리지 않는다.
 const NULLABLE_OPTIONAL_KEYS: Record<string, true> = {
   before: true, after: true, conclusion: true, meaning: true, dialogue: true, worker: true, participant: true,
+  grade: true, transforms: true,
 };
 function stripNulls(value: unknown): void {
   if (Array.isArray(value)) {
@@ -683,6 +699,7 @@ export async function draftAnalysis(sessionId: number, actorId: number): Promise
     keywords,
     tasks: analysis.tasks,
     questions: analysis.questions,
+    omissions: omissionsOf(analysis.record, analysis.summary),
     summary_override: null,
   };
 

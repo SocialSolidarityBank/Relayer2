@@ -1,6 +1,6 @@
 # v6 상담기록 분석 — 구현·검증 보고 (2026-09-18, 브랜치 `feat/ai-module-v6`)
 
-마이그레이션 번호: **0031** (`migrations/0031_record_analysis_v6.sql`; origin/main 0029, `feat/case-memory` 0030). 바탕 origin/main d3c024f.
+마이그레이션 번호: **0032** (`migrations/0032_record_analysis_v6.sql`; origin/main 에 0030 사례 기억·0031 `ai_drafts_evidence`(#102)가 먼저 내려 0031→0032 로 옮김). 바탕 origin/main d3c024f.
 시드 `.ouroboros/seed-ai-module.yaml`, 장부 `docs/ai-module-ledger-2026-09-18.md`, 규칙 정본 `docs/relayer_v1_handoff.md` 부록.
 
 ## 1. 변경 이유와 결과 동작
@@ -13,7 +13,7 @@
 |---|---|---|
 | 계약 | `api/src/domain/record-analysis.ts` | 타입·zod `LlmAnalysisSchema`·span ID(`w:<doc>:<n>`/`t:<id>:<n>`)·`splitSentences`·`coverageOf`·`checkReferences`·금지어·`INTAKE_FREE_TEXT_KEYS`·라우트 표 |
 | 규칙 | `api/src/domain/structured-record.ts`, `session-summary.ts`, `transcript-links.ts` | 01·02·04 검증기(순수 함수), `renderOrder`(①번호), `statusForTranscriptSpan` |
-| 저장·오케스트레이션 | `migrations/0031_record_analysis_v6.sql`, `api/src/record-analysis.ts` | `record_analyses`(draft/approved/failed, source_versions, 암호화 body, append-only), 문서·span·문장별 마스킹·프롬프트·검증·draft/failed·approve(draft_id+source_versions 409, `replaceAiCards` 유지)·`analysisView`·`backlinks`·`sessionAiSummaries`·`v6StaleFlags` |
+| 저장·오케스트레이션 | `migrations/0032_record_analysis_v6.sql`, `api/src/record-analysis.ts` | `record_analyses`(draft/approved/failed, source_versions, 암호화 body, append-only), 문서·span·문장별 마스킹·프롬프트·검증·draft/failed·approve(draft_id+source_versions 409, `replaceAiCards` 유지)·`analysisView`·`backlinks`·`sessionAiSummaries`·`v6StaleFlags` |
 | 제공자 | `api/src/ai.ts`, `api/src/consent.ts` | `callModel<T>` 일반화, `AI_PROVIDER=stub`(`AI_STUB_FILE`, 호출마다 재읽기), `sessionParts` manual 필터, 지난 회차 루프·나중 말·fact_changes 생성 삭제 |
 | 라우트·조회 | `api/src/routes.ts`, `api/src/service.ts`, `api/src/revisions.ts` | `GET/POST /sessions/:id/draft`, `POST /sessions/:id/draft/approve`, `GET /sessions/:id/analysis`, `GET /cases/:id/backlinks?keyword=`; `CaseDetail.sessions[].ai_summary` = `SessionAiSummary`(v6|legacy); `kind=summary` 리비전 → `summary_override` |
 | 화면 부품 | `web/src/structured-record.tsx`, `session-summary.tsx`, `transcript-view.tsx`, `analysis-panel.tsx`, `analysis-preview.tsx` | 구조화 뷰·요약 4구역·전사 뷰·대조/백링크 패널·개발용 합성 fixture |

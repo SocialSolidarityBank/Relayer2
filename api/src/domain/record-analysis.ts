@@ -22,9 +22,11 @@
 //
 // 테스트 제공자: AI_PROVIDER=stub, AI_STUB_FILE=<json 경로>. 파일 모양은 StubFile. 동의·마스킹·검증은 그대로 돈다.
 import { z } from 'zod';
+import { EVIDENCE_GRADES, EVIDENCE_TRANSFORMS, type EvidenceGrade, type EvidenceTransform } from './types.ts';
 
 export const ANALYSIS_SCHEMA_VERSION = 1;
 export const ANALYSIS_RULE_VERSION = 'v6';
+
 
 // ─── 원문 문서와 문장 span ───────────────────────────────────────────────────────
 
@@ -158,14 +160,20 @@ export type StructuredRecord = { topics: Topic[]; paragraphs: Paragraph[]; annot
 
 export type GoalLink = 'overall' | 'session' | null;
 
+/**
+ * 항목별 근거 등급·변환(#102 를 v6 에 흡수, 2026-09-18 Q). 근거 자체는 span 참조가 보증하고,
+ * 등급·변환은 모델이 같은 호출에서 매기는 판단이다 — 없으면 화면이 비워 둔다. 애매하면 낮은 등급.
+ */
+export type Evidence = { grade?: EvidenceGrade; transforms?: EvidenceTransform[] };
+
 /** 핵심·확인필요·완료·해결의 한 줄. 어휘는 참조 span 의 원문 것이어야 한다(치환 금지). */
-export type SummaryItem = { text: string; spans: string[]; goal: GoalLink };
+export type SummaryItem = Evidence & { text: string; spans: string[]; goal: GoalLink };
 
 /** 실제 직접 발화가 원문에 있을 때만. 인용문은 참조 span 텍스트에 그대로 들어 있어야 한다(T18). */
 export type Dialogue = { worker?: string; participant?: string };
 
 /** 약속 이행 여부 — 약속 span 과 결과 span 이 모두 같은 회차 수기에 있어야 한다(T09·T13). */
-export type PromiseResultItem = {
+export type PromiseResultItem = Evidence & {
   promise: string;
   result: string;
   promise_spans: string[];
@@ -178,7 +186,7 @@ export type PromiseResultItem = {
 };
 
 /** 상담 중 새로 드러난 것 — 요약 전용 예외 항목. mode=change 는 `변화점:`(전후 span 필요), confirmed 는 `확인된 내용:`. */
-export type NewlyRevealedItem = {
+export type NewlyRevealedItem = Evidence & {
   dialogue?: Dialogue;
   mode: 'change' | 'confirmed';
   lines: string[];
@@ -189,7 +197,7 @@ export type NewlyRevealedItem = {
 };
 
 /** 이번 상담 후 새로운 가능성 — 같은 회차의 변화 span → 후반 합의·계획 span 연결이 있을 때만(T11). */
-export type NewPossibilityItem = {
+export type NewPossibilityItem = Evidence & {
   dialogue?: Dialogue;
   lines: string[];
   change_spans: string[];
@@ -252,7 +260,8 @@ export type LlmAnalysis = {
 
 const spanIds = z.array(z.string().min(1));
 const goalLink = z.union([z.literal('overall'), z.literal('session'), z.null()]);
-const summaryItem = z.object({ text: z.string().min(1), spans: spanIds, goal: goalLink });
+const evidence = { grade: z.enum(EVIDENCE_GRADES).optional(), transforms: z.array(z.enum(EVIDENCE_TRANSFORMS)).optional() };
+const summaryItem = z.object({ ...evidence, text: z.string().min(1), spans: spanIds, goal: goalLink });
 const dialogue = z.object({ worker: z.string().optional(), participant: z.string().optional() }).optional();
 
 export const LlmAnalysisSchema: z.ZodType<LlmAnalysis> = z.object({
@@ -273,6 +282,7 @@ export const LlmAnalysisSchema: z.ZodType<LlmAnalysis> = z.object({
     changes: z.object({
       promise_result: z.array(
         z.object({
+          ...evidence,
           promise: z.string().min(1),
           result: z.string().min(1),
           promise_spans: spanIds,
@@ -284,6 +294,7 @@ export const LlmAnalysisSchema: z.ZodType<LlmAnalysis> = z.object({
       ),
       newly_revealed: z.array(
         z.object({
+          ...evidence,
           dialogue,
           mode: z.enum(['change', 'confirmed']),
           lines: z.array(z.string()),
@@ -293,7 +304,7 @@ export const LlmAnalysisSchema: z.ZodType<LlmAnalysis> = z.object({
         }),
       ),
       new_possibility: z.array(
-        z.object({ dialogue, lines: z.array(z.string()), change_spans: spanIds, plan_spans: spanIds, goal: goalLink }),
+        z.object({ ...evidence, dialogue, lines: z.array(z.string()), change_spans: spanIds, plan_spans: spanIds, goal: goalLink }),
       ),
     }),
     follow_up: z.array(summaryItem),
@@ -352,9 +363,40 @@ export type AnalysisBody = {
   keywords: Keyword[];
   tasks: string[];
   questions: string[];
+  /** 놓친 구간(#102 흡수) — 어떤 요약 항목도 참조하지 않은 수기 단락. 모델이 아니라 서버가 센다(`omissionsOf`). */
+  omissions: Omission[];
   /** 승인 뒤 사람이 통째 고친 요약(Q 17). 있으면 화면은 이 텍스트만 보이고 요약 항목의 근거·목표 연결을 해제한다. */
   summary_override: SummaryOverride | null;
 };
+
+export type Omission = { paragraph_id: string; spans: string[] };
+
+/** 요약 항목이 참조하는 수기 span 전부. 근거 모달·놓친 구간이 같은 목록을 쓴다. */
+export function referencedSpans(summary: SessionSummary): Set<string> {
+  const out = new Set<string>();
+  const add = (ids: ReadonlyArray<string> | undefined) => ids?.forEach((id) => out.add(id));
+  summary.core.forEach((x) => add(x.spans));
+  summary.changes.promise_result.forEach((x) => {
+    add(x.promise_spans);
+    add(x.result_spans);
+  });
+  summary.changes.newly_revealed.forEach((x) => add(x.spans));
+  summary.changes.new_possibility.forEach((x) => {
+    add(x.change_spans);
+    add(x.plan_spans);
+  });
+  summary.follow_up.forEach((x) => add(x.spans));
+  summary.completed.forEach((x) => add(x.spans));
+  return out;
+}
+
+/** 놓친 구간 = 어느 span 도 요약에 안 쓰인 단락. 결정적이라 모델의 역방향 추정이 필요 없다(#102 의 `omissions` 대체). */
+export function omissionsOf(record: StructuredRecord, summary: SessionSummary): Omission[] {
+  const used = referencedSpans(summary);
+  return record.paragraphs
+    .filter((p) => p.spans.length > 0 && !p.spans.some((id) => used.has(id)))
+    .map((p) => ({ paragraph_id: p.id, spans: p.spans }));
+}
 
 export type AnalysisRevision = {
   id: number;
