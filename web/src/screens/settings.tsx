@@ -84,6 +84,7 @@ import { DatePicker } from '../date-picker.tsx';
 import { Dialog } from '../dialog.tsx';
 import { AUDIT_DAYS, AUDIT_KIND_TABS, AuditScreen } from './audit.tsx';
 import { CONNECTION_GUIDES } from '../../../site/connection-guide.js';
+import './settings.css';
 
 // 날짜·일시 표기는 `date-time.ts` 한 곳이다(2026-09-18 Q).
 
@@ -1802,6 +1803,8 @@ export function ConnectionsPane() {
   const guide = (id: (typeof CONNECTION_GUIDES)[number]['id']) => {
     const content = CONNECTION_GUIDES.find((item) => item.id === id);
     if (!content) return null;
+    // 번호·화살표·색은 전부 CSS(settings.css)다 — 랜딩 팝업과 innerText 가 같아야 한다(e2e connections).
+    // `AI가 돕는 범위` 는 절차가 아니라 역할 구분이라 라벤더 메모(DESIGN.md §6 AI 톤)로 뗀다.
     return (
       <div className="connection-guide-row">
         <Dialog
@@ -1812,7 +1815,7 @@ export function ConnectionsPane() {
         >
           <ol className="connection-guide" data-guide-id={content.id}>
             {content.steps.map((step) => (
-              <li key={step.label}>
+              <li key={step.label} data-tone={step.label === 'AI가 돕는 범위' ? 'ai' : undefined}>
                 <strong>{step.label}</strong>
                 <span>
                   {step.parts.map((part, index) =>
