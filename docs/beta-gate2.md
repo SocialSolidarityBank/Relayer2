@@ -9,7 +9,7 @@
 
 ```bash
 cd <repository-directory>
-./scripts/reset-for-measure.sh --mini     # 참가자가 바뀔 때마다. reset 이라고 적어야 진행된다
+./scripts/reset-for-measure.sh             # 참가자가 바뀔 때마다. reset 이라고 적어야 진행된다
 ```
 
 **참가자에게 주는 것은 주소 한 줄이다.**

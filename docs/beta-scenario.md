@@ -36,6 +36,7 @@
 
 ## 0-B. 준비 (진행자가 미리)
 
+```bash
 cd <repository-directory>
 docker compose up -d
 set -a && . ./.env && set +a
