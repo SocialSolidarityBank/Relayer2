@@ -163,3 +163,72 @@ cwebp -q 86 -alpha_q 100 새그림.png -o site/img/cover.webp
 비율이 어긋나면 그림이 늦게 올 때 아래 글이 밀린다. 표시 폭은 CSS 가 정한다(최대 520).
 
 `site/` 바로 아래 이미지는 커밋 대상이 아니다(로컬 제외 목록). 쓸 그림은 `img/` 나 `shots/` 에 둔다.
+
+## 팀원이 고칠 때
+
+저장소는 공개다(Apache-2.0). 클론에는 권한이 필요 없다.
+
+```bash
+git clone https://github.com/SocialSolidarityBank/Relayer2.git
+cd Relayer2
+python3 -m http.server 8080 --directory site   # http://127.0.0.1:8080
+```
+
+고칠 파일은 셋이다. `site/index.html`, `site/guide-user.html`, `site/guide-admin.html`.
+문장은 HTML 안에 그대로 있으니 글자만 바꾸고 브라우저를 새로 고치면 된다.
+**설치할 것도, 환경 변수도, 데이터베이스도 없다.** 빌드 도구가 없어서 그렇다.
+
+고친 뒤 검수를 돌린다(Node 22 이상, 의존성 없음).
+
+```bash
+node scripts/site-check-text.mjs
+```
+
+올리는 길은 둘이다.
+
+- **협업자로 초대받은 경우**: 브랜치를 만들어 push 하고 PR 을 연다.
+  `gh repo view` 로 확인하면 지금 push 권한은 조직 계정 하나뿐이다. 초대는 저장소 관리자가 한다.
+- **초대 없이**: GitHub 에서 fork 한 뒤 PR 을 연다. 공개 저장소라 그대로 된다.
+
+`main` 에 들어가면 배포는 맥미니에서 한 줄이다(`docs/deploy.md`).
+
+```bash
+ssh mini 'cd ~/services/relayer2 && git pull && launchctl kickstart -k gui/$(id -u)/or.bss.relayer'
+```
+
+정적 파일이라 다시 빌드할 것이 없다. `site/` 만 바뀐 변경은 앱을 다시 띄우지 않아도
+다음 요청부터 새 파일이 나간다(앱이 요청마다 디스크를 읽는다). 앱을 다시 띄우는 것은
+`routes.ts` 처럼 코드가 바뀐 경우다.
+
+## 환경 변수를 넘기는 방법
+
+**소개 페이지와 가이드만 고치는 사람에게는 넘길 것이 없다.** 위 절차에 환경 변수가 없다.
+시크릿을 주지 않는 것이 맞다.
+
+앱 전체를 돌려야 하는 경우(화면 사진 다시 찍기, API 작업)도 **운영 값을 넘기지 않는다.**
+`.env.example` 를 복사해 자기 기기용 값을 직접 만든다.
+
+```bash
+cp .env.example .env
+openssl rand -base64 32   # PII_ENC_KEY
+openssl rand -hex 32      # SESSION_SECRET
+pnpm db:up && pnpm migrate && pnpm seed   # 로컬 docker DB, 합성 데이터
+```
+
+뜨는 데 필요한 값은 이 둘뿐이다. `DATABASE_URL` 은 비워 두면 로컬 docker 를 보고,
+AI 와 음성 열쇠가 없으면 그 기능만 503 으로 실패한다. 나머지는 그대로 돈다.
+
+운영 값이 정말 필요한 자리(맥미니, 새 기관 배포)는 값을 사람 손으로 옮기지 않는다.
+Infisical `prod:/RELAYER2/<slug>` 에 권한을 주고 각자 기기에서 내려받는다.
+
+```bash
+./scripts/pull-secrets.sh /RELAYER2/<slug>    # .env(0600) 로 받는다. 화면에 찍지 않는다
+```
+
+받는 사람에게 필요한 것은 값이 아니라 **권한 둘**이다.
+
+1. 1Password `BSS` 볼트의 Infisical 서비스 계정 항목 공유
+2. `~/.dotfiles/scripts/opsvc` 가 있는 기기
+
+카카오톡, 메일, 문서, 스크린샷으로 값을 보내지 않는다. 한 번 보내면 회수할 수 없고
+`PII_ENC_KEY` 는 그 DB 의 상담 내용을 여는 열쇠다.
