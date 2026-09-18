@@ -32,6 +32,9 @@ PLAYWRIGHT_BASE_URL=http://localhost:8798 PLAYWRIGHT_API_PREFIX= VOICE_ENABLED=1
 
 - 서버: `node --env-file=.env.design api/src/index.ts`, `PORT=8798`, `web/dist` 를 같은 원점에서 낸다.
   `.env.design`(gitignore 됨)에 `DATABASE_URL`·`PII_ENC_KEY`·`SESSION_SECRET`·`PORT`·`VOICE_ENABLED=1` 이 있다.
+- AI 정리를 실제로 돌려 볼 때는 `scripts/preview-with-ai.sh` 로 띄운다(2026-09-18): Infisical `prod:/RELAYER2` 의
+  `RELAYER_OPENAI_API_KEY` 를 **자식 프로세스 환경에만** 얹고(값은 어디에도 안 찍힘, 길이만 stderr) 같은 서버를 연다.
+  키는 `.env.design` 에 넣지 않는다.
 - DB: 일회용 `relayer_design`(운영 `.env` 에 붙지 않는다). **시드만 남긴다** — e2e 가 만든 자료는
   쌓아 두지 않는다(2026-09-18 Q). 지저분해지면 통째로 다시 만든다:
   ```bash

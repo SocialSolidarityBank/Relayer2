@@ -54,23 +54,23 @@ describe('verifyEvidence', () => {
     expect(out.evidence[0]).toMatchObject({ quotes: [], context: '', grade: '없음' });
   });
 
-  it('라벨이 틀린 인용은 다른 자료에서 찾고, 놓친 구간도 같은 규칙이다', () => {
+  it('라벨이 틀린(대괄호째) 인용은 다른 자료에서 찾고, 놓친 구간도 같은 규칙이다', () => {
     const out = verifyEvidence(
       {
         ...base,
         evidence: [
-          { item: '무력감', source: '상담 내용', quotes: ['그냥 다 놓고 싶더라고요.'], context: '', grade: '정황', transforms: ['감정 라벨링'], note: '' },
+          { item: '무력감', source: '[상담 내용]', quotes: ['그냥 다 놓고 싶더라고요.'], context: '', grade: '정황', transforms: ['감정 라벨링'], note: '' },
         ],
         omissions: [
-          { source: '전사문', quote: '형이 같이 있었어요.', importance: '상', summary: '동거인 존재' },
+          { source: '[전사문]', quote: '형이 같이 있었어요.', importance: '상', summary: '동거인 존재' },
           { source: '전사문', quote: '누나가 같이 있었어요.', importance: '상', summary: '지어냄' },
         ],
         omitted_minor_count: -2,
       },
       PARTS,
     );
-    expect(out.evidence[0].grade).toBe('정황');
-    expect(out.omissions.map((o) => o.quote)).toEqual(['형이 같이 있었어요.']);
+    expect(out.evidence[0]).toMatchObject({ grade: '정황', source: '상담 내용' });
+    expect(out.omissions).toEqual([{ source: '전사문', quote: '형이 같이 있었어요.', importance: '상', summary: '동거인 존재' }]);
     expect(out.omitted_minor_count).toBe(0);
   });
 });
