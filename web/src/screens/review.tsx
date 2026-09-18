@@ -117,6 +117,42 @@ export function ReviewScreen({ caseId, sessionId }: { caseId: number; sessionId:
               <FactChanges items={draft.fact_changes} />
             </Fold>
 
+            {/* 역방향 점검(2026-09-18 Q): 어떤 항목에도 안 쓰인 자료 구간. 상·중은 낱개, 하는 건수만.
+                승인 전에 "이거 빠졌는데 넣을래?" 묻는 자리라 검토 화면에 둔다. 인용은 서버가 자료와 대조한 것이다. */}
+            <Fold
+              title="놓친 구간"
+              desc={
+                draft.omissions.length > 0 || draft.omitted_minor_count > 0
+                  ? [
+                      draft.omissions.filter((o) => o.importance === '상').length > 0 &&
+                        `상 ${draft.omissions.filter((o) => o.importance === '상').length}건`,
+                      draft.omissions.filter((o) => o.importance === '중').length > 0 &&
+                        `중 ${draft.omissions.filter((o) => o.importance === '중').length}건`,
+                      draft.omitted_minor_count > 0 && `하 ${draft.omitted_minor_count}건`,
+                    ]
+                      .filter(Boolean)
+                      .join(', ')
+                  : '정리에 안 든 구간 없음'
+              }
+            >
+              {draft.omissions.length === 0 ? (
+                <Empty>{draft.omitted_minor_count > 0 ? `인사·잡담·반복 ${draft.omitted_minor_count}건뿐` : '없음'}</Empty>
+              ) : (
+                <div className="omission-list">
+                  {draft.omissions.map((o, i) => (
+                    <div className="omission-item" key={i}>
+                      <p className="omission-head">
+                        <span className="evidence-grade" data-tone={o.importance === '상' ? 'warn' : 'sub'}>{o.importance}</span>
+                        <span className="omission-summary">{o.summary}</span>
+                        <span className="seq-section-note">{o.source}</span>
+                      </p>
+                      <p className="evidence-text">{o.quote}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Fold>
+
             <Fold
               title="마스킹"
               desc={
