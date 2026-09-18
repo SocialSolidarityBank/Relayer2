@@ -1,4 +1,4 @@
-// 상담 녹음 패널과 음성·수기 기록 불일치 접이는 카드. 상담 기록하기(record.tsx)에 붙는다.
+// 상담 녹음 패널. 상담 기록하기(record.tsx)에 붙는다. 구 `음성·수기 기록 불일치` 카드는 걷었다(2026-09-18 Q).
 //
 //   시작이 곧 회차 — 녹음 시작·파일 업로드·수기 첫 입력이 sessions/start 를 부른다.
 //   업로드는 즉시 끝나고 전사는 서버가 뒤에서 돌린다. 화면은 상태만 보여 준다.
@@ -11,20 +11,17 @@ import { useEffect, useRef, useState } from 'react';
 import {
   approveTranscript,
   Forbidden,
-  getMismatches,
   getSpeechStatus,
   getTranscript,
   listRecordings,
   recordingAudioHref,
   requestTranscript,
   uploadRecording,
-  type Mismatch,
-  type MismatchView,
   type Recording,
   type SpeechStatus,
   type Transcript,
 } from '../speech-api.ts';
-import { Button, Card, Empty, ErrorText, Field, Fold, FormActions, Item } from '../ui.tsx';
+import { Button, Card, Empty, ErrorText, Field, Item } from '../ui.tsx';
 
 export const fmtBytes = (n: number): string =>
   n >= 1_048_576 ? `${(n / 1_048_576).toFixed(1)}MB` : `${Math.ceil(n / 1024)}KB`;
@@ -66,17 +63,6 @@ const accepts = (file: File, formats: string[]): boolean =>
 const pickMimeType = (): string | undefined =>
   ['audio/webm;codecs=opus', 'audio/mp4'].find((t) => MediaRecorder.isTypeSupported(t));
 
-/**
- * 화면 잠김 안내(2026-09-18 Q D1-사실). 근거는 PR 본문의 출처 목록:
- * - iOS: 화면 잠김·앱 전환 시 마이크 트랙이 멈춘다는 보고가 WebKit Bugzilla 에 반복되고(241400·211829),
- *   홈 화면 웹앱·WKWebView 는 WebKit 이 백그라운드 캡처를 의도적으로 끈다(217948). 애플 문서가
- *   "잠기면 반드시 멈춘다"고 못박지는 않으므로 `멈출 수 있음`으로 적는다.
- * - Chrome: 마이크를 잡은 탭은 백그라운드 동결 대상에서 뺀다고 문서화돼 있다(freezing-on-energy-saver).
- *   그래도 절전·메모리 압박은 문서 밖이라 "켜 두고 앞에 두는 것이 안전" 수준으로만 말한다.
- */
-const LOCK_NOTE =
-  'iPhone·iPad는 화면 잠김이나 앱 전환 시 녹음이 멈출 수 있음, 어느 기기든 화면을 켜고 이 화면을 앞에 둔 채 녹음';
-
 /** 녹음 행의 전사 상태 한 줄. 'done' 은 전사문 상태(draft/approved)로 더 정확히 말한다. */
 const stateLabel = (r: Recording, transcript: Transcript | null): string => {
   if (r.transcribe_state === 'done') {
@@ -89,26 +75,6 @@ const stateLabel = (r: Recording, transcript: Transcript | null): string => {
   )[r.transcribe_state];
 };
 
-function MismatchList({ items }: { items: Mismatch[] }) {
-  return (
-    <>
-      {items.map((m, i) => (
-        <div className="wire-repeat-card" key={i}>
-          <Item
-            title={m.label}
-            desc={`${m.leftFrom}: ${m.left} ↔ ${m.rightFrom}: ${m.right}`}
-          />
-          {(m.leftSnippet || m.rightSnippet) && (
-            <dl className="panel-meta">
-              <dt>{m.leftFrom}</dt><dd>{m.leftSnippet ?? m.left}</dd>
-              <dt>{m.rightFrom}</dt><dd>{m.rightSnippet ?? m.right}</dd>
-            </dl>
-          )}
-        </div>
-      ))}
-    </>
-  );
-}
 
 /**
  * 상담 기록하기 상단의 녹음 구역(2026-09-16 인계).
@@ -118,7 +84,6 @@ export function RecordingPanel({
   sessionId,
   ensureSession,
   onAccessLost,
-  onTranscriptChange,
 }: {
   /** 시작된(기록됨) 회차. 없으면 null — 녹음·업로드가 먼저 회차를 만든다. */
   sessionId: number | null;
@@ -126,8 +91,6 @@ export function RecordingPanel({
   ensureSession: () => Promise<number>;
   /** 배정이 빠져 403 이 오면 부른다 — 화면을 닫는 판단은 부모가 한다. */
   onAccessLost?: () => void;
-  /** 전사문이 새로 생기거나 상태가 바뀌면 부른다 — 불일치 카드가 다시 읽는다. */
-  onTranscriptChange?: () => void;
 }) {
   const [status, setStatus] = useState<SpeechStatus | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -168,7 +131,6 @@ export function RecordingPanel({
       transcriptKeyRef.current = key;
       setTranscript(found);
       setDraftText(found?.text ?? '');
-      onTranscriptChange?.();
     }
   };
 
@@ -405,6 +367,8 @@ export function RecordingPanel({
   return (
     <Card
       title="상담 녹음"
+      // 안내는 제목 옆 한 줄뿐이다(2026-09-18 Q — 구 라벨·값 세 줄, 화면 잠김 주의 삭제).
+      meta={`${fmtBytes(status.max_bytes)} 이내, ${status.formats.join(', ') || '오디오'} 업로드 가능`}
       action={
         <div className="recording-actions">
           {recording ? (
@@ -423,21 +387,6 @@ export function RecordingPanel({
       }
     >
       {error && <ErrorText>{error}</ErrorText>}
-      {/* 안내 세 줄은 라벨·값 2열이다(2026-09-18 Q). 버튼은 제목 줄 오른쪽으로 올렸다. */}
-      <dl className="recording-note">
-        <div>
-          <dt>파일 형식</dt>
-          <dd>{status.formats.join(', ') || '오디오'}</dd>
-        </div>
-        <div>
-          <dt>파일 크기</dt>
-          <dd>{fmtBytes(status.max_bytes)} 이내</dd>
-        </div>
-        <div>
-          <dt>주의</dt>
-          <dd>{LOCK_NOTE}</dd>
-        </div>
-      </dl>
       {recording && <p className="panel-meta">녹음 중 {fmtMs(elapsed)}</p>}
       <input
         ref={fileRef}
@@ -548,143 +497,3 @@ export function RecordingPanel({
   );
 }
 
-/**
- * 음성·수기 기록 불일치 접이는 카드. 녹음·전사 조작은 위 RecordingPanel 이 맡고,
- * 여기는 승인된 전사문과 수기 기록의 숫자 항목 비교만 남는다.
- */
-export function SessionAudio({
-  sessionId,
-  onAccessLost,
-  writtenChanged = false,
-  voiceStamp = 0,
-}: {
-  sessionId: number;
-  /** 배정이 빠져 403 이 오면 부른다 — 화면을 닫는 판단은 부모가 한다. */
-  onAccessLost?: () => void;
-  writtenChanged?: boolean;
-  /** 위 패널에서 전사문이 바뀌면 값이 올라간다 — 비교 대상이 달라졌으니 다시 읽는다. */
-  voiceStamp?: number;
-}) {
-  const [status, setStatus] = useState<SpeechStatus | null>(null);
-  const [transcript, setTranscript] = useState<Transcript | null>(null);
-  const [mismatches, setMismatches] = useState<MismatchView | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-
-  /** 언마운트·접근 상실 뒤 늦게 온 응답이 상태를 덮지 못하게 한다. */
-  const alive = useRef(true);
-  useEffect(() => {
-    alive.current = true;
-    return () => {
-      alive.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    setTranscript(null);
-    setMismatches(null);
-    let live = true;
-    setLoading(true);
-    setError(null);
-    void (async () => {
-      try {
-        const st = await getSpeechStatus();
-        if (!live) return;
-        setStatus(st);
-        if (!st.enabled) return;
-        const [tr, mm] = await Promise.all([getTranscript(sessionId), getMismatches(sessionId)]);
-        if (!live) return;
-        setTranscript('id' in tr ? tr : null);
-        setMismatches(mm);
-      } catch (e) {
-        if (!live) return;
-        if (e instanceof Forbidden) onAccessLost?.();
-        setError(e instanceof Error ? e.message : '불러오기 실패');
-      } finally {
-        if (live) setLoading(false);
-      }
-    })();
-    return () => {
-      live = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, voiceStamp]);
-
-  const guard = (e: unknown): void => {
-    if (e instanceof Forbidden) onAccessLost?.();
-    if (alive.current) setError(e instanceof Error ? e.message : '작업 실패');
-  };
-
-  const checkMismatches = async () => {
-    if (writtenChanged) return;
-    setBusy('mismatch');
-    setError(null);
-    try {
-      const mm = await getMismatches(sessionId);
-      if (!alive.current) return;
-      setMismatches(mm);
-    } catch (e) {
-      guard(e);
-    } finally {
-      if (alive.current) setBusy(null);
-    }
-  };
-
-  const summary =
-    status === null
-      ? '불러오는 중'
-      : !status.enabled
-        ? '꺼짐'
-        : transcript?.status === 'approved'
-          ? '전사 확인됨'
-          : transcript
-            ? '전사 확인 전'
-            : '숫자 항목 비교';
-
-  return (
-    <Fold title="음성·수기 기록 불일치" desc={error ? '불러오기 실패' : summary}>
-      {error && <ErrorText>{error}</ErrorText>}
-      {loading ? (
-        <Empty>불러오는 중</Empty>
-      ) : error && !status ? (
-        <Button onClick={() => window.location.reload()}>다시 불러오기</Button>
-      ) : !status?.enabled ? (
-        // 기능이 꺼져 있으면 꺼져 있다고만 말한다. 빈 양식을 보여 주면 켜져 있는 줄 안다.
-        <Empty>녹음·전사 기능 꺼짐</Empty>
-      ) : (
-        <>
-          {transcript?.status === 'approved' && (
-            <Button disabled={busy !== null || writtenChanged} onClick={() => void checkMismatches()}>
-              {busy === 'mismatch' ? '확인 중…' : '불일치 확인'}
-            </Button>
-          )}
-
-          {writtenChanged && <Empty>수기 기록 저장 후 비교 가능</Empty>}
-          {!writtenChanged && mismatches && (
-            <>
-              {/* 구획 이름은 소제목이다(2026-09-17 Q) — 구 `.panel-meta`(14/400)는 값·상태의 옷이라
-                  아래 목록과 위계가 같아졌다. */}
-              <h3 className="wire-subhead">숫자 항목 비교</h3>
-              {mismatches.voice_status === 'unavailable' ? (
-                <Empty>{mismatches.voice_reason === 'missing_written' ? '비교 불가, 수기 기록 없음' : '비교 불가, 전사문 없음'}</Empty>
-              ) : mismatches.voice_status === 'needs_review' ? (
-                <Empty>전사 확인 전, 비교 안 함</Empty>
-              ) : mismatches.voice_vs_written.length === 0 ? (
-                <Empty>어긋난 숫자 항목 없음</Empty>
-              ) : (
-                <MismatchList items={mismatches.voice_vs_written} />
-              )}
-              {mismatches.across_sessions.length > 0 && (
-                <>
-                  <h3 className="wire-subhead">회차간 기록 불일치</h3>
-                  <MismatchList items={mismatches.across_sessions} />
-                </>
-              )}
-            </>
-          )}
-        </>
-      )}
-    </Fold>
-  );
-}

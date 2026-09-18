@@ -1,8 +1,34 @@
 import { DatePicker } from './date-picker.tsx';
-import type { DateTimeValue } from './date-time.ts';
+import { TIME_OPTIONS, timeOf, timeOptionLabel, withTime, type DateTimeValue } from './date-time.ts';
 import { Field } from './ui.tsx';
 import './date-time-input.css';
 
+/**
+ * 시각 **선택창 하나**(2026-09-18 Q — 구 오전·오후/시/분 셋). 항목은 5분 간격이고 글자는
+ * 전역 시각 표기(`AM 09:00`)다. 저장된 값이 5분 격자 밖이면(지금 시각 10:26) 그 값을 끼워 넣는다 —
+ * 선택창이 값을 잃고 빈 칸으로 돌아가면 안 된다.
+ */
+export function TimeSelect({ id, label, value, onChange, required = false, disabled = false }: {
+  id: string;
+  label: string;
+  /** `HH:mm`(24시간제) 또는 빈 값. */
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+  disabled?: boolean;
+}) {
+  const options = value && !TIME_OPTIONS.includes(value) ? [...TIME_OPTIONS, value].sort() : TIME_OPTIONS;
+  return (
+    <Field label={label} htmlFor={id} control="select" required={required}>
+      <select id={id} required={required} disabled={disabled} value={value} onChange={e => onChange(e.target.value)}>
+        <option value="">선택</option>
+        {options.map(t => <option key={t} value={t}>{timeOptionLabel(t)}</option>)}
+      </select>
+    </Field>
+  );
+}
+
+/** 날짜 + 시작 시간. 종료 시각은 부르는 화면이 옆에 `TimeSelect` 로 세운다(일정 등록·기록지 같은 꼴). */
 export function DateTimeInput({ idPrefix, value, onChange, disabled = false, required = true }: {
   idPrefix: string;
   value: DateTimeValue;
@@ -13,28 +39,7 @@ export function DateTimeInput({ idPrefix, value, onChange, disabled = false, req
   return <fieldset className="date-time-input" disabled={disabled} aria-label="상담 일시">
     <DatePicker id={`${idPrefix}-date`} value={value.date} required={required}
       onChange={date => onChange({ ...value, date })} />
-    <div className="date-time-fields">
-      <Field label="오전·오후" htmlFor={`${idPrefix}-period`} control="select">
-        <select id={`${idPrefix}-period`} value={value.period}
-          onChange={e => onChange({ ...value, period: e.target.value as DateTimeValue['period'] })}>
-          <option>오전</option><option>오후</option>
-        </select>
-      </Field>
-      <Field label="시" htmlFor={`${idPrefix}-hour`} control="select" required={required}>
-        <select id={`${idPrefix}-hour`} required={required} value={value.hour}
-          onChange={e => onChange({ ...value, hour: e.target.value })}>
-          <option value="">선택</option>
-          {Array.from({ length: 12 }, (_, i) => <option key={i} value={String(i + 1)}>{i + 1}</option>)}
-        </select>
-      </Field>
-      <Field label="분" htmlFor={`${idPrefix}-minute`} control="select">
-        <select id={`${idPrefix}-minute`} value={value.minute}
-          onChange={e => onChange({ ...value, minute: e.target.value })}>
-          {Array.from({ length: 60 }, (_, i) => <option key={i} value={String(i).padStart(2, '0')}>{String(i).padStart(2, '0')}</option>)}
-        </select>
-      </Field>
-    </div>
-    {/* `한국 시간 기준` 한 줄은 걷었다(2026-09-18 Q C2) — 선택창 안 단위(`시`·`분`)도 라벨이
-        이미 말한다. 숫자만 남기면 두 자리 선택창이 짧아져 한 행에 종료 시각까지 든다. */}
+    <TimeSelect id={`${idPrefix}-time`} label="시작 시간" value={timeOf(value)} required={required}
+      onChange={time => onChange(withTime(value, time))} />
   </fieldset>;
 }

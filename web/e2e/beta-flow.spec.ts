@@ -499,8 +499,9 @@ test('회차를 고쳐 쓰고, 적어만 둔 줄도 저장된다', async ({ page
   await page.getByRole('button', { name: '2회차 원본 보기' }).click();
   const editDialog = page.getByRole('dialog', { name: '2회차 원본' });
 
-  // 지난번에 적은 것과 매긴 결과가 그대로 서 있다
+  // 지난번에 적은 것과 매긴 결과가 그대로 서 있다. 팝업의 확인할 과제는 접혀서 본문 아래다(2026-09-18 Q) — 펼친다.
   await expect(editDialog.locator('#memo')).toHaveValue('처음 적은 상담 내용');
+  await editDialog.locator('details', { has: page.getByText('확인할 과제') }).first().locator(':scope > summary').click();
   await expect(editDialog.getByRole('radio', { name: '진행 전' })).toBeChecked();
 
   await editDialog.locator('#memo').fill('고쳐 적은 상담 내용');

@@ -74,26 +74,6 @@ export type Transcript = {
   segments?: TranscriptSegment[];
 };
 
-export type Mismatch = {
-  kind: 'voice_vs_written' | 'across_sessions';
-  label: string;
-  left: string;
-  right: string;
-  leftFrom: string;
-  rightFrom: string;
-  leftSnippet?: string;
-  rightSnippet?: string;
-};
-
-export type MismatchView = {
-  voice_vs_written: Mismatch[];
-  across_sessions: Mismatch[];
-  /** 없으면 '없음'이 아니라 '확인 불가'다 — 둘을 같은 화면으로 보여 주면 안 된다. */
-  voice_status: 'unavailable' | 'needs_review' | 'ready';
-  voice_reason?: 'missing_transcript' | 'missing_written' | 'unreviewed_transcript';
-  /** 지금 엔진은 숫자 항목만 본다. 문장이 달라도 숫자가 같으면 잡지 못한다. */
-  scope: 'numeric';
-};
 
 export const getSpeechStatus = () => call<SpeechStatus>('/speech/status');
 
@@ -129,6 +109,3 @@ export const approveTranscript = (sessionId: number, transcriptId: number, text?
     method: 'POST',
     body: JSON.stringify({ transcript_id: transcriptId, ...(text === undefined ? {} : { text }) }),
   });
-
-export const getMismatches = (sessionId: number) =>
-  call<MismatchView>(`/sessions/${sessionId}/mismatches`);
