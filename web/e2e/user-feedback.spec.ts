@@ -93,7 +93,7 @@ test('피드백 인테이크의 조건부 입력과 실제 상담정보가 생�
   await expect(page.getByLabel('상담 장소', { exact: false })).toHaveCount(0);
   await pickDateTime(page, 'held-at', '2026-09-16T10:30');
   await page.getByRole('button', { name: '저장', exact: true }).click();
-  await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '기본 정보' })).toBeVisible();
   const edited = await (await page.request.get(`${api}/cases/${caseId}/intake`)).json();
   expect(edited.session_id).toBe(saved.session_id);
   expect(edited.method).toBe('other');
@@ -102,11 +102,8 @@ test('피드백 인테이크의 조건부 입력과 실제 상담정보가 생�
   expect(edited.detail.need_economy_detail).toBe('보존할 과거 응답');
 
   // 원본 팝업의 **수기 열**이 인테이크 화면을 잠근 채 그리므로 참고 메모도 그 자리에 선다(D13).
-  await page.getByRole('tab', { name: '회차별 원본 보기' }).click();
-  await page
-    .locator('.wire-repeat-card', { hasText: '1회차' })
-    .getByRole('button', { name: '원본 보기' })
-    .click();
+  await page.getByRole('tab', { name: '회차별 원본' }).click();
+  await page.getByRole('button', { name: '1회차 원본 보기' }).click();
   const original = page.getByRole('dialog', { name: '1회차 원본' });
   await expect(original.getByRole('region', { name: '수기 기록' }).getByLabel('참고 메모', { exact: true }))
     .toHaveValue('가족에게 상담 사실 비공개 요청함');
@@ -131,7 +128,7 @@ test('상담 기록은 다섯 구획이고 인테이크의 전체 목표를 덮�
   await page.locator('#memo').fill('합성 상담 기록');
   await page.locator('#next-goal').fill('다음 상담에서 확인할 목표');
   await page.getByRole('button', { name: '저장', exact: true }).click();
-  await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '기본 정보' })).toBeVisible();
   const result = await (await page.request.get(`${api}/cases/${caseId}/intake`)).json();
   expect(result.overall_goal).toBe('보존할 전체 상담 목표');
   const view = await (await page.request.get(`${api}/cases/${caseId}`)).json();
@@ -139,8 +136,8 @@ test('상담 기록은 다섯 구획이고 인테이크의 전체 목표를 덮�
   await page.goto(`/#/cases/${caseId}/sessions/${session.id}/edit`);
   await expect(page.locator('#place')).toHaveValue('이전 상담 장소');
   await page.locator('#place').fill('');
-  await page.getByRole('button', { name: '저장', exact: true }).click();
-  await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
+  await page.getByRole('button', { name: '수정', exact: true }).click();
+  await expect(page.getByRole('tab', { name: '기본 정보' })).toBeVisible();
   const cleared = await (await page.request.get(`${api}/sessions/${session.id}`)).json();
   expect(cleared.place).toBeNull();
 });
@@ -163,7 +160,7 @@ test('과거 수급과 복수 선호를 새 단일 응답으로 추정하지 않
   await expect(page.locator('input[name="preferred_counsel_method"]:checked')).toHaveCount(0);
   await page.getByLabel('신청 배경', { exact: true }).fill('');
   await page.getByRole('button', { name: '저장', exact: true }).click();
-  await expect(page.getByRole('tab', { name: '당사자 정보' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '기본 정보' })).toBeVisible();
   const saved = await (await page.request.get(`${api}/cases/${caseId}/intake`)).json();
   expect(saved.memo).toBeNull();
   expect(saved.detail).toMatchObject(legacy);

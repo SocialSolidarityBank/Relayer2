@@ -215,9 +215,10 @@ export function Routes() {
     const reviewing = path.match(/^#\/cases\/(\d+)\/sessions\/(\d+)\/review$/);
     if (reviewing) return <ReviewScreen caseId={Number(reviewing[1])} sessionId={Number(reviewing[2])} />;
 
-    // 목표 탭 직행(2026-09-18 UI-9). 기록 화면의 목표 카드 `수정`이 여기로 온다.
+    // 목표 직행(2026-09-18 UI-9). 기록 화면의 목표 카드 `기록 보기`가 여기로 온다 — 목표 기록은
+    // 기본 정보 탭의 아코디언이다(2026-09-18 Q, 구 넷째 탭 폐지).
     const goals = path.match(/^#\/cases\/(\d+)\/info\/goals$/);
-    if (goals) return <ParticipantInfoScreen caseId={Number(goals[1])} initialTab="상담 목표 기록" />;
+    if (goals) return <ParticipantInfoScreen caseId={Number(goals[1])} initialTab="기본 정보" />;
 
     const byCase = path.match(/^#\/cases\/(\d+)\/(record|schedule|intake|info|close)$/);
     if (byCase) {

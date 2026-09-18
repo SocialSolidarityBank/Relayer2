@@ -69,11 +69,19 @@ export function RecordScreen({
   caseId,
   sessionId: editingId,
   startClosing = false,
+  embedded = false,
+  onSaved,
 }: {
   caseId: number;
   sessionId?: number;
   /** 당사자 카드에서 `상담 종결`로 들어왔으면 종결 체크를 켜고 시작한다(2026-09-17 Q). */
   startClosing?: boolean;
+  /** 회차 원본 팝업의 수기 열에 심을 때 — 페이지 제목·HERO 는 팝업 머리가 말하므로 걷고,
+      레일은 한 열로 흘러 본문 위에 선다(`.record-grid[data-embedded]`). */
+  embedded?: boolean;
+  /** 저장 뒤 화면을 옮기는 대신 부른다(팝업에 심겼을 때 — 팝업이 닫고 목록을 다시 받는다).
+      종결 체크가 켜져 있으면 종결 기록이 다음 순서라 그때는 늘 종결 화면으로 간다. */
+  onSaved?: () => void;
 }) {
   const [briefing, setBriefing] = useState<Briefing | null>(null);
   // 당사자 카드의 연락처·이메일은 사례 상세가 준다(2026-09-17 Q).
@@ -213,17 +221,19 @@ export function RecordScreen({
     return (
       <>
         {/* 페이지 제목은 HERO 바로 위 `h1` 이다(2026-09-18 Q — 구 뒤로 줄 눈썹 텍스트 대체). */}
-        <PageHeader title="상담 기록지" />
-        <ParticipantHero
-          name={briefing.participant_card.name}
-          pseudonym={briefing.participant_card.pseudonym}
-          details={[
-            ['ID', briefing.participant_card.pseudonym],
-            ['참여중인 사업', briefing.participant_card.program_name],
-            ['연락처', detail.participant.phone ?? ''],
-            ['이메일', detail.participant.email ?? ''],
-          ]}
-        />
+        {!embedded && <PageHeader title="상담 기록지" />}
+        {!embedded && (
+          <ParticipantHero
+            name={briefing.participant_card.name}
+            pseudonym={briefing.participant_card.pseudonym}
+            details={[
+              ['ID', briefing.participant_card.pseudonym],
+              ['참여중인 사업', briefing.participant_card.program_name],
+              ['연락처', detail.participant.phone ?? ''],
+              ['이메일', detail.participant.email ?? ''],
+            ]}
+          />
+        )}
         <div className="wire-container">
           <Card
             title="상담 종결"
@@ -332,7 +342,8 @@ export function RecordScreen({
         ],
         outcomes: Object.values(outcomes),
       });
-      window.location.hash = isClosing ? `#/cases/${caseId}/close` : `#/cases/${caseId}/info`;
+      if (onSaved && !isClosing) onSaved();
+      else window.location.hash = isClosing ? `#/cases/${caseId}/close` : `#/cases/${caseId}/info`;
     } catch (e) {
       setError(e instanceof Error ? e.message : '저장 실패');
     } finally {
@@ -351,21 +362,22 @@ export function RecordScreen({
 
   return (
     <>
-      {/* 페이지 제목은 HERO 바로 위 `h1` 이다(2026-09-18 Q). 머리 카드는 사람을 말하고
-          화면 이름은 이 줄이 말한다. 정보는 이 화면이 이미 받는 값만 올린다. */}
-      <PageHeader title="상담 기록지" />
-      <ParticipantHero
-        name={briefing.participant_card.name}
-        pseudonym={briefing.participant_card.pseudonym}
-        details={[
-          ['ID', briefing.participant_card.pseudonym],
-          ['참여중인 사업', `${briefing.participant_card.program_name}, ${seq}회차${editing ? ' 수정' : ''}`],
-          ['연락처', detail?.participant.phone ?? ''],
-          ['이메일', detail?.participant.email ?? ''],
-        ]}        actions={
-          <Button onClick={() => (window.location.hash = `#/cases/${caseId}/info`)}>당사자 정보</Button>
-        }
-      />
+      {!embedded && <PageHeader title="상담 기록지" />}
+      {!embedded && (
+        <ParticipantHero
+          name={briefing.participant_card.name}
+          pseudonym={briefing.participant_card.pseudonym}
+          details={[
+            ['ID', briefing.participant_card.pseudonym],
+            ['참여중인 사업', `${briefing.participant_card.program_name}, ${seq}회차${editing ? ' 수정' : ''}`],
+            ['연락처', detail?.participant.phone ?? ''],
+            ['이메일', detail?.participant.email ?? ''],
+          ]}
+          actions={
+            <Button onClick={() => (window.location.hash = `#/cases/${caseId}/info`)}>당사자 정보</Button>
+          }
+        />
+      )}
       {/* 시작이 곧 회차 — 녹음·올리기·수기 첫 입력이 회차를 연다(2026-09-16 인계). */}
       <RecordingPanel
         sessionId={session?.id ?? startedId}
@@ -395,7 +407,7 @@ export function RecordScreen({
         </Dialog>
       )}
 
-      <div className="wire-container rail-grid record-grid" data-grid="true">
+      <div className="wire-container rail-grid record-grid" data-grid="true" data-embedded={embedded || undefined}>
         <aside className="record-side">
           {/* 종결 상담 체크는 레일 **맨 위**다(2026-09-17 Q). 이번이 마지막인지가 과제 결과보다
               먼저 정해지는 일이고, 당사자 카드에서 `상담 종결`로 들어오면 이미 켜진 채로 열린다.
@@ -672,9 +684,10 @@ export function RecordScreen({
               disabled={(!memo.trim() && !startedId && !editing) || !heldAtIso || saving}
               onClick={() => void save()}
             >
-              {/* 수정 화면에서도 저장 버튼은 `저장`이다. 들어올 때 누른 버튼과 이름이 같으면
-                  같은 일을 또 하는 줄 안다(2026-09-15 예행연습). 화면 제목이 이미 수정이라고 말한다. */}
-              {saving ? '저장 중…' : isClosing ? '저장하고 종결로' : '저장'}
+              {/* 수정 화면(sessionId 있음)의 주 버튼은 `수정`이다 — 저장된 회차를 고쳐 쓰는
+                  일이라 새 기록의 `저장`과 이름을 가른다(2026-09-18 Q). 새 기록은 `저장`,
+                  종결 체크가 켜지면 `저장하고 종결로`. */}
+              {saving ? '저장 중…' : editingId ? (isClosing ? '수정하고 종결로' : '수정') : isClosing ? '저장하고 종결로' : '저장'}
             </Button>
           </FormActions>
         </main>
