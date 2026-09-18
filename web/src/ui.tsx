@@ -340,6 +340,7 @@ export function Fold({
   action,
   onOpen,
   crisis = false,
+  className,
   children,
 }: {
   /** 문자열이 기본이다. 배지를 제목 줄에 함께 세울 때만 노드를 준다. */
@@ -358,11 +359,13 @@ export function Fold({
   onOpen?: () => void;
   /** 위험 신호가 붙은 카드. 이식 CSS 의 `is-crisis`(risk 테두리·틴트)를 그대로 쓴다. */
   crisis?: boolean;
+  /** 화면 국소 보정용 이름표(`Card` 와 같다). 호출부가 align-check 선택자를 붙이는 자리다. */
+  className?: string;
   children: ReactNode;
 }) {
   return (
     <details
-      className={`surface-card wire-card wire-card-details${crisis ? ' is-crisis' : ''}`}
+      className={`surface-card wire-card wire-card-details${crisis ? ' is-crisis' : ''}${className ? ` ${className}` : ''}`}
       name={group}
       open={open}
       onToggle={event => {

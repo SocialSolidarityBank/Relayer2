@@ -188,10 +188,17 @@ test('등록부터 회차 기록·이어받기까지 한 바퀴', async ({ page 
   const originalDialog = page.getByRole('dialog', { name: '2회차 원본' });
   await expect(originalDialog.getByRole('region', { name: '수기 기록' })).toContainText(NEXT_GOAL);
   await expect(originalDialog.getByRole('region', { name: '녹음 전사' })).toContainText('올라온 녹음 없음');
-  // 원문 수정은 편집 모드다(D3) — 수정을 누르면 원문 칸이 열린다. 저장은 리비전 서버가 맡는다.
-  await originalDialog.getByRole('region', { name: '수기 기록' }).getByRole('button', { name: '수정', exact: true }).click();
-  await expect(originalDialog.getByRole('textbox', { name: '오늘 상담 내용' })).toHaveValue('내역서는 아직 못 뗐다고 함.');
-  await originalDialog.getByRole('button', { name: '취소' }).click();
+  // 원문 수정은 편집 모드 + 리비전 로그다(D3, L5 `POST /sessions/:id/revisions`). 저장하면 원문이
+  // 바뀌고 수정 기록이 남는다 — 지울 수 없다.
+  const written = originalDialog.getByRole('region', { name: '수기 기록' });
+  await written.getByRole('button', { name: '수정', exact: true }).click();
+  const memoBox = originalDialog.getByRole('textbox', { name: '오늘 상담 내용' });
+  await expect(memoBox).toHaveValue('내역서는 아직 못 뗐다고 함.');
+  await memoBox.fill('내역서는 아직 못 뗐다고 함. 다음 주 발급 예정.');
+  await written.getByRole('button', { name: '저장', exact: true }).click();
+  await expect(written).toContainText('다음 주 발급 예정.');
+  await expect(written).toContainText('수정 기록 1');
+  await expect(memoBox).toHaveCount(0);
   await originalDialog.getByRole('button', { name: '닫기' }).click();
   await expect(originalDialog).toBeHidden();
   // 팝업을 닫아도 회차 목록을 떠나지 않는다.

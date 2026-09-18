@@ -154,6 +154,8 @@ export type ScheduleRow = {
   open_questions: number;
 };
 
+export type SessionStale = { ai_summary: boolean; mismatch: boolean };
+
 export type SessionTranscriptState = 'none' | 'pending' | 'draft' | 'approved' | 'failed' | 'skipped';
 
 export type CaseDetail = {
@@ -183,6 +185,10 @@ export type CaseDetail = {
     written: boolean;
     /** 녹음·전사 상태. 여러 녹음이면 가장 최근 녹음 기준. */
     voice: { recordings: number; transcript: SessionTranscriptState };
+    /** 소요 분(L5 D4). 없으면 null. */
+    duration_min: number | null;
+    /** 원본(수기·전사)을 고친 뒤 AI 요약·불일치가 옛것이 됐는가(L5 D3). 자동 재처리는 없다. */
+    stale: SessionStale;
   }>;
   goal_revisions: Array<{ text: string | null; created_at: string }>;
   pending_next_goal: { session_id: number; session_seq: number; text: string | null } | null;
@@ -212,6 +218,12 @@ export const getBriefing = (caseId: number, seq?: number) =>
 export const getCase = (caseId: number) => json<CaseView>(`/cases/${caseId}`);
 export const updateOverallGoal = (caseId: number, overallGoal: string | null) =>
   json<{ ok: true }>(`/cases/${caseId}/goal`, { method: 'PATCH', body: JSON.stringify({ overall_goal: overallGoal }) });
+/** 다음 상담 목표를 줄 배열로(L5 D5). 대상은 `pending_next_goal` 의 회차이고 서버가 '\n' 으로 잇는다. */
+export const updateNextGoalLines = (caseId: number, lines: string[]) =>
+  json<{ ok: true; session_id: number }>(`/cases/${caseId}/next-goals`, {
+    method: 'PATCH',
+    body: JSON.stringify({ lines }),
+  });
 export const updateNextGoal = (sessionId: number, nextGoalText: string | null) =>
   json<{ ok: true }>(`/sessions/${sessionId}/next-goal`, {
     method: 'PATCH',
@@ -500,7 +512,8 @@ export type SessionRecord = {
   held_at: string | null;
   method: string | null;
   place: string | null;
-  duration_min?: number | null;
+  duration_min: number | null;
+  stale: SessionStale;
   memo: string | null;
   next_goal_text: string | null;
   overall_goal: string | null;
@@ -517,6 +530,13 @@ export type SessionRecord = {
     reason: string | null;
   }>;
 };
+
+/** 회차 원본 리비전(L5 D3, append-only). 세 종류: 수기 메모 · 전사문 · AI 요약문. */
+export type RevisionKind = 'memo' | 'transcript' | 'summary';
+export type Revision = { id: number; kind: RevisionKind; text: string; actor: string | null; created_at: string };
+export const listRevisions = (sessionId: number) => json<Revision[]>(`/sessions/${sessionId}/revisions`);
+export const reviseSession = (sessionId: number, kind: RevisionKind, text: string) =>
+  json<Revision>(`/sessions/${sessionId}/revisions`, { method: 'POST', body: JSON.stringify({ kind, text }) });
 
 export const getSessionRecord = (sessionId: number) => json<SessionRecord>(`/sessions/${sessionId}`);
 

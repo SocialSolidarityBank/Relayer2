@@ -7,10 +7,17 @@
 //
 // 수정은 **편집 모드 + 리비전 로그**다(플래너 판단 D3). `수정` → 원문 칸이 열리고 `저장` 하면
 // 새 리비전이 붙는다(`POST /sessions/:id/revisions`, append-only — 지울 수 없다). 원본이 바뀌면
-// 그 회차의 AI 요약·불일치는 `재정리 필요` 가 되고, 자동 재처리는 하지 않는다(비용·동의 게이트).
-// 서버가 아직 이 경로를 모르면 저장은 실패로 **그 자리에 그대로** 보인다 — 성공한 척하지 않는다.
+// 그 회차의 AI 요약·불일치는 `재정리 필요`(서버 `stale`)가 되고, 자동 재처리는 하지 않는다(비용·동의 게이트).
+// 저장 실패는 **그 자리에 그대로** 보인다 — 성공한 척하지 않는다.
 import { useEffect, useRef, useState } from 'react';
-import { getSessionRecord, type SessionRecord } from './api.ts';
+import {
+  getSessionRecord,
+  listRevisions,
+  reviseSession,
+  type Revision,
+  type RevisionKind,
+  type SessionRecord,
+} from './api.ts';
 import {
   Forbidden,
   getTranscript,
@@ -42,35 +49,8 @@ const TRANSCRIBE_LABEL: Record<Recording['transcribe_state'], string> = {
 
 export type OriginalPart = 'written' | 'voice';
 
-// ── 리비전(L5 계약 §4) ───────────────────────────────────────────────────
-// `api.ts` 는 이 레인 소유가 아니라 여기서 부른다. 배너(`API_FAILED`)를 띄우지 않는 이유는
-// 실패를 **그 자리에서** 보여 주기 때문이다 — 같은 실패가 두 번 보이면 안 된다.
-type RevisionKind = 'memo' | 'transcript' | 'summary';
-export type Revision = { id: number; kind: RevisionKind; text: string; actor: string; created_at: string };
-
-const BASE = import.meta.env.DEV ? '/api' : '';
-
-async function revisionCall<T>(path: string, init?: RequestInit): Promise<T> {
-  let res: Response;
-  try {
-    res = await fetch(`${BASE}${path}`, {
-      ...init,
-      credentials: 'same-origin',
-      headers: init?.body ? { 'content-type': 'application/json' } : undefined,
-    });
-  } catch {
-    throw new Error('서버 연결 실패');
-  }
-  if (!res.ok) {
-    const message = (await res.json().catch(() => ({}))).error;
-    throw new Error(message ?? (res.status === 404 ? '서버 미지원' : `${res.status}`));
-  }
-  return (await res.json()) as T;
-}
-
-const listRevisions = (sessionId: number) => revisionCall<Revision[]>(`/sessions/${sessionId}/revisions`);
-const postRevision = (sessionId: number, kind: RevisionKind, text: string) =>
-  revisionCall<Revision>(`/sessions/${sessionId}/revisions`, { method: 'POST', body: JSON.stringify({ kind, text }) });
+// 부르는 쪽이 리비전 저장 실패를 그 자리에 적는다. 5xx 배너는 `api.ts` 가 띄운다 — 까닭을
+// 화면이 모르는 실패만 배너 몫이고, 409(원본 없음)·400 은 여기서 문구로 보인다.
 
 const stamp = (iso: string): string => {
   const d = new Date(iso);
@@ -110,7 +90,7 @@ function Revisable({
     setSaving(true);
     setError(null);
     try {
-      const rev = await postRevision(sessionId, kind, draft);
+      const rev = await reviseSession(sessionId, kind, draft);
       onSaved(rev);
       setEditing(false);
     } catch (e) {

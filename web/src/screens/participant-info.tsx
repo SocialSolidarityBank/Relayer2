@@ -13,8 +13,9 @@ import {
   issueAccess,
   listDocuments,
   recordConsent,
+  reviseSession,
   revokeAccess,
-  updateNextGoal,
+  updateNextGoalLines,
   updateOverallGoal,
   uploadDocument,
   type AccessState,
@@ -69,26 +70,8 @@ const AI_OFF_LABEL: Record<string, string> = {
   pending: '확인 중',
 };
 
-// 리비전 부르기는 `session-original.tsx` 가 갖고 있다(L5 계약 §4). 요약 수정도 같은 경로다
-// (`kind: 'summary'`) — 승인본을 고쳐도 리비전으로 남는다(F4).
-const BASE = import.meta.env.DEV ? '/api' : '';
-async function postSummaryRevision(sessionId: number, text: string): Promise<void> {
-  let res: Response;
-  try {
-    res = await fetch(`${BASE}/sessions/${sessionId}/revisions`, {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ kind: 'summary', text }),
-    });
-  } catch {
-    throw new Error('서버 연결 실패');
-  }
-  if (!res.ok) {
-    const message = (await res.json().catch(() => ({}))).error;
-    throw new Error(message ?? (res.status === 404 ? '서버 미지원' : `${res.status}`));
-  }
-}
+// 요약 수정도 리비전이다(`kind: 'summary'`, L5 §4) — 승인본을 고쳐도 로그로 남는다(F4).
+// 저장 뒤 사례 상세를 다시 받는다: 서버가 새 승인본을 쌓아 `ai_summary` 가 그것을 가리킨다.
 
 /** 줄글 여러 개는 불렛이다(F2). 한 줄이면 단락 하나. */
 const Lines = ({ text }: { text: string }) => {
@@ -116,14 +99,12 @@ const Lines = ({ text }: { text: string }) => {
 function Sessions({
   detail,
   caseId,
-  stale,
-  markStale,
+  reload,
 }: {
   detail: CaseDetail;
   caseId: number;
-  /** 이 화면에서 원본을 고친 회차. 그 회차의 AI 요약·불일치는 `재정리 필요` 다(D3). */
-  stale: Set<number>;
-  markStale: (sessionId: number) => void;
+  /** 원본·요약 리비전 뒤 사례 상세를 다시 받는다 — `stale` 배지와 새 요약이 서버 값이다. */
+  reload: () => Promise<void>;
 }) {
   const [brief, setBrief] = useState<Briefing | null>(null);
   const [original, setOriginal] = useState<{ sessionId: number; seq: number; focus: OriginalPart } | null>(null);
@@ -131,9 +112,6 @@ function Sessions({
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  // 저장한 요약 리비전은 이 화면에서 바로 보인다 — 사례 상세를 다시 받아도 서버가 요약 자체를
-  // 바꾸지 않을 수 있어서(리비전은 append-only) 화면이 최신 리비전을 든다.
-  const [revised, setRevised] = useState<Record<number, string>>({});
   useEffect(() => {
     void getBriefing(caseId).then(setBrief);
   }, [caseId]);
@@ -145,9 +123,9 @@ function Sessions({
     setSaving(true);
     setSaveError(null);
     try {
-      await postSummaryRevision(sessionId, draft);
-      setRevised((prev) => ({ ...prev, [sessionId]: draft }));
+      await reviseSession(sessionId, 'summary', draft);
       setEditing(null);
+      await reload();
     } catch (e) {
       setSaveError(`저장 실패, ${e instanceof Error ? e.message : '다시 시도'}`);
     } finally {
@@ -172,7 +150,7 @@ function Sessions({
             </Button>
           )}
           {/* 기록은 늘 일정 예약 화면을 거친다(2026-09-18 Q D1) — 예정 회차가 없으면 지금 일시가 기본이다. */}
-          <Button onClick={() => (window.location.hash = `#/cases/${caseId}/schedule`)}>
+          <Button onClick={() => (window.location.hash = `#/cases/${caseId}/schedule?then=record`)}>
             상담 기록하기
           </Button>
         </FormActions>
@@ -206,8 +184,8 @@ function Sessions({
             s.voice.recordings > 0 && `녹음 ${s.voice.recordings}`,
             transcriptLabel,
           ];
-          const summary = revised[s.id] ?? s.ai_summary?.summary ?? null;
-          const isStale = stale.has(s.id);
+          const summary = s.ai_summary?.summary ?? null;
+          const isStale = s.stale.ai_summary || s.stale.mismatch;
           const openOriginal = (focus: OriginalPart) => (event: React.MouseEvent) => {
             event.stopPropagation();
             setOriginal({ sessionId: s.id, seq: s.seq, focus });
@@ -391,7 +369,7 @@ function Sessions({
           seq={original.seq}
           focus={original.focus}
           onClose={() => setOriginal(null)}
-          onRevised={markStale}
+          onRevised={() => void reload()}
         />
       )}
     </>
@@ -414,16 +392,16 @@ function Goals({ detail, reload }: { detail: CaseDetail; reload: () => Promise<v
   const withGoal = detail.sessions.filter((s) => s.today_goal_text);
   const history = detail.goal_revisions;
 
-  const nextText = lines.map((l) => l.trim()).filter(Boolean).join('\n');
+  const nextLines = lines.map((l) => l.trim()).filter(Boolean);
   const overallChanged = overall.trim() !== (detail.case.overall_goal ?? '').trim();
-  const nextChanged = pending !== null && nextText !== pendingLines.join('\n');
+  const nextChanged = pending !== null && nextLines.join('\n') !== pendingLines.join('\n');
 
   const save = async () => {
     setSaving(true);
     setError(null);
     try {
       if (overallChanged) await updateOverallGoal(detail.case.id, overall.trim() || null);
-      if (nextChanged && pending) await updateNextGoal(pending.session_id, nextText || null);
+      if (nextChanged) await updateNextGoalLines(detail.case.id, nextLines);
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : '저장 실패');
@@ -796,8 +774,6 @@ const timeLabel = (iso: string): string => {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 };
 
-/** `sessions.duration_min` 은 L5 계약(§4 D4)이다 — 서버가 실으면 그대로 보이고, 없으면 빈 칸이다. */
-type SessionRow = CaseDetail['sessions'][number] & { duration_min?: number | null };
 
 function SessionStatus({ detail }: { detail: CaseDetail }) {
   const done = detail.sessions.filter((s) => s.status === 'done');
@@ -808,7 +784,7 @@ function SessionStatus({ detail }: { detail: CaseDetail }) {
     .sort((a, b) => (a.scheduled_at ?? '').localeCompare(b.scheduled_at ?? ''))[0];
   const planned = detail.case.sessions_planned;
   // 최신순으로 쌓는다 — 지금 상태가 맨 위다.
-  const rows: SessionRow[] = [...detail.sessions].sort((a, b) => b.seq - a.seq);
+  const rows = [...detail.sessions].sort((a, b) => b.seq - a.seq);
   // 부제는 얇은 안내문 크기이고 숫자만 굵다(E3).
   const head = [
     intake ? (intake.status === 'done' ? '인테이크 작성함' : '인테이크 예정만') : '인테이크 없음',
@@ -906,11 +882,11 @@ const closeWarnings = (detail: CaseDetail): string[] => {
 function Fulls({
   detail,
   caseId,
-  markStale,
+  reload,
 }: {
   detail: CaseDetail;
   caseId: number;
-  markStale: (sessionId: number) => void;
+  reload: () => Promise<void>;
 }) {
   const [open, setOpen] = useState<{ sessionId: number; seq: number } | null>(null);
   const done = detail.sessions.filter((x) => x.status === 'done');
@@ -953,7 +929,7 @@ function Fulls({
           sessionId={open.sessionId}
           seq={open.seq}
           onClose={() => setOpen(null)}
-          onRevised={markStale}
+          onRevised={() => void reload()}
         />
       )}
     </Card>
@@ -1006,10 +982,8 @@ function Info({ detail, caseId }: { detail: CaseDetail; caseId: number }) {
 export function ParticipantInfoScreen({ caseId, initialTab = '당사자 정보' }: { caseId: number; initialTab?: Tab }) {
   const [detail, setDetail] = useState<CaseDetail | null>(null);
   const [tab, setTab] = useState<Tab>(initialTab);
-  // 이 화면에서 원본을 고친 회차(D3). 서버가 `stale` 을 싣기 전에도 화면은 정직해야 한다 —
-  // 고친 회차의 요약에는 `재정리 필요` 가 붙는다. 탭을 오가도 남는다.
-  const [stale, setStale] = useState<Set<number>>(() => new Set());
-  const markStale = (sessionId: number) => setStale((prev) => new Set(prev).add(sessionId));
+  // 원본·요약 리비전 뒤에는 사례 상세를 다시 받는다 — `stale`(D3)·새 요약은 서버 값이다.
+  const reload = () => getCaseDetail(caseId).then(setDetail);
 
   useEffect(() => {
     void getCaseDetail(caseId).then(setDetail);
@@ -1043,11 +1017,12 @@ export function ParticipantInfoScreen({ caseId, initialTab = '당사자 정보' 
         details={heroDetails}
         actions={
           <>
-            {/* 행동 둘(2026-09-17 Q): 기록과 이 사람의 일정. 종결은 아래 `상담 종결` 카드 것이다.
-                기록은 늘 일정 예약 화면을 거친다(2026-09-18 Q D1). */}
-            <Button variant="primary" onClick={() => (window.location.hash = `#/cases/${caseId}/schedule`)}>
+            {/* 행동 셋: 기록(일정 예약을 거쳐 기록으로 — D1, 당사자 목록 카드와 같은 `then=record`),
+                이 사람의 일정 등록, 일정 보기. 종결은 아래 `상담 종결` 카드 것이다. */}
+            <Button variant="primary" onClick={() => (window.location.hash = `#/cases/${caseId}/schedule?then=record`)}>
               상담 기록하기
             </Button>
+            <Button onClick={() => (window.location.hash = `#/cases/${caseId}/schedule`)}>상담 일정 등록</Button>
             <Button onClick={() => (window.location.hash = `#/schedule?case=${caseId}`)}>상담 일정 보기</Button>
           </>
         }
@@ -1070,13 +1045,13 @@ export function ParticipantInfoScreen({ caseId, initialTab = '당사자 정보' 
         </div>
 
         {tab === '당사자 정보' && <Info detail={detail} caseId={caseId} />}
-        {tab === '회차별 요약' && <Sessions detail={detail} caseId={caseId} stale={stale} markStale={markStale} />}
-        {tab === '회차별 원본 보기' && <Fulls detail={detail} caseId={caseId} markStale={markStale} />}
+        {tab === '회차별 요약' && <Sessions detail={detail} caseId={caseId} reload={reload} />}
+        {tab === '회차별 원본 보기' && <Fulls detail={detail} caseId={caseId} reload={reload} />}
         {tab === '목표' && (
           <Goals
             key={`${detail.case.overall_goal ?? ''}|${detail.pending_next_goal?.text ?? ''}`}
             detail={detail}
-            reload={() => getCaseDetail(caseId).then(setDetail)}
+            reload={reload}
           />
         )}
       </div>
