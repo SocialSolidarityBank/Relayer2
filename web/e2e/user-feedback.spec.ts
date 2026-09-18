@@ -25,7 +25,8 @@ async function register(page: Page) {
 
 test('피드백 인테이크의 조건부 입력과 실제 상담정보가 생성·수정에서 유지된다', async ({ page }) => {
   const caseId = await register(page);
-  await expect(page.locator('.wire-container > section.wire-card .wire-card-title, .wire-container > .card-grid > section.wire-card .wire-card-title'))
+  // 인테이크 본문은 `.intake-form` 이 감싼다(2026-09-18 Q — 구획 여백·가로선 정리 스코프).
+  await expect(page.locator('.intake-form > section.wire-card .wire-card-title, .intake-form > .card-grid > section.wire-card .wire-card-title'))
     .toHaveText([
       '상담 일시와 상담 방식', /공적급여.*수급자 여부/, '상담 운영정보', '상담 신청 사유 및 필요 자원 연계',
       '이전에 받은 지원', '강점과 도와줄 사람', '전체 상담 목표', '수행할 과제', '다음에 물어볼 것',

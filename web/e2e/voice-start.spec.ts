@@ -80,7 +80,9 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
   // 인테이크는 건너뛴다 — 시작 경로가 만드는 회차가 1회차다.
   await page.goto(`${base}/app#/cases/${caseId}/record`);
   await expect(page).toHaveURL(/\/record$/);
-  await expect(page.locator('.page-header')).toContainText('1회차');
+  // 회차 수는 당사자 카드(HERO)가 싣는다. 화면에는 `h1` 제목 줄(`.page-header`)이 하나 더 있어(2026-09-18 Q)
+  // `.page-header` 만으로는 둘이 잡힌다 — HERO 카드로 좁힌다.
+  await expect(page.locator('.participant-hero-card')).toContainText('1회차');
 
   await page.getByRole('button', { name: '녹음 시작' }).click();
   await expect(page.getByText('녹음 중')).toBeVisible();
@@ -106,9 +108,10 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
   await expect(page.getByRole('heading', { name: NAME })).toBeVisible();
   await page.getByRole('tab', { name: '회차별 요약' }).click();
   // 한 회차가 한 접힘 카드다(2026-09-17 Q). 기록 상태는 펼친 본문의 `기록 상태` 구역에 있다.
-  const fold = page.locator('details', { hasText: '1회차' }).first();
-  // 머리 가운데는 행동 버튼 넷이 차지한다(2026-09-18 Q F4) — 제목 글자를 눌러 펼친다.
-  await fold.locator('.seq-head-no').click();
+  // 회차 카드로 좁힌다 — 펼친 본문 안 구역도 `<details>`(작은 아코디언, 2026-09-18 Q)라 `details` 만으로는
+  // 엉뚱한 것이 먼저 잡힌다. 행동 넷은 본문으로 내려갔으니 머리 어디를 눌러도 펼쳐진다.
+  const fold = page.locator('details.wire-card-details', { hasText: '1회차' }).first();
+  await fold.locator(':scope > summary').click();
   await expect(fold).toContainText('수기 미작성');
   // 수를 단위 없이 두지 않는다(2026-09-18 Q 결정 D14 — 녹음·전사는 `건`).
   await expect(fold).toContainText('녹음 1건');
@@ -140,7 +143,7 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
   await expect(resume).toContainText('1회차, 녹음 1건, 수기 없음');
   await resume.getByRole('button', { name: '이어 쓰기' }).click();
   await expect(resume).toBeHidden();
-  await expect(page.locator('.page-header')).toContainText('1회차');
+  await expect(page.locator('.participant-hero-card')).toContainText('1회차');
   await expect(page.locator('audio')).toHaveCount(1);
   await page.locator('#memo').fill('녹음 뒤 적은 수기.');
   await page.getByRole('button', { name: '저장', exact: true }).click();
@@ -152,7 +155,7 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
   await page.goto(`${base}/app#/cases/${caseId}/record`);
   await expect(page.locator('.record-main')).toBeVisible();
   await expect(resume).toBeHidden();
-  await expect(page.locator('.page-header')).toContainText('2회차');
+  await expect(page.locator('.participant-hero-card')).toContainText('2회차');
 
   // 새 회차를 고르면 미작성 2회차를 덮지 않고 3회차를 만든다.
   await page.getByRole('button', { name: '녹음 시작' }).click();
@@ -164,7 +167,7 @@ test('녹음 시작이 회차를 만들고 요약과 전문 보기로 이어진�
   await expect(resume).toContainText('2회차, 녹음 1건, 수기 없음');
   await resume.getByRole('button', { name: '새 회차' }).click();
   await expect(resume).toBeHidden();
-  await expect(page.locator('.page-header')).toContainText('3회차');
+  await expect(page.locator('.participant-hero-card')).toContainText('3회차');
   await page.locator('#memo').fill('미작성 회차와 분리한 새 기록.');
   await page.getByRole('button', { name: '저장', exact: true }).click();
   await expect(page).toHaveURL(/\/info$/);

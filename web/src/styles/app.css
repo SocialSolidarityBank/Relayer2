@@ -168,10 +168,16 @@ body { margin: 0; }
    하나뿐이라 선이 가르는 것이 없다 — 나누는 일은 제목 줄의 아래 패딩 24 가 이미 한다.
    `Fold` 가 그리던 `.wire-card-divider` 는 마크업에서 걷었다(선이 두 줄이었다). */
 .wire-card-details[open] > .wire-card-summary { border-bottom: 0; }
-/* 펼친 제목 줄의 설명 글자도 채운 면 전용 색을 받는다(2026-09-17 Q). 이식 CSS 는 제목·배지·
-   세로선만 반전하고 설명(`--sub`)은 빼 두었다 — 다크의 `--sub`(#B5AEBE)가 파스텔 면 위에
-   올라가 대비 1.15:1 이 됐다(실측). 라이트도 4.34:1 로 기준 밑이었다. */
-.wire-card-details[open]:not(.is-crisis) > .wire-card-summary .fold-title-desc { color: var(--on-action); }
+/* 펼친 머리는 두 테마 모두 파스텔 면이다. **제목 묶음 안 모든 글자**를 `--on-action` 으로
+   뒤집는다 — 회색 메타·계열색 플래그(`AI` 라벤더·`원본 수정됨` 코랄)·상태 텍스트·개수 칩이
+   제 색을 들고 오면 면 위에서 사라진다(2026-09-18 Q "텍스트 반전 안 됨": 라벤더 `AI` 가
+   라벤더 파스텔 위에 얹혔다). 클래스마다 덧대던 규칙 넷(요약 줄·회차 번호·날짜·사업 행)을
+   이 하나로 모았다 — 새 글자가 들어와도 따로 규칙을 안 붙인다. 버튼은 제목 묶음 밖(오른쪽
+   행동 묶음)에 서므로 안 걸리고, 위험 회차(`is-crisis`)는 코랄 면이라 뒤집지 않는다. */
+.wire-card-details[open]:not(.is-crisis) > .wire-card-summary .wire-card-title,
+.wire-card-details[open]:not(.is-crisis) > .wire-card-summary .wire-card-title * { color: var(--on-action); }
+/* 개수 칩은 회색 면을 벗고 면 전용 선만 남긴다 — 파스텔 위 회색 상자는 얼룩으로 읽힌다. */
+.wire-card-details[open]:not(.is-crisis) > .wire-card-summary .fold-count { background: transparent; box-shadow: inset 0 0 0 1px var(--line-on-action); }
 
 /* 항목 행에 행동이 있으면 **글 왼쪽 · 행동 오른쪽, 세로 가운데**다(2026-09-17 Q).
    이식 CSS 의 `.wire-item-action{justify-self:start}` 는 행동을 설명 아래 왼쪽에 쌓아,
@@ -661,7 +667,6 @@ body { margin: 0; }
 .program-row-name { flex: none; }
 .program-row > .wire-meta-row { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; font-size: var(--text-sm); color: var(--sub); }
 .program-row > .wire-button { flex: none; }
-.wire-card-details[open]:not(.is-crisis) > .wire-card-summary .program-row > .wire-meta-row { color: var(--on-action); }
 
 /* 카드 밖 한 줄 안내(L4). 경고는 코랄. */
 .wire-note { margin: 0; font-size: var(--text-sm); color: var(--sub); }
@@ -673,6 +678,9 @@ body { margin: 0; }
    좁아지면 한 칸으로 접는 이식 규칙은 그대로 유지해야 해서 같은 컨테이너 쿼리를 다시 선언한다
    (app.css 가 뒤 파일이라 조건 없는 선언 하나만 두면 좁은 화면에서도 네 칸이 남는다). */
 .participant-hero-details { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+/* 다섯째 칸부터는 2행 전폭이다(2026-09-18 Q — 당사자 정보의 `전체 상담 목표`). 네 칸 격자에
+   긴 글이 한 칸에 갇히면 세로로 늘어난다. 한 열로 접힌 폭에서는 어차피 전폭이다. */
+.participant-hero-details > .wire-field-row:nth-child(n + 5) { grid-column: 1 / -1; }
 @container (max-width: 760px) {
   .participant-hero-details { grid-template-columns: minmax(0, 1fr); }
 }
@@ -700,11 +708,8 @@ body { margin: 0; }
   .original-cols { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* 회차별 요약(F1~F3). 펼친 머리는 두 테마 모두 파스텔 면이라 회차 번호·날짜도 `--on-action`
-   으로 뒤집는다 — 다크에서 `--ink`(밝음)·`--sub`(회색)가 파스텔 위에 얹혀 안 보였다(F1).
-   테마별 리터럴은 없다: 모두 토큰이다. */
-.wire-card-details[open]:not(.is-crisis) > .wire-card-summary .seq-head-no,
-.wire-card-details[open]:not(.is-crisis) > .wire-card-summary .seq-head-meta { color: var(--on-action); }
+/* 회차별 요약(F1~F3). 펼친 머리의 회차 번호·날짜 반전은 위 L1 의 제목 묶음 통합 규칙이 맡는다
+   (2026-09-18 Q — 구 클래스별 규칙 삭제). */
 /* 구 구역 제목 배지 블록(채운 면 + 어두운 글씨)은 2026-09-18 Q 로 걷었다 — 제목은 위
    `.seq-section-title` 의 14px 컬러 텍스트 하나이고, 계열색은 `data-tone` 이 정한다. */
 /* 한글 본문 여백(F3): 행간 1.6, 낱말 안 줄바꿈 없음. 항목 사이 여백은 `--space-2` 가 갖는다. */
@@ -721,21 +726,8 @@ body { margin: 0; }
   .seq-sections[data-cols='2'] { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
 }
 
-/* 목표 탭(G1~G3). 카드 하나 안에서 두 구획은 라벨 색으로 갈린다 — 전체 목표는 기본(민트),
-   다음 상담 목표는 블루(시간 축). 전체 목표 칸은 그라데이션 아웃라인 2px 로 강조한다(G2 —
-   캘린더 외곽선과 같은 `--gradient-brand`). */
-.goal-overall { margin-block-end: var(--space-5); }
-.goal-overall .wire-input-box {
-  border: 2px solid transparent;
-  background: linear-gradient(var(--panel), var(--panel)) padding-box, var(--gradient-brand) border-box;
-}
-.goal-next .wire-form-label { color: var(--blue-deep); }
-.next-goal-list { display: grid; gap: var(--space-2); width: 100%; }
-/* 줄마다 칸 하나 + 위쪽에 선 +/- 스테퍼(AC-G3: 스테퍼 top = 칸 top). 스테퍼 어휘는 등록 화면의
-   `.number-stepper` 그대로이고 여기서는 세로 자리만 칸의 윗선에 못박는다. */
-.next-goal-row { position: relative; }
-.next-goal-row > textarea { padding-inline-end: var(--space-6); resize: none; }
-.next-goal-row > .number-stepper { top: var(--control-pad); }
+/* 구 목표 탭(G1~G3)의 편집 칸·스테퍼 CSS 는 2026-09-18 Q 로 걷었다 — 탭이 `상담 목표 기록`
+   읽기 전용 두 카드가 되면서 마크업이 사라졌다. 전체 상담 목표는 HERO 2행이 보여 준다. */
 
 /* 당사자 등록(H1): 동의 접힘 카드 사이 여백 8. */
 .consent-folds { display: grid; gap: var(--space-2); }

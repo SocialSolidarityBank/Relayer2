@@ -218,8 +218,8 @@ export function RecordScreen({
           name={briefing.participant_card.name}
           pseudonym={briefing.participant_card.pseudonym}
           details={[
-            ['당사자 ID', briefing.participant_card.pseudonym],
-            ['참여 사업', briefing.participant_card.program_name],
+            ['ID', briefing.participant_card.pseudonym],
+            ['참여중인 사업', briefing.participant_card.program_name],
             ['연락처', detail.participant.phone ?? ''],
             ['이메일', detail.participant.email ?? ''],
           ]}
@@ -358,8 +358,8 @@ export function RecordScreen({
         name={briefing.participant_card.name}
         pseudonym={briefing.participant_card.pseudonym}
         details={[
-          ['당사자 ID', briefing.participant_card.pseudonym],
-          ['참여 사업', `${briefing.participant_card.program_name}, ${seq}회차${editing ? ' 수정' : ''}`],
+          ['ID', briefing.participant_card.pseudonym],
+          ['참여중인 사업', `${briefing.participant_card.program_name}, ${seq}회차${editing ? ' 수정' : ''}`],
           ['연락처', detail?.participant.phone ?? ''],
           ['이메일', detail?.participant.email ?? ''],
         ]}        actions={
@@ -510,7 +510,8 @@ export function RecordScreen({
 
         <main className="record-main">
           {/* 목표는 기록하면서 봐야 한다(2026-09-18 UI-9). 전체 상담 목표 + 이 회차가 이어받은 오늘 상담 목표.
-              둘 다 없으면 카드를 안 그린다. 고치는 자리는 목표 탭이다(SPEC §4-2) — 여기선 보내기만. */}
+              둘 다 없으면 카드를 안 그린다. 고치는 자리는 **인테이크**뿐이고(2026-09-18 Q — 목표 탭은
+              `상담 목표 기록` 읽기 전용이 됐다) 여기선 기록으로 보내기만 한다. */}
           {briefing.goals && (
             <Card title="목표">
               <Item
@@ -525,7 +526,7 @@ export function RecordScreen({
                     : '오늘 상담 목표'
                 }
                 action={
-                  <Button onClick={() => (window.location.hash = `#/cases/${caseId}/info/goals`)}>수정</Button>
+                  <Button onClick={() => (window.location.hash = `#/cases/${caseId}/info/goals`)}>기록 보기</Button>
                 }
               />
             </Card>

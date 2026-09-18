@@ -41,9 +41,9 @@ export function CloseScreen({ caseId }: { caseId: number }) {
   // 당사자 카드 정보 넷(2026-09-17 Q — ②ⓐ 모든 화면 같은 격자).
   // 당사자 카드 정보 넷(2026-09-17 Q): ID · 사업과 회차 · 연락처 · 이메일.
   const heroDetails: Array<[string, string]> = [
-    ['당사자 ID', detail.pseudonym],
+    ['ID', detail.pseudonym],
     [
-      '참여 사업',
+      '참여중인 사업',
       `${detail.case.program_name}${lastSeq ? `, 마지막 ${lastSeq}회차` : ', 기록 없음'}`,
     ],
     ['연락처', detail.participant.phone ?? ''],
