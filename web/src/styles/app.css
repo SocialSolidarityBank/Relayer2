@@ -2,7 +2,8 @@
    .app-shell/.sidebar 를 쓴다(2026-09-16 Q 사이드바 셸 — 구 .app-nav 한 줄 대체). */
 body { margin: 0; }
 
-/* 로그인 게이트 워드마크 = 랜딩과 같은 Chillax 'Relayer'. 영문 전용 서체라 한글엔 안 쓴다. */
+/* 워드마크 = 랜딩과 같은 Chillax `Relayer`(3색 deep 그라데이션). 영문 전용 서체라 한글엔 안 쓴다.
+   레시피는 여기 한 벌이고 **크기는 쓰는 자리가 정한다** — 로그인 게이트 28, 머리줄·모바일 바 16. */
 @font-face {
   font-family: 'Chillax';
   src: url('./fonts/Chillax-Semibold.woff2') format('woff2');
@@ -10,10 +11,9 @@ body { margin: 0; }
   font-style: normal;
   font-display: swap;
 }
-.gate-wordmark {
+.wordmark {
   font-family: 'Chillax', var(--font-sans);
   font-weight: 600;
-  font-size: var(--text-2xl);
   letter-spacing: -0.005em;
   line-height: normal;
   color: var(--ink);
@@ -22,12 +22,15 @@ body { margin: 0; }
   background-clip: text;
   -webkit-text-fill-color: transparent;
 }
+/* 그라데이션을 못 그리는 환경에서는 color 로 잉크가 남는다(랜딩 `site.css` 와 같은 안전망). */
 @supports not ((background-clip: text) or (-webkit-background-clip: text)) {
-  .gate-wordmark { -webkit-text-fill-color: currentColor; background: none; }
+  .wordmark { -webkit-text-fill-color: currentColor; background: none; }
 }
+.gate-wordmark { font-size: var(--text-2xl); }
 
-/* 머리줄 기관 이름. 정본 헤더에는 기관 전환기가 서지만 베타는 기관이 하나라 글자만 둔다. */
-.app-header-brand { font-size: var(--text-md); font-weight: 600; color: var(--ink); }
+/* 머리줄·모바일 바의 제품 이름. 정본 헤더에는 기관 전환기가 서지만 베타는 기관이 하나라
+   워드마크만 둔다. 굵기·색은 `.wordmark` 가 갖는다. */
+.app-header-brand { font-size: var(--text-md); }
 
 .app-nav-me { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); color: var(--sub); font-size: var(--text-sm); white-space: nowrap; }
 .app-nav-logout { border: 0; background: none; padding: 0; min-height: var(--pill-height); color: var(--sub); font: inherit; text-decoration: underline; cursor: pointer; }
