@@ -294,7 +294,7 @@ export function Routes() {
           왼쪽은 기관·사람 이름(데스크톱 헤더와 같은 내용), 오른쪽 끝은 원형 사이드바 버튼이다.
           CCC-new 는 여기에 기관·사업 전환기를 두지만 베타는 기관이 하나라 글자만 둔다. */}
       <div className="drawer-bar">
-        <span className="app-header-brand">릴레이어</span>
+        <span className="app-header-brand wordmark">Relayer</span>
         {/* `.app-nav-me` 는 헤더 하나만 갖는다 — 실측 스크립트·e2e 가 그 이름으로 '로그인됨'을
             판정하므로 두 벌이면 숨은 쪽을 먼저 잡아 보이지 않는다고 읽는다. */}
         <span className="drawer-bar-me">{me.name}</span>
@@ -320,7 +320,7 @@ export function Routes() {
         aria-hidden="true"
       />
       <header className="app-header">
-        <span className="app-header-brand">릴레이어</span>
+        <span className="app-header-brand wordmark">Relayer</span>
         {/* 계정 행동은 사이드바 하단 세 버튼으로 내렸다(2026-09-17 Q) — 머리줄은 기관·사람
             이름만 갖는다. 로그아웃이 두 자리에 있으면 어느 것이 정본인지 알 수 없다. */}
         <div className="header-actions">

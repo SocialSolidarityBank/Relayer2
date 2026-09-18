@@ -31,7 +31,7 @@ export function LoginScreen({ onDone }: { onDone: () => void }) {
   return (
     <main className="page-content preview-gate">
       <div className="preview-gate-head">
-        <span className="gate-wordmark">Relayer</span>
+        <span className="wordmark gate-wordmark">Relayer</span>
       </div>
 
       {error && (
