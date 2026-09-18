@@ -24,6 +24,10 @@ import {
   type ConsentCopy,
   type ConsentView,
   type DocumentRow,
+  type EvidenceGrade,
+  type EvidenceTransform,
+  type SourceDocument,
+  type SourceSpan,
 } from '../api.ts';
 import {
   Badge,
@@ -46,6 +50,7 @@ import { ConsentLinkCard } from '../consent-link.tsx';
 import { SessionOriginalDialog } from '../session-original.tsx';
 import {
   ChangeSubsections,
+  GradeChip,
   KeywordChips,
   SummaryItems,
   changeItemCount,
@@ -93,10 +98,10 @@ const Lines = ({ text }: { text: string }) => {
 type SeqTone = 'ai' | 'change' | 'warn' | 'state' | 'risk' | 'done';
 
 /**
- * 근거 하이라이터(2026-09-18 Q). 요약의 문장 하나(핵심·변화·확인필요·완료·위험)를 누르면 그
- * 문장이 나온 회차의 원문을 띄우고 근거를 표시한다. v6 항목은 **서버가 준 span 좌표**를
- * 그대로 오려 표시하고(정확), 좌표가 없는 문장(구버전 요약·위험 신호 카드)은 회차 메모에서
- * 문장·낱말 겹침으로 근사한다.
+ * 근거 모달(2026-09-18 Q — #102 의 프런트매터 모양을 v6 span 좌표에 얹는다). 요약의 문장 하나
+ * (핵심·변화·확인필요·완료·위험)를 누르면 그 문장의 **근거**를 띄운다. 위는 항목·출처·자료·
+ * 등급·변환, 아래는 근거가 든 **수기 단락**이다 — v6 항목은 서버가 준 span 좌표를 그대로 오려
+ * 표시한다(정확, 텍스트 노드만). 좌표가 없는 위험 신호 카드만 회차 메모의 낱말 겹침으로 근사한다.
  */
 type Evidence = {
   sentence: string;
@@ -106,10 +111,14 @@ type Evidence = {
   memo: string | null;
   /** v6 항목의 원문 좌표. 있으면 분석을 불러 그 자리만 표시한다. */
   spans?: string[];
+  /** 항목의 근거 등급·변환(#102 — 없으면 `-`). */
+  grade?: EvidenceGrade;
+  transforms?: EvidenceTransform[];
 };
 
 const norm = (s: string) => s.replace(/\s+/g, ' ').trim();
 
+/** 위험 신호(근거 좌표 없음)의 근사 표시 — 문장 전체가 있으면 그 자리, 없으면 2자 이상 낱말마다. */
 function Highlighted({ text, sentence }: { text: string; sentence: string }) {
   const whole = norm(sentence);
   const idx = whole ? text.indexOf(whole) : -1;
@@ -130,34 +139,37 @@ function Highlighted({ text, sentence }: { text: string; sentence: string }) {
   return <>{out}</>;
 }
 
+/** 주관이 들어간 변환은 눈에 띄게(코랄) — 받은 문안의 (다)·(라). */
+const SUBJECTIVE = new Set(['집계·경향화', '해석·판단', '감정 라벨링']);
+
 /**
- * span 좌표로 오린 원문. 문서마다 라벨 한 줄 + 본문이고, 표시는 좌표 구간뿐이다 —
- * 원문은 **텍스트 노드**로만 그린다(T01·T31 — LLM 문자열을 원문 자리에 쓰지 않는다).
+ * 항목의 span 이 든 **수기 단락** 전체(#102 의 맥락 카드). 단락 안에서 항목 span 만 표시하고
+ * 나머지는 그대로 읽힌다 — 근거는 문장이 아니라 그 문장이 놓인 맥락이다. 원문은 **텍스트
+ * 노드**로만 그린다(T01·T31 — LLM 문자열을 원문 자리에 쓰지 않는다).
  */
-const markedDocs = (view: AnalysisView, spans: string[]) => {
+const evidenceParagraphs = (view: AnalysisView, spans: string[]) => {
   const want = new Set(spans);
-  const hit = view.spans.filter((s) => want.has(s.id));
-  return view.documents
-    .filter((d) => hit.some((s) => s.doc === d.id))
-    .sort((a, b) => a.order - b.order)
-    .map((d) => {
-      const out: ReactNode[] = [];
-      let last = 0;
-      for (const s of hit.filter((x) => x.doc === d.id).sort((a, b) => a.start - b.start)) {
-        if (s.start > last) out.push(d.text.slice(last, s.start));
-        out.push(
-          <mark className="evidence-mark" key={s.id}>
-            {d.text.slice(Math.max(last, s.start), s.end)}
-          </mark>,
-        );
-        last = Math.max(last, s.end);
-      }
-      if (last < d.text.length) out.push(d.text.slice(last));
-      return { id: d.id, label: d.label, nodes: out };
-    });
+  const paragraphs = (view.analysis?.body?.record.paragraphs ?? []).filter((p) =>
+    p.spans.some((s) => want.has(s)),
+  );
+  const spanById = new Map(view.spans.map((s) => [s.id, s]));
+  const docById = new Map(view.documents.map((d) => [d.id, d]));
+  return paragraphs.map((p) => {
+    // 단락의 span 을 문서 경계로 끊는다 — 경계마다 자료 라벨을 달고 같은 문서 안은 원문 공백 그대로.
+    const chunks: Array<{ doc: SourceDocument; spans: Array<{ span: SourceSpan; hit: boolean }> }> = [];
+    for (const sid of p.spans) {
+      const s = spanById.get(sid);
+      const d = s && docById.get(s.doc);
+      if (!s || !d) continue;
+      const last = chunks[chunks.length - 1];
+      if (last && last.doc.id === d.id) last.spans.push({ span: s, hit: want.has(sid) });
+      else chunks.push({ doc: d, spans: [{ span: s, hit: want.has(sid) }] });
+    }
+    return { id: p.id, title: p.title, chunks };
+  });
 };
 
-/** 머리(`근거` + 닫기)와 본문뿐인 모달(2026-09-18 Q). 본문 = 누른 문장 → 출처 회차 라벨 → 표시된 원문. */
+/** 머리(`근거` + 닫기)와 본문뿐인 모달(2026-09-18 Q). 본문 = 프런트매터 + 맥락 카드. */
 function EvidenceDialog({
   evidence,
   cache,
@@ -186,33 +198,66 @@ function EvidenceDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [evidence.sessionId, evidence.sentence]);
 
-  const docs = spans.length > 0 && view !== null && view !== 'failed' ? markedDocs(view, spans) : [];
+  const loaded = view !== null && view !== 'failed';
+  const paragraphs = spans.length > 0 && loaded ? evidenceParagraphs(view, spans) : [];
+  const source = loaded ? view.documents.find((d) => d.id === view.spans.find((s) => s.id === spans[0])?.doc)?.label : undefined;
+  const grounded = paragraphs.length > 0;
   return (
     <Dialog id="evidence" title="근거" headClose open onClose={onClose} className="evidence-dialog">
       <div className="evidence-body">
-        <p className="evidence-sentence">{evidence.sentence}</p>
-        <p className="seq-section-title">
-          <Meta parts={[`${evidence.seq}회차`, dateLabel(evidence.heldAt), docs.length > 0 ? '원본' : '수기 기록']} />
-        </p>
+        {/* 프런트매터 — 구분에 필요한 정보만 라벨·값으로. 아래 본문에서 되풀이하지 않는다. */}
+        <dl className="evidence-front">
+          <div><dt>항목</dt><dd>{evidence.sentence}</dd></div>
+          <div><dt>출처</dt><dd><Meta parts={[`${evidence.seq}회차`, dateLabel(evidence.heldAt)]} /></dd></div>
+          <div><dt>자료</dt><dd>{source ?? '-'}</dd></div>
+          <div><dt>등급</dt><dd><GradeChip grade={evidence.grade} /></dd></div>
+          <div>
+            <dt>변환</dt>
+            <dd>
+              {evidence.transforms && evidence.transforms.length > 0 ? (
+                <span className="evidence-tags">
+                  {evidence.transforms.map((t) => (
+                    <span key={t} className="evidence-tag" data-tone={SUBJECTIVE.has(t) ? 'warn' : undefined}>{t}</span>
+                  ))}
+                </span>
+              ) : (
+                '-'
+              )}
+            </dd>
+          </div>
+        </dl>
         {spans.length > 0 && view === null ? (
           <Empty>불러오는 중</Empty>
-        ) : docs.length > 0 ? (
-          docs.map((d) => (
-            <div key={d.id}>
-              <p className="record-doc-label">{d.label}</p>
-              <p className="evidence-text">{d.nodes}</p>
-            </div>
-          ))
+        ) : grounded ? (
+          <section className="evidence-card">
+            {paragraphs.map((p) => (
+              <div key={p.id}>
+                <p className="record-doc-label">{p.id} {p.title}</p>
+                {p.chunks.map((chunk) => (
+                  <p className="evidence-text" key={chunk.doc.id}>
+                    {chunk.spans.map(({ span: s, hit }, i) => (
+                      <span key={s.id}>
+                        {i > 0 && chunk.doc.text.slice(chunk.spans[i - 1].span.end, s.start)}
+                        {hit ? (
+                          <mark className="evidence-mark">{chunk.doc.text.slice(s.start, s.end)}</mark>
+                        ) : (
+                          chunk.doc.text.slice(s.start, s.end)
+                        )}
+                      </span>
+                    ))}
+                  </p>
+                ))}
+              </div>
+            ))}
+          </section>
         ) : evidence.memo ? (
-          <p className="evidence-text"><Highlighted text={evidence.memo} sentence={evidence.sentence} /></p>
+          <section className="evidence-card">
+            <p className="evidence-text"><Highlighted text={evidence.memo} sentence={evidence.sentence} /></p>
+            <p className="seq-section-note">문장과 겹치는 말을 표시, AI 정리 문장은 원문과 글자가 다를 수 있음</p>
+          </section>
         ) : (
-          <Empty>수기 기록 없음</Empty>
+          <Empty>근거 없음</Empty>
         )}
-        <p className="seq-section-note">
-          {docs.length > 0
-            ? '원문 좌표 그대로 표시'
-            : '문장과 겹치는 말을 표시, AI 정리 문장은 원문과 글자가 다를 수 있음'}
-        </p>
       </div>
     </Dialog>
   );
@@ -263,8 +308,8 @@ function SeqSection({
  * 그리지 않는다(`달라진 사실 없음` 같은 빈자리 채움 없음, T06). 분석이 아예 없으면 핵심 하나에
  * `AI 정리 없음` 이다. 요약 고치기는 화면에 없다(2026-09-18 Q — `summary_override` 는 서버 것이다).
  *
- * 요약 탭의 v6 들목은 둘이다: 문장을 누르면 **근거**(span 좌표)를, 키워드 칩을 누르면 그 회차
- * 원본 팝업의 **백링크**를 연다.
+ * 요약 탭의 v6 들목은 둘이다: 문장을 누르면 **근거**(span 좌표 + 등급·변환)를, 키워드 칩을 누르면
+ * 그 회차 원본 팝업의 **백링크**를 연다.
  */
 function Sessions({
   detail,
@@ -290,7 +335,11 @@ function Sessions({
   }, [caseId]);
   const risk = brief?.risk_signals ?? null;
   /** 문장 하나를 근거 모달로 여는 텍스트 링크. 출처 회차는 문장이 난 회차다. */
-  const link = (sentence: string, seq: number, spans?: string[]) => {
+  const link = (
+    sentence: string,
+    seq: number,
+    item?: { spans: string[]; grade?: EvidenceGrade; transforms?: EvidenceTransform[] },
+  ) => {
     const src = detail.sessions.find((x) => x.seq === seq);
     return (
       <button
@@ -303,7 +352,9 @@ function Sessions({
             sessionId: src?.id ?? 0,
             heldAt: src?.held_at ?? null,
             memo: src?.memo ?? null,
-            spans,
+            spans: item?.spans,
+            grade: item?.grade,
+            transforms: item?.transforms,
           })
         }
       >
@@ -360,8 +411,9 @@ function Sessions({
           const override = v6?.override ?? null;
           const isStale = s.stale.ai_summary || s.stale.mismatch;
           const changes = summary ? changeItemCount(summary.changes) : 0;
-          /** 이 회차 항목의 문장 링크 — 근거는 항목의 span 좌표다. */
-          const itemLink = (sentence: string, spans: string[]) => link(sentence, s.seq, spans);
+          /** 이 회차 항목의 문장 링크 — 근거는 항목의 span 좌표와 등급·변환이다. */
+          const itemLink = (sentence: string, item: { spans: string[]; grade?: EvidenceGrade; transforms?: EvidenceTransform[] }) =>
+            link(sentence, s.seq, item);
           return (
             <Fold
               key={s.id}

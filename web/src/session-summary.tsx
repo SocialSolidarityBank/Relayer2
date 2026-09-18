@@ -12,6 +12,8 @@ import type { ReactNode } from 'react';
 import {
   CHANGE_SUBSECTIONS,
   CHANGE_SUBSECTION_LABEL,
+  type Evidence,
+  type EvidenceGrade,
   type GoalLink,
   type Keyword,
   type NewlyRevealedItem,
@@ -25,13 +27,38 @@ import { Badge } from './ui.tsx';
 
 const SUBSECTION_NO = ['①', '②', '③'] as const;
 
+/** 등급 색(#102): 완전 민트 · 부분·정황·없음 중립 · 과잉·모순 코랄. 채운 면은 없다(§6). */
+const GRADE_TONE: Record<string, string> = {
+  완전: 'mint',
+  부분: 'sub',
+  정황: 'sub',
+  과잉: 'warn',
+  모순: 'warn',
+  없음: 'sub',
+};
+/** 카드에서는 주의가 필요한 등급만 칩을 단다 — 나머지는 조용히 둔다(2026-09-18 Q). */
+const WARN_GRADES = new Set<EvidenceGrade>(['과잉', '모순', '없음']);
+
+/** 등급 칩 — 회차 카드·검토 화면·근거 모달이 같은 모양으로 쓴다. */
+export const GradeChip = ({ grade }: { grade?: EvidenceGrade }) => (
+  <span className="evidence-grade" data-tone={grade ? GRADE_TONE[grade] : undefined}>
+    {grade ?? '-'}
+  </span>
+);
+
+/** 항목 끝의 등급 칩. `warn` 이면 주의 등급만, `all` 이면 있는 등급 전부 단다. */
+const ItemGrade = ({ item, show }: { item: Evidence; show?: 'warn' | 'all' }) =>
+  item.grade && (show === 'all' || (show === 'warn' && WARN_GRADES.has(item.grade))) ? (
+    <GradeChip grade={item.grade} />
+  ) : null;
+
 /**
  * 항목 문장을 감싸는 자리. 회차 카드는 문장을 근거 모달로 여는 `seq-link` 버튼으로 만들고
- * (span 좌표를 함께 넘긴다), 검토 화면처럼 링크가 없는 자리는 글자 그대로 둔다.
+ * (span 좌표·등급·변환을 함께 넘긴다), 검토 화면처럼 링크가 없는 자리는 글자 그대로 둔다.
  */
-export type ItemLink = (text: string, spans: string[]) => ReactNode;
-const linked = (link: ItemLink | undefined, text: string, spans: string[]): ReactNode =>
-  link ? link(text, spans) : text;
+export type ItemLink = (text: string, item: Evidence & { spans: string[] }) => ReactNode;
+const linked = (link: ItemLink | undefined, text: string, item: Evidence & { spans: string[] }): ReactNode =>
+  link ? link(text, item) : text;
 
 /** 줄글 여러 개는 불렛, 한 줄이면 단락 하나 — participant-info 의 Lines 와 같은 규칙. */
 const Lines = ({ text }: { text: string }) => {
@@ -60,15 +87,19 @@ export const SummaryItems = ({
   items,
   sessionSeq,
   link,
+  showGrade,
 }: {
   items: SummaryItem[];
   sessionSeq?: number;
   link?: ItemLink;
+  /** `warn` = 과잉·모순·없음만 칩(회차 카드), `all` = 있는 등급 전부(검토 화면). */
+  showGrade?: 'warn' | 'all';
 }) => (
   <ul className="seq-list">
     {items.map((item, i) => (
       <li key={i}>
-        {linked(link, item.text, item.spans)} <GoalTag goal={item.goal} sessionSeq={sessionSeq} />
+        {linked(link, item.text, item)} <ItemGrade item={item} show={showGrade} />{' '}
+        <GoalTag goal={item.goal} sessionSeq={sessionSeq} />
       </li>
     ))}
   </ul>
@@ -78,14 +109,16 @@ const PromiseResult = ({
   item,
   sessionSeq,
   link,
+  showGrade,
 }: {
   item: PromiseResultItem;
   sessionSeq?: number;
   link?: ItemLink;
+  showGrade?: 'warn' | 'all';
 }) => (
   <li>
-    <p className="seq-text">약속: "{linked(link, item.promise, item.promise_spans)}"</p>
-    <p className="seq-text">실제 결과: "{linked(link, item.result, item.result_spans)}"</p>
+    <p className="seq-text">약속: "{linked(link, item.promise, { ...item, spans: item.promise_spans })}"</p>
+    <p className="seq-text">실제 결과: "{linked(link, item.result, { ...item, spans: item.result_spans })}"</p>
     {item.changes.length > 0 && (
       <>
         <p className="seq-text">변화점:</p>
@@ -99,7 +132,7 @@ const PromiseResult = ({
       </>
     )}
     {item.conclusion && <p className="seq-text">∴ {item.conclusion}</p>}
-    <GoalTag goal={item.goal} sessionSeq={sessionSeq} />
+    <ItemGrade item={item} show={showGrade} /> <GoalTag goal={item.goal} sessionSeq={sessionSeq} />
   </li>
 );
 
@@ -107,10 +140,12 @@ const NewlyRevealed = ({
   item,
   sessionSeq,
   link,
+  showGrade,
 }: {
   item: NewlyRevealedItem;
   sessionSeq?: number;
   link?: ItemLink;
+  showGrade?: 'warn' | 'all';
 }) => (
   <li>
     {item.dialogue?.worker && <p className="seq-text">실무자: "{item.dialogue.worker}"</p>}
@@ -119,10 +154,10 @@ const NewlyRevealed = ({
     <p className="seq-text">{item.mode === 'change' ? '변화점:' : '확인된 내용:'}</p>
     <ul className="seq-list">
       {item.lines.map((l, i) => (
-        <li key={i}>{linked(link, l, item.spans)}</li>
+        <li key={i}>{linked(link, l, item)}</li>
       ))}
     </ul>
-    <GoalTag goal={item.goal} sessionSeq={sessionSeq} />
+    <ItemGrade item={item} show={showGrade} /> <GoalTag goal={item.goal} sessionSeq={sessionSeq} />
   </li>
 );
 
@@ -130,10 +165,12 @@ const NewPossibility = ({
   item,
   sessionSeq,
   link,
+  showGrade,
 }: {
   item: NewPossibilityItem;
   sessionSeq?: number;
   link?: ItemLink;
+  showGrade?: 'warn' | 'all';
 }) => (
   <li>
     {item.dialogue?.worker && <p className="seq-text">실무자: "{item.dialogue.worker}"</p>}
@@ -141,12 +178,59 @@ const NewPossibility = ({
     <p className="seq-text">변화점:</p>
     <ul className="seq-list">
       {item.lines.map((l, i) => (
-        <li key={i}>{linked(link, l, [...item.change_spans, ...item.plan_spans])}</li>
+        <li key={i}>{linked(link, l, { ...item, spans: [...item.change_spans, ...item.plan_spans] })}</li>
       ))}
     </ul>
-    <GoalTag goal={item.goal} sessionSeq={sessionSeq} />
+    <ItemGrade item={item} show={showGrade} /> <GoalTag goal={item.goal} sessionSeq={sessionSeq} />
   </li>
 );
+
+/** `이번 회차에서 확인된 변화` 의 건수 — 아코디언 머리의 `N건` 이 세는 값이다. */
+export const changeItemCount = (changes: SessionSummary['changes']): number =>
+  CHANGE_SUBSECTIONS.reduce((n, key) => n + changes[key].length, 0);
+
+/**
+ * `이번 회차에서 확인된 변화` 의 하위 항목 셋. 의미 순서는 고정(약속 이행 여부 → 새로 드러난 것
+ * → 새로운 가능성)이고 번호는 비어 있지 않은 것만 세어 ①부터 단다(T12).
+ */
+export function ChangeSubsections({
+  changes,
+  sessionSeq,
+  link,
+  showGrade,
+}: {
+  changes: SessionSummary['changes'];
+  sessionSeq?: number;
+  link?: ItemLink;
+  showGrade?: 'warn' | 'all';
+}) {
+  const filled = CHANGE_SUBSECTIONS.filter((key) => changes[key].length > 0);
+  const body = (key: (typeof CHANGE_SUBSECTIONS)[number]): ReactNode => {
+    if (key === 'promise_result')
+      return changes.promise_result.map((item, i) => (
+        <PromiseResult key={i} item={item} sessionSeq={sessionSeq} link={link} showGrade={showGrade} />
+      ));
+    if (key === 'newly_revealed')
+      return changes.newly_revealed.map((item, i) => (
+        <NewlyRevealed key={i} item={item} sessionSeq={sessionSeq} link={link} showGrade={showGrade} />
+      ));
+    return changes.new_possibility.map((item, i) => (
+      <NewPossibility key={i} item={item} sessionSeq={sessionSeq} link={link} showGrade={showGrade} />
+    ));
+  };
+  return (
+    <>
+      {filled.map((key, i) => (
+        <div className="summary-subsection" key={key}>
+          <h4 className="summary-subsection-title">
+            {SUBSECTION_NO[i]} {CHANGE_SUBSECTION_LABEL[key]}
+          </h4>
+          <ul className="seq-list">{body(key)}</ul>
+        </div>
+      ))}
+    </>
+  );
+}
 
 /** `이번 회차에서 확인된 변화` 의 건수 — 아코디언 머리의 `N건` 이 세는 값이다. */
 export const changeItemCount = (changes: SessionSummary['changes']): number =>
