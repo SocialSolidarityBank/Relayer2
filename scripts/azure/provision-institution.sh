@@ -339,8 +339,17 @@ fqdn="$(az containerapp show --name "$app_name" --resource-group "$RG" --query p
 curl -fsS --retry 12 --retry-delay 5 --retry-all-errors "https://${fqdn}/health" >/dev/null
 
 printf '10. node api/src/migrate.ts --check\n'
-az containerapp exec --name "$app_name" --resource-group "$RG" \
-  --command 'node api/src/migrate.ts --check'
+# `az containerapp exec` 는 TTY 가 없으면 termios 오류로 죽는다(2026-09-18 실측). 파이프로
+# 돌릴 때는 `script` 로 가짜 TTY 를 준다. 출력에서 "migrations up to date" 를 직접 확인한다.
+exec_out="$TMP/migrate-check.log"
+if [ -t 0 ]; then
+  az containerapp exec --name "$app_name" --resource-group "$RG" \
+    --command 'node api/src/migrate.ts --check' | tee "$exec_out"
+else
+  script -q "$exec_out" az containerapp exec --name "$app_name" --resource-group "$RG" \
+    --command 'node api/src/migrate.ts --check' </dev/null >/dev/null
+fi
+grep -q 'migrations up to date' "$exec_out" || fail "migrate --check 가 'migrations up to date' 를 내지 않았습니다."
 
 printf '11. GET /auth/signup open:true\n'
 curl -fsS --retry 5 --retry-delay 2 --retry-all-errors "https://${fqdn}/auth/signup" | \
