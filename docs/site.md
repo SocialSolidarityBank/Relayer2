@@ -14,6 +14,7 @@ site/                 공개되는 것만
   site.css            색과 형태. 앱 토큰의 사본이다
   site.js             펼침 목록과 가이드 목차 표시
   fonts/              Chillax, 영문 전용
+  img/cover.webp      첫 화면 커버. 배경이 비어 있는 워드마크 그림
   shots/              화면 사진
 
 docs/site.md          이 문서
@@ -148,3 +149,17 @@ node ~/developer/tools/align-tools/align-check.mjs http://127.0.0.1:8081/index.h
 올려 새 주소로 만든다. HTML 은 덮이지 않으므로 `?v=` 만 바꾸면 브라우저가 새 파일을 받는다.
 
 영역 설정을 `Respect Existing Headers` 로 바꾸면 `?v=` 를 올릴 일이 없어진다.
+
+## 커버 그림 바꾸기
+
+`site/img/cover.webp` 한 장을 갈아 끼우면 된다. 배경이 비어 있는(알파) 그림이어야 한다.
+캔버스 색 위에 그대로 앉으므로 배경이 칠해진 그림을 넣으면 사각형이 보인다.
+
+```bash
+cwebp -q 86 -alpha_q 100 새그림.png -o site/img/cover.webp
+```
+
+바꾼 뒤 `site/index.html` 의 `width`, `height` 를 새 그림의 실제 화소 수로 맞춘다.
+비율이 어긋나면 그림이 늦게 올 때 아래 글이 밀린다. 표시 폭은 CSS 가 정한다(최대 520).
+
+`site/` 바로 아래 이미지는 커밋 대상이 아니다(로컬 제외 목록). 쓸 그림은 `img/` 나 `shots/` 에 둔다.

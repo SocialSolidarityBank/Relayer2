@@ -462,6 +462,15 @@ summary:focus-visible,
 
 /* 첫 화면 위 여백은 앱의 페이지 세로 패딩과 같은 값이다. */
 .hero { padding-top: var(--page-pad-y); }
+/* 커버. 배경이 없는 워드마크 그림이라 캔버스 위에 그대로 앉는다. 액자도 그림자도 두지 않는다.
+ * 폭은 글자 크기와 같은 계단을 쓴다: 첫 화면 제목(--display)의 11배 어름이고 상한이 520 이다.
+ * 높이를 비율로 예약해(aspect-ratio) 그림이 늦게 와도 아래 글이 밀리지 않는다. */
+.hero-cover {
+  display: block;
+  width: min(520px, 100%);
+  height: auto;
+  margin: 0 0 var(--space-6);
+}
 .hero-title {
   margin: 0;
   font-size: var(--display);
