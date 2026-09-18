@@ -13,10 +13,12 @@ import { chromium } from '../web/node_modules/@playwright/test/index.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:8799';
 const user = process.argv[3] ?? 'test2';
+// 소개 페이지가 루트로 오면서 앱은 /app 로 내려갔다(main #66). 실측은 앱 문으로 들어간다.
+const app = `${base}/app`;
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-await page.goto(`${base}/`);
+await page.goto(`${app}#/login`);
 await page.locator('#email').fill(user);
 await page.locator('#password').fill(user);
 await page.getByRole('button', { name: '로그인' }).click();
@@ -25,7 +27,7 @@ await page.locator('.app-nav-me').waitFor();
 // 시드 사례 하나를 찾는다 — 목록 첫 카드의 사례 주소.
 // 카드가 접힘 카드가 되면서 카드 전체를 감싼 `a.participant-card-link` 는 없어졌고(2026-09-18 A2),
 // 사례 주소는 머리 오른쪽 `당사자 정보` 행동이 갖는다.
-await page.goto(`${base}/#/participants`);
+await page.goto(`${app}#/participants`);
 await page.locator('.participant-list a[href*="#/cases/"]').first().waitFor();
 const href = await page.locator('.participant-list a[href*="#/cases/"]').first().getAttribute('href');
 const caseId = href?.match(/#\/cases\/(\d+)/)?.[1];
@@ -119,7 +121,7 @@ const measure = () => {
 
 let fails = 0;
 for (const route of ROUTES) {
-  await page.goto(`${base}/${route}`);
+  await page.goto(`${app}${route}`);
   await page.waitForTimeout(600);
   const rows = await page.evaluate(measure);
   const bad = rows.filter((r) => !r.pass);

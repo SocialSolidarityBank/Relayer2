@@ -15,6 +15,12 @@ const VIEWS = [{ key: 'month', label: '월간' }, { key: 'week', label: '주간'
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const dayFormatter = new Intl.DateTimeFormat('ko-KR', { timeZone: 'UTC', year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
 const shortDayFormatter = new Intl.DateTimeFormat('ko-KR', { timeZone: 'UTC', month: 'numeric', day: 'numeric', weekday: 'short' });
+/** 시간표 열 머리: 2026.09.14(금). 좌측정렬·글자수 고정으로 줄맞춤한다. */
+const gridWeekday = new Intl.DateTimeFormat('ko-KR', { timeZone: 'UTC', weekday: 'short' });
+const gridDayLabel = (day: string) =>
+  `${day.slice(0, 4)}.${day.slice(5, 7)}.${day.slice(8, 10)}(${gridWeekday.format(new Date(`${day}T00:00:00Z`))})`;
+/** 시간표 시각 머리: AM 09:00 · PM 12:00. 글자수 고정. */
+const gridHourLabel = (hour: number) => `${hour < 12 ? 'AM' : 'PM'} ${String(hour % 12 || 12).padStart(2, '0')}:00`;
 type CalendarEvent = { row: ScheduleRow; time: CalendarTime };
 const EMPTY_EVENTS: CalendarEvent[] = [];
 /** 다가오는 일정은 다섯 건까지 보여 주고 나머지는 `날짜 더보기`가 펼친다(2026-09-17 Q). */
@@ -232,12 +238,12 @@ export function HomeScreen({ focusCaseId = null }: { focusCaseId?: number | null
                   <thead><tr><th scope="col"><span className="wire-toolbar-label">시간</span></th>{period.days.map(day => <th key={day} scope="col" data-today={day === today}>
                     <div className="sc-time-heading">
                       <button type="button" data-day={day} aria-label={`${dayFormatter.format(new Date(`${day}T00:00:00Z`))} 일간 보기`} onClick={() => { jumpTo(day); setView('day'); }}>
-                        {shortDayFormatter.format(new Date(`${day}T00:00:00Z`))}
+                        {gridDayLabel(day)}
                       </button>
                     </div>
                   </th>)}</tr></thead>
                   <tbody>{HOURS.map(hour => <tr key={hour} data-hour={hour}>
-                    <th scope="row">{hour < 12 ? '오전' : '오후'} {hour % 12 || 12}시</th>
+                    <th scope="row">{gridHourLabel(hour)}</th>
                     {period.days.map(day => {
                       const events = byHour.get(`${day}/${hour}`) ?? EMPTY_EVENTS;
                       return <td key={day} data-has-events={events.length > 0 || undefined}

@@ -85,12 +85,12 @@ CCC는 블루 채움 배지를 시간 축으로 제한하지만, 릴레이어의
 |---|---|---|---|
 | 페이지 제목 `.wire-page-title` | 28px (`--text-2xl`), 767px 이하 24px (`--text-xl`) | 600 | `--ink`, 1.25 |
 | 카드 제목 `.wire-card-title` | 16px (`--text-md`) | 600 | `--ink`, 1.35 |
-| 항목 제목 `.wire-item-title` | 16px | 600 | `--ink` |
+| 항목 제목 `.wire-item-title` | 14px (`--text-sm`) | 400 | `--ink` |
 | 폼 라벨 `.wire-form-label` | 14px (`--text-sm`) | 600 | `--sub`, normal |
 | 폼 묶음 제목 `legend` | 16px | 600 | `--mint-deep`, 1.35 |
-| 입력값 | 14px | 400 | `--ink`, 단일행 normal·여러 줄 1.6 |
-| 필드 도움말 `.wire-form-hint` | 13px (`--text-detail`) | 400 | `--sub` |
-| 설명 `.panel-meta`, `.wire-item-desc` | 14px | 400 | `--sub` |
+| 입력값·선택창·placeholder | 13px (`--text-detail`) | 400 | `--ink`, 단일행 normal·여러 줄 1.6 |
+| 필드 도움말 `.wire-form-hint`, 선택 힌트 `.wire-choice-hint` | 12px (`--text-caption`) | 400 | `--sub` |
+| 설명 `.panel-meta`, `.wire-item-desc` | 12px (`--text-caption`) | 400 | `--sub` |
 | 글자 버튼 | 14px | 600 | 변형별 색, normal |
 | 배지 | 12px (`--text-badge`) | 400 | 배지 면에 맞는 전경 |
 

@@ -31,8 +31,7 @@ export function LoginScreen({ onDone }: { onDone: () => void }) {
   return (
     <main className="page-content preview-gate">
       <div className="preview-gate-head">
-        <h1>릴레이어</h1>
-        <p>기관에 등록된 아이디와 비밀번호</p>
+        <span className="gate-wordmark">Relayer</span>
       </div>
 
       {error && (
@@ -68,9 +67,9 @@ export function LoginScreen({ onDone }: { onDone: () => void }) {
         >
           <span className="wire-button-text">{busy ? '확인 중' : '로그인'}</span>
         </button>
-        <p className="note-inline">
-          계정 없음 → 기관 관리자에게 초대 링크 요청 · 새 기관 시작 → <a href="#/signup">가입하기</a>
-        </p>
+        <a className="wire-button preview-gate-submit" data-variant="secondary" href="#/signup">
+          <span className="wire-button-text">가입하기</span>
+        </a>
       </form>
     </main>
   );

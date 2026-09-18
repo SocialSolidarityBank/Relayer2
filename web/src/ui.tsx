@@ -33,18 +33,24 @@ export function Chevron({ dir = 'down' }: { dir?: 'up' | 'down' | 'left' | 'righ
  * **돌아갈 곳이 없으면 아예 그리지 않는다.** 없는 출구를 그려 두면 눌러도 아무 일이
  * 일어나지 않아 화면이 고장난 것처럼 보인다.
  */
-export function BackLink() {
+export function BackLink({ title }: { title?: string }) {
   const [canGoBack, setCanGoBack] = useState(false);
   useEffect(() => {
     setCanGoBack(window.history.length > 1);
   }, []);
-  if (!canGoBack) return null;
+  // HERO 위에 큰 제목이 없는 화면은 이 줄 오른쪽에 페이지 이름(page-eyebrow)을 세운다(2026-09-18 Q).
+  if (!canGoBack && !title) return null;
   return (
     <div className="page-backbar">
-      <button type="button" className="page-back" onClick={() => window.history.back()}>
-        <Chevron dir="left" />
-        <span>뒤로</span>
-      </button>
+      {canGoBack ? (
+        <button type="button" className="page-back" onClick={() => window.history.back()}>
+          <Chevron dir="left" />
+          <span>뒤로</span>
+        </button>
+      ) : (
+        <span className="page-back-spacer" aria-hidden="true" />
+      )}
+      {title && <span className="page-eyebrow">{title}</span>}
     </div>
   );
 }

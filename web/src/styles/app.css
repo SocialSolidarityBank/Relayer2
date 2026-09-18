@@ -2,6 +2,30 @@
    .app-shell/.sidebar 를 쓴다(2026-09-16 Q 사이드바 셸 — 구 .app-nav 한 줄 대체). */
 body { margin: 0; }
 
+/* 로그인 게이트 워드마크 = 랜딩과 같은 Chillax 'Relayer'. 영문 전용 서체라 한글엔 안 쓴다. */
+@font-face {
+  font-family: 'Chillax';
+  src: url('./fonts/Chillax-Semibold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+.gate-wordmark {
+  font-family: 'Chillax', var(--font-sans);
+  font-weight: 600;
+  font-size: var(--text-2xl);
+  letter-spacing: -0.005em;
+  line-height: normal;
+  color: var(--ink);
+  background: var(--gradient-mark);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+@supports not ((background-clip: text) or (-webkit-background-clip: text)) {
+  .gate-wordmark { -webkit-text-fill-color: currentColor; background: none; }
+}
+
 /* 머리줄 기관 이름. 정본 헤더에는 기관 전환기가 서지만 베타는 기관이 하나라 글자만 둔다. */
 .app-header-brand { font-size: var(--text-md); font-weight: 600; color: var(--ink); }
 
@@ -177,7 +201,7 @@ body { margin: 0; }
   .participant-hero-details { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
-.wire-choice-hint { display: block; margin-top: var(--space-1); font-size: var(--text-sm); font-weight: 400; color: var(--sub); }
+.wire-choice-hint { display: block; margin-top: var(--space-1); font-size: var(--text-caption); font-weight: 400; color: var(--sub); }
 
 /* 라벨 행이 없는 반복 입력: 입력칸과 버튼이 한 행 중앙에 선다.
    이식 CSS 의 .wire-repeat-actions 는 CCC 의 `+`·`-` 아이콘 버튼용이라 너비를 알약 높이로
@@ -236,27 +260,16 @@ body { margin: 0; }
    가 남는 높이를 전부 먹는다). 버튼 옷은 이식한 `.header-icon-button` 32 원형 그대로다. */
 .sidebar-footer { margin-top: auto; display: flex; align-items: center; gap: var(--space-2); }
 
-/* 767 이하: 내비를 본문 위에 눕힌다(2026-09-16).
-   이식 CSS 는 이 폭에서 사이드바를 **드로어**로 바꾸고(.sidebar{position:fixed;translateX(100%)})
-   헤더를 숨긴다. 여는 손잡이(.drawer-bar)·스크림·닫기 버튼 마크업이 릴레이어에는 없어서
-   390px 실측에서 내비가 화면 밖(x=375)에 갇히고 이름·로그아웃까지 사라졌다.
-   드로어를 살리려면 여닫는 상태·스크림·초점 처리가 새로 필요하다. 이 폭은 지금 실사 표면이
-   아니므로 항목과 순서를 그대로 둔 채 흐름으로 되돌린다. 묶음은 폭이 되는 만큼 나란히 선다. */
-@media (max-width: 767px) {
-  .app-header { display: flex; padding: 0 var(--page-pad-x); }
-  .sidebar {
-    position: static; transform: none; height: auto; width: auto; max-width: none; z-index: auto;
-    padding: var(--space-4) var(--page-pad-x); gap: var(--space-4);
-  }
-  /* 본문과 만나는 모서리가 아래로 바뀌므로 세로선을 가로선으로 돌린다(헤더 아래 선과 같은 축). */
-  .sidebar::after { inset: auto 0 0; width: auto; height: 1px; opacity: 1; background: var(--gradient-frame); }
-  .sidebar > .navigation-groups {
-    overflow: visible;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    /* 묶음 칸이 늘어나면 안의 항목 행까지 벌어져 옆 묶음과 줄이 안 맞는다(390px 실측 17px). */
-    align-items: start;
-  }
-}
+/* 767 이하: 사이드바는 **드로어**다(2026-09-18 Q — 구 '흐름으로 되돌림' 블록 대체).
+   이식 CSS(`shell.css`)가 이 폭에서 사이드바를 드로어로 바꾸고 헤더를 숨긴다. 그때 없어서
+   내비가 화면 밖에 갇혔던 손잡이(`.drawer-bar`)·스크림·닫기 버튼 마크업과 여닫는 상태·Esc·
+   초점·본문 스크롤 잠금을 `routes.tsx` 가 붙였다(CCC-new `app-sidebar.tsx` 이식). 되돌리지 않는다. */
+/* 드로어 머리 줄에는 닫기 버튼 하나만 서므로 오른쪽 끝에 세운다 — 여는 손잡이와 같은 쪽이라
+   한 버튼이 여닫는 토글로 읽힌다. CCC 는 왼쪽 닫기 + 오른쪽 계정 행동이지만 릴레이어의
+   계정 행동 세 버튼은 사이드바 하단(`.sidebar-footer`)이 갖고 드로어에도 함께 따라온다. */
+.sidebar-head { justify-content: flex-end; }
+/* 모바일 바의 사람 이름. 헤더의 `.app-nav-me` 와 같은 옷이지만 클래스는 따로 쓴다(위 주석). */
+.drawer-bar-me { margin-left: auto; color: var(--sub); font-size: var(--text-sm); white-space: nowrap; }
 
 /* 회차 정보 카드의 회차×상태 표(2026-09-17 Q — C안 확정, 최신순). */
 .seq-scroll { min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; }
@@ -498,18 +511,16 @@ body { margin: 0; }
   .record-when-row { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* 녹음 카드 머리(D1): 왼쪽은 안내 세 줄(파일 형식·파일 크기·주의), 오른쪽은 버튼 두 개가
-   같은 행 세로 중앙이다. 안내 라벨은 민트 deep(§6 라벨 색), 값은 --sub. */
-.recording-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4) var(--space-6); min-width: 0; }
-.recording-note { display: grid; gap: var(--space-1); margin: 0; min-width: 0; }
-.recording-note > div { display: flex; gap: var(--space-2); min-width: 0; font-size: var(--text-sm); line-height: var(--leading-normal); }
-.recording-note dt { flex: none; font-weight: 600; color: var(--mint-deep); }
-.recording-note dd { margin: 0; color: var(--sub); }
+/* 녹음 카드(2026-09-18 Q): 버튼 둘은 제목 줄 오른쪽(Card action), 안내 세 줄은 본문에서
+   라벨·값 2열로 왼쪽 정렬한다. 라벨은 민트 deep(§6), 값은 --sub. */
+.recording-note { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-1) var(--space-4); margin: 0; min-width: 0; font-size: var(--text-sm); line-height: var(--leading-normal); }
+.recording-note > div { display: contents; }
+.recording-note dt { font-weight: 600; color: var(--mint-deep); text-align: left; }
+.recording-note dd { margin: 0; color: var(--sub); text-align: left; }
 .recording-actions { display: flex; flex: none; gap: var(--space-3); }
-@media (max-width: 767px) {
-  .recording-head { flex-direction: column; align-items: stretch; }
-  .recording-actions { justify-content: flex-end; }
-}
+/* 열린 과제·물어볼 것 개수는 제목이 아니라 개수 칩이다(2026-09-18 Q — 붙여 쓰면 '11번째'처럼 읽혔다).
+   여백을 띄우고 굵기를 낮춰 제목과 분리한다. */
+.fold-count { margin-left: var(--space-2); padding: 0 var(--space-2); border-radius: var(--radius-pill); background: var(--muted); font-size: var(--text-badge); font-weight: 400; color: var(--sub); }
 /* ==== L4 설정 (UI 개편 2026-09-18, ui-plan §1 I·J·K·L) ================================== */
 /* 카드 머리 오른쪽 끝 행동(I2·K3·L4). `Card` 의 action 슬롯을 감싸는 이름표 — 이식 `.wire-card-head`
    가 둘째 자식부터 `margin-left:auto` 로 오른쪽 끝에 세우고 세로 가운데는 flex 가 이미 맞춘다. */
@@ -687,3 +698,25 @@ body { margin: 0; }
 /* 설정 가이드 팝업: 본문은 순서 목록 하나. 링크·코드가 길어도 팝업 폭 안에서 줄바꿈한다. */
 .connection-guide-dialog .connection-guide { margin-bottom: 0; overflow-wrap: anywhere; }
 .connection-guide-row { display: flex; }
+
+/* ==== 인테이크 폼 정리(2026-09-18 Q) ==== §6 미검수였던 인테이크를 납작하게 편다:
+   구획 사이 여백을 넓히고, 카드 제목 구분선·묶음 위 가로선을 걷고, 묶음 제목(라벨)은
+   글자만 14px 로 내린다. 카드 제목은 제목이라 16px --ink 그대로 두되 밑줄만 없앤다.
+   인테이크(작성·원본 보기)에만 건다 — 다른 폼의 legend·구분선은 그 화면 차례에 본다. */
+.intake-form { display: grid; gap: var(--space-6); min-width: 0; }
+.intake-form .wire-card-body { gap: var(--space-5); }
+.intake-form .wire-card-divider { display: none; }
+.intake-form .wire-card-title { margin-bottom: var(--space-4); }
+.intake-form .wire-fieldset { border-top: 0; padding-top: 0; }
+.intake-form .wire-fieldset > legend { font-size: var(--text-sm); }
+
+/* 과제 수행 주체(2026-09-18 Q): 넓으면 라디오 둘, 행이 460 미만으로 좁아지면 선택창으로 바꿔
+   입력칸 폭을 지킨다. 컨테이너는 입력+토글+추가가 함께 선 행이다. */
+.wire-field-with-action { container-type: inline-size; }
+.task-owner { flex: none; display: flex; align-items: center; }
+.task-owner-radios { display: flex; flex-wrap: nowrap; align-items: center; gap: var(--space-4); flex: none; }
+.task-owner-select { display: none; flex: none; width: 132px; }
+@container (max-width: 460px) {
+  .task-owner-radios { display: none; }
+  .task-owner-select { display: block; }
+}

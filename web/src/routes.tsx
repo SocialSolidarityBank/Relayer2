@@ -1,6 +1,6 @@
 // 베타 라우팅. 화면이 다섯이라 라우터 의존성을 두지 않는다.
 // 로그인하지 않았으면 어떤 화면도 열지 않는다.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { applyTheme, followSystemTheme, initialTheme, setTheme as chooseTheme, type Theme } from './theme.ts';
 import { NavIcon, type ShellIconName } from './shell-icons.tsx';
 import { getMe, logout, Unauthorized, type Me } from './api.ts';
@@ -57,6 +57,38 @@ export function Routes() {
       .then(setMe)
       .catch((e) => setMe(e instanceof Unauthorized ? null : null));
   }, []);
+
+  /**
+   * 768 미만의 사이드바는 **드로어**다(DESIGN §4-4 · CCC-new `app-sidebar.tsx` 이식).
+   * 손잡이는 모바일 바 오른쪽 끝 원형 버튼이고, 스크림·Esc·닫기 버튼이 닫는 길이다.
+   * 이식 CSS(`shell.css`)가 이미 드로어를 그리고 있었고 마크업·상태만 없었다.
+   */
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const drawerHandleRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLElement>(null);
+  // 이동하면 닫는다 — 열린 채로 남으면 도착한 화면을 자기가 가린다.
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [hash]);
+  useEffect(() => {
+    if (!drawerOpen) return;
+    // Esc 는 스크림을 못 누르는 상황(키보드·보조기기)의 유일한 탈출구다.
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setDrawerOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    // 열려 있는 동안 뒤 본문이 함께 스크롤되면 스크림이 덮은 것처럼 안 읽힌다.
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    // 초점을 드로어 안으로 옮긴다 — 안 옮기면 탭이 뒤 본문을 돌아 화면과 어긋난다.
+    drawerRef.current?.focus({ preventScroll: true });
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previousOverflow;
+      // 닫을 때 손잡이로 초점을 돌려준다(열기 전 자리).
+      drawerHandleRef.current?.focus({ preventScroll: true });
+    };
+  }, [drawerOpen]);
 
   /**
    * 사이드바는 **목록·등록만** 가리킨다(2026-09-18 Q A1). 구 `상담 일정 등록`·`상담 기록하기`
@@ -204,6 +236,13 @@ export function Routes() {
     return null;
   })();
 
+  // HERO 만 있고 큰 제목이 없는 화면의 페이지 이름(뒤로 줄 오른쪽, 16px 라벤더). 필요한 화면만 준다.
+  const eyebrow = /^#\/cases\/\d+\/schedule$/.test(path)
+    ? '상담 일정 등록'
+    : /^#\/cases\/\d+\/record$/.test(path) || /^#\/cases\/\d+\/sessions\/\d+\/edit$/.test(path)
+      ? '상담 기록지'
+      : undefined;
+
 
   /**
    * 사이드바 셸(2026-09-16 Q "사람들이 헷갈려 한다").
@@ -251,6 +290,35 @@ export function Routes() {
 
   return (
     <div className="app-shell">
+      {/* 모바일 바 = 좁은 화면의 헤더다(768 미만에서만 보인다, `shell.css` `.drawer-bar`).
+          왼쪽은 기관·사람 이름(데스크톱 헤더와 같은 내용), 오른쪽 끝은 원형 사이드바 버튼이다.
+          CCC-new 는 여기에 기관·사업 전환기를 두지만 베타는 기관이 하나라 글자만 둔다. */}
+      <div className="drawer-bar">
+        <span className="app-header-brand">릴레이어</span>
+        {/* `.app-nav-me` 는 헤더 하나만 갖는다 — 실측 스크립트·e2e 가 그 이름으로 '로그인됨'을
+            판정하므로 두 벌이면 숨은 쪽을 먼저 잡아 보이지 않는다고 읽는다. */}
+        <span className="drawer-bar-me">{me.name}</span>
+        <button
+          ref={drawerHandleRef}
+          type="button"
+          className="header-icon-button drawer-handle"
+          aria-label="메뉴"
+          title="메뉴"
+          aria-expanded={drawerOpen}
+          aria-controls="app-sidebar"
+          onClick={() => setDrawerOpen((open) => !open)}
+        >
+          <NavIcon name="sidebar" />
+        </button>
+      </div>
+      {/* 스크림은 늘 마운트하고 열림만 오간다 — 조건 마운트면 닫는 순간 어둠이 뚝 사라진다.
+          닫힘 상태는 pointer-events:none 이라 본문을 막지 않는다. */}
+      <div
+        className="drawer-scrim"
+        data-open={drawerOpen ? 'true' : undefined}
+        onClick={() => setDrawerOpen(false)}
+        aria-hidden="true"
+      />
       <header className="app-header">
         <span className="app-header-brand">릴레이어</span>
         {/* 계정 행동은 사이드바 하단 세 버튼으로 내렸다(2026-09-17 Q) — 머리줄은 기관·사람
@@ -260,7 +328,28 @@ export function Routes() {
         </div>
       </header>
 
-      <aside className="sidebar">
+      <aside
+        ref={drawerRef}
+        id="app-sidebar"
+        className="sidebar"
+        aria-label="주 메뉴"
+        data-drawer-open={drawerOpen ? 'true' : undefined}
+        tabIndex={-1}
+      >
+        {/* 드로어 머리 줄(768 미만에서만 보인다). 닫기는 X 가 아니라 여는 버튼과 같은
+            사이드바 아이콘·같은 32 원형이다 — 한 버튼이 여닫는 토글로 읽힌다(CCC 2026-08-06 Q 2차).
+            계정 행동 세 버튼은 릴레이어에서는 사이드바 하단(`.sidebar-footer`)이 갖고, 드로어에도 함께 따라온다. */}
+        <div className="sidebar-head">
+          <button
+            type="button"
+            className="header-icon-button drawer-dismiss"
+            aria-label="메뉴 닫기"
+            title="메뉴 닫기"
+            onClick={() => setDrawerOpen(false)}
+          >
+            <NavIcon name="sidebar" />
+          </button>
+        </div>
         <div className="navigation-groups">
           <div className="navigation-group">
             <p className="navigation-section-title">일정</p>
@@ -339,7 +428,7 @@ export function Routes() {
       {/* 뒤로 가기는 본문 위 한 자리다(정본 .page-backbar). 돌아갈 곳이 없으면 안 그린다. */}
       <div className="content-column">
         <ApiFailureBanner />
-        <BackLink />
+        <BackLink title={eyebrow} />
         <div className="page-content">{screen}</div>
       </div>
     </div>

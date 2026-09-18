@@ -181,7 +181,7 @@ export function ParticipantsScreen({
               ['담당 실무자', `${stats.workers}명`],
             ] as Array<[string, string]>).map(([label, value]) => (
               <div className="participant-stat" key={label}>
-                <span className="participant-stat-label">{label}</span>
+                <span className="participant-stat-label" data-tone={label === '배정 필요' ? 'warn' : undefined}>{label}</span>
                 <strong className="participant-stat-value">{value}</strong>
               </div>
             ))}
