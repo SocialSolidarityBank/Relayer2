@@ -7,7 +7,8 @@
 <meta name="description" content="비영리 기관의 사례관리 기록을 모으고 다음 상담을 준비하는 도구입니다." />
 <link rel="stylesheet" href="site.css" />
 <!-- 글은 이 파일 안에 그대로 있습니다. 문장을 고치려면 아래 구획을 찾아 글자만 바꾸면 됩니다.
-     앱으로 가는 링크는 두 개뿐입니다. /#/signup 은 사용해 보기, /#/login 은 로그인입니다.
+     앱으로 가는 링크는 두 개뿐입니다. /app#/signup 은 사용해 보기, /app#/login 은 로그인입니다.
+     루트는 이 소개 페이지가 갖고 앱은 /app 으로 들어갑니다(api/src/routes.ts WEB_ENTRIES).
      앱을 다른 주소에 올렸다면 세 HTML 파일에서 이 두 경로만 바꿉니다. -->
 </head>
 <body>
@@ -20,7 +21,7 @@
       <a href="#what" data-optional>하는 일</a>
       <a href="guide-user.html">사용자 가이드</a>
       <a href="guide-admin.html">관리자 가이드</a>
-      <a class="btn" href="/#/login"><span class="btn-text">로그인</span></a>
+      <a class="btn" href="/app#/login"><span class="btn-text">로그인</span></a>
     </nav>
   </div>
 </header>
@@ -35,12 +36,13 @@
       다음 회차 화면에 그대로 올라옵니다.
     </p>
     <div class="hero-actions">
-      <a class="btn btn-primary btn-lg" href="/#/signup"><span class="btn-text">사용해 보기</span></a>
-      <a class="btn btn-lg" href="/#/login"><span class="btn-text">로그인</span></a>
+      <a class="btn btn-primary btn-lg" href="/app#/signup"><span class="btn-text">사용해 보기</span></a>
+      <a class="btn btn-lg" href="/app#/login"><span class="btn-text">로그인</span></a>
     </div>
     <p class="hero-note">
-      처음 쓰는 기관은 <b>사용해 보기</b>에서 관리자 계정을 만듭니다. 계정을 이미 받았다면 <b>로그인</b>,
-      아직 받지 못했다면 기관 관리자가 보내는 초대 링크가 필요합니다.
+      <b>사용해 보기</b>를 누르면 이 주소에서 계정을 만들 수 있는지 그 자리에서 알려 줍니다.
+      계정을 이미 받았다면 <b>로그인</b>, 아직 받지 못했다면 기관 관리자가 보내는 초대 링크가
+      필요합니다.
     </p>
 
     <figure class="shot hero-shot">
@@ -230,17 +232,19 @@
     <div class="doors">
       <div class="card door">
         <div>
-          <h3>우리 기관이 처음 씁니다</h3>
-          <p>관리자 계정을 만들고 기관 이름과 사업을 등록합니다. 그다음 실무자를 초대할 수 있습니다.</p>
+          <h3>새 기관으로 시작하고 싶습니다</h3>
+          <p>
+            기관마다 주소를 따로 엽니다. 이 주소는 이미 열려 있어서 새 기관이 여기서 가입하지
+            않습니다. 사회연대은행에 문의하면 기관 주소를 새로 엽니다.
+          </p>
         </div>
-        <a class="btn btn-primary" href="/#/signup"><span class="btn-text">사용해 보기</span></a>
       </div>
       <div class="card door">
         <div>
           <h3>계정을 이미 받았습니다</h3>
           <p>기관에서 받은 아이디와 비밀번호로 들어옵니다.</p>
         </div>
-        <a class="btn" href="/#/login"><span class="btn-text">로그인</span></a>
+        <a class="btn" href="/app#/login"><span class="btn-text">로그인</span></a>
       </div>
       <div class="card door">
         <div>
@@ -309,7 +313,7 @@
       <nav aria-label="바닥 메뉴">
         <a href="guide-user.html">사용자 가이드</a>
         <a href="guide-admin.html">관리자 가이드</a>
-        <a href="/#/login">로그인</a>
+        <a href="/app#/login">로그인</a>
       </nav>
     </div>
     <p class="foot-note">
