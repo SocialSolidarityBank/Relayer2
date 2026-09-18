@@ -1,8 +1,9 @@
 // DB 접근은 여기 하나로 모은다. 쓰기는 전부 트랜잭션 하나 안에서 끝낸다.
 import {
   activeDomains,
+  consentInstitutionName,
+  effectiveInstitutionName,
   CONSENT_COPY,
-  CONSENT_DOMAINS,
   copyHash,
   copyText,
   copyVersion,
@@ -71,6 +72,8 @@ export async function createCase(input: {
   actorId: number;
 }): Promise<{ case_id: number; participant_id: number; pseudonym: string }> {
   return await sql.begin(async (tx) => {
+    const [organization] = await tx<Array<{ name: string }>>`
+      select name from organization where id = 1`;
     // 사업은 살아 있는 것만 고른다. 종료된 사업에 새 사례를 여는 것은 잠긴 쓰기다.
     const [program] = await tx<Array<{ retired_at: string | null }>>`
       select retired_at from programs where id = ${input.program_id}`;
@@ -95,7 +98,8 @@ export async function createCase(input: {
         insert into consent_events
           (participant_id, case_id, domain, decision, purpose, copy_version, copy_hash, effective_at, recorded_by)
         values (${participant.id}, ${c.id}, ${consent.domain}, ${consent.decision},
-                ${CONSENT_COPY[consent.domain].purpose}, ${copyVersion()}, ${copyHash(consent.domain)},
+                ${CONSENT_COPY[consent.domain].purpose}, ${copyVersion()},
+                ${copyHash(consent.domain, effectiveInstitutionName(organization?.name))},
                 ${new Date().toISOString()}, ${input.actorId})`;
     }
     return { case_id: c.id, participant_id: participant.id, pseudonym };
@@ -731,19 +735,23 @@ export type ConsentView = Array<{
 export async function getConsents(caseId: number): Promise<ConsentView | null> {
   const [supportCase] = await sql<SupportCase[]>`select participant_id from support_cases where id = ${caseId}`;
   if (!supportCase) return null;
-  const events = await sql<ConsentEventRow[]>`
-    select id, domain, decision, copy_version, copy_hash, effective_at
-    from consent_events
-    where participant_id = ${supportCase.participant_id} and case_id = ${caseId}
-    order by id`;
+  const [events, institutionName, domains] = await Promise.all([
+    sql<ConsentEventRow[]>`
+      select id, domain, decision, copy_version, copy_hash, effective_at
+      from consent_events
+      where participant_id = ${supportCase.participant_id} and case_id = ${caseId}
+      order by id`,
+    consentInstitutionName(),
+    activeDomains(),
+  ]);
   // 기능이 꺼진 영역은 목록에 두지 않는다 — 받을 이유가 없는 동의를 화면에 띄우지 않는다.
-  return activeDomains().map((domain) => {
-    const mine = events.filter((e) => e.domain === domain);
+  return domains.map((domain) => {
+    const mine = events.filter((event) => event.domain === domain);
     return {
       domain,
       label: CONSENT_COPY[domain].label,
-      copy: copyText(domain).copy,
-      status: foldConsent(domain, events),
+      copy: copyText(domain, institutionName).copy,
+      status: foldConsent(domain, events, institutionName),
       decided_at: mine.at(-1)?.effective_at ?? null,
     };
   });
@@ -756,11 +764,12 @@ export async function recordConsent(
 ): Promise<ConsentView> {
   const [supportCase] = await sql<SupportCase[]>`select participant_id from support_cases where id = ${caseId}`;
   if (!supportCase) throw new Error('사례 없음');
+  const institutionName = await consentInstitutionName();
   await sql`
     insert into consent_events
       (participant_id, case_id, domain, decision, purpose, copy_version, copy_hash, effective_at, recorded_by)
     values (${supportCase.participant_id}, ${caseId}, ${input.domain}, ${input.decision},
-            ${CONSENT_COPY[input.domain].purpose}, ${copyVersion()}, ${copyHash(input.domain)},
+            ${CONSENT_COPY[input.domain].purpose}, ${copyVersion()}, ${copyHash(input.domain, institutionName)},
             ${new Date().toISOString()}, ${input.actorId ?? null})`;
   return (await getConsents(caseId)) ?? [];
 }
