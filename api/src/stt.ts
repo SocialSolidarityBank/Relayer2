@@ -625,6 +625,92 @@ export async function latestTranscript(sessionId: number, actorId: number): Prom
 }
 
 /**
+ * 합성 데이터셋의 정답 대화문을 승인 전사문으로 붙인다.
+ *
+ * 외부 STT 호출은 하지 않는다. 관리자만 여는 라우트가 호출하며, 여기서는 녹음과 회차의
+ * 소유 관계·배정·민감정보 동의를 다시 확인한다. 본문은 일반 전사와 같은 PII 가림과
+ * 암호화를 거쳐 저장한다.
+ */
+export async function importApprovedTranscript(
+  sessionId: number,
+  recordingId: number,
+  actorId: number,
+  rawText: string,
+): Promise<Transcript> {
+  const [recording] = await sql<Array<{ case_id: number }>>`
+    select s.case_id from recordings r
+    join sessions s on s.id = r.session_id
+    where r.id = ${recordingId} and r.session_id = ${sessionId} and r.deleted_at is null`;
+  if (!recording) throw new NotFound('이 회차의 녹음 없음');
+  await assertCaseAccess(recording.case_id, actorId);
+  await assertCaseOpen(recording.case_id);
+  await assertConsent(recording.case_id, 'sensitive_information_processing');
+
+  const [participant] = await sql<
+    Array<{ pseudonym: string; enc_name: string | null; enc_phone: string | null; enc_email: string | null }>
+  >`
+    select p.pseudonym, v.enc_name, v.enc_phone, v.enc_email
+    from support_cases c
+    join participants p on p.id = c.participant_id
+    left join participant_pii v on v.participant_id = p.id
+    where c.id = ${recording.case_id}`;
+  if (!participant) throw new NotFound('당사자 없음');
+  const { parts, hits } = maskAll(
+    [{ label: '전사', text: rawText }],
+    {
+      pseudonym: participant.pseudonym,
+      name: decryptPii(participant.enc_name),
+      phone: decryptPii(participant.enc_phone),
+      email: decryptPii(participant.enc_email),
+    },
+  );
+  const text = parts[0].text;
+
+  const [latest] = await sql<TranscriptRow[]>`
+    select id, recording_id, session_id, status, text, segments, mask_hits, engine, created_at
+    from transcripts where session_id = ${sessionId} order by id desc limit 1`;
+  if (latest) {
+    const current = decodeTranscript(latest);
+    if (
+      current.status === 'approved' &&
+      current.recording_id === recordingId &&
+      current.engine === 'curated-dataset' &&
+      current.text === text
+    ) {
+      return current;
+    }
+  }
+
+  const [inserted] = await sql<Array<{ id: number; created_at: string }>>`
+    insert into transcripts
+      (recording_id, session_id, status, text, segments, mask_hits, engine, created_by, approved_by)
+    values
+      (${recordingId}, ${sessionId}, 'approved', ${encryptText(text)}, null, ${sql.json(hits)},
+       'curated-dataset', ${actorId}, ${actorId})
+    returning id, created_at`;
+  await sql`
+    update recordings set transcribe_state = 'done', transcribe_note = '합성 데이터셋 승인 전사문'
+    where id = ${recordingId}`;
+  await audit({
+    actorId,
+    action: 'voice.approve',
+    caseId: recording.case_id,
+    fields: [`transcript=${inserted.id}`, 'source=curated-dataset', ...Object.entries(hits).map(([kind, n]) => `masked:${kind}=${n}`)],
+  });
+  await assertCaseAccess(recording.case_id, actorId);
+  return {
+    id: inserted.id,
+    recording_id: recordingId,
+    session_id: sessionId,
+    status: 'approved',
+    text,
+    mask_hits: hits,
+    engine: 'curated-dataset',
+    created_at: inserted.created_at,
+  };
+}
+
+/**
  * 승인. 사람이 고친 문구가 있으면 그것으로 승인한다.
  * 지우지 않고 새 행을 쌓는다 — 무엇을 보고 승인했는지가 남아야 한다.
  * `transcriptId` 를 주면 **그 초안을 본 승인**이다 — 사이에 새 초안이 올라왔으면
