@@ -46,7 +46,7 @@ import {
 import { ConsentLinkCard } from '../consent-link.tsx';
 import { SessionOriginalDialog, type OriginalPart } from '../session-original.tsx';
 import { Dialog } from '../dialog.tsx';
-import { dateLabel } from '../date-time.ts';
+import { dateLabel, timeLabel } from '../date-time.ts';
 
 const TABS = ['당사자 정보', '회차별 요약', '회차별 원본 보기', '목표'] as const;
 type Tab = (typeof TABS)[number];
@@ -789,11 +789,7 @@ const SEQ_TRANSCRIPT: Record<string, string> = {
   skipped: '건너뜀',
 };
 
-/** 일시는 날짜와 시:분이다(E4). */
-const timeLabel = (iso: string): string => {
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-};
+// 일시는 날짜와 시각 두 칸이다(E4). 두 표기 모두 `date-time.ts` 것이다.
 
 
 function SessionStatus({ detail }: { detail: CaseDetail }) {

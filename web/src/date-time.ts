@@ -55,3 +55,24 @@ export function dayLabel(day: string): string {
   const weekday = WEEKDAY[new Date(`${day}T00:00:00Z`).getUTCDay()];
   return `${day.slice(0, 4)}.${day.slice(5, 7)}.${day.slice(8, 10)}.(${weekday})`;
 }
+
+/** 전역 시각 표기: `AM 10:26`. 한국 시간 기준이고 달력 라벨과 같은 꼴이다. */
+export function timeLabel(iso: string | null | undefined): string {
+  if (!iso) return '시각 없음';
+  const parsed = Date.parse(iso);
+  if (!Number.isFinite(parsed)) return '시각 없음';
+  const kst = new Date(parsed + KST_OFFSET_MS);
+  const hour = kst.getUTCHours();
+  const minute = String(kst.getUTCMinutes()).padStart(2, '0');
+  return `${hour < 12 ? 'AM' : 'PM'} ${String(hour % 12 || 12).padStart(2, '0')}:${minute}`;
+}
+
+/**
+ * 전역 일시 표기: `2026.09.18.(금) AM 10:26`(2026-09-18 Q).
+ * 화면마다 `9월 21일 10:26` · `2026. 9. 11. 10:26` · `2026년 9월 18일 금요일 오후 10:26` 로
+ * 갈리던 것을 이 한 곳으로 모은다.
+ */
+export function dateTimeLabel(iso: string | null | undefined): string {
+  if (!iso || !Number.isFinite(Date.parse(iso))) return '일시 없음';
+  return `${dateLabel(iso)} ${timeLabel(iso)}`;
+}

@@ -18,13 +18,10 @@ import {
 } from '../ui.tsx';
 import { METHODS } from '../vocab.ts';
 import { DateTimeInput } from '../date-time-input.tsx';
-import { dateTimeFromIso, dateTimeToIso, EMPTY_DATE_TIME } from '../date-time.ts';
+import { dateTimeFromIso, dateTimeLabel, dateTimeToIso, EMPTY_DATE_TIME } from '../date-time.ts';
 import './schedule-new.css';
 
-const scheduleFormatter = new Intl.DateTimeFormat('ko-KR', {
-  timeZone: 'Asia/Seoul', year: 'numeric', month: 'long', day: 'numeric', weekday: 'long',
-  hour: 'numeric', minute: '2-digit', hour12: true,
-});
+// 저장 요약의 일시 표기는 `date-time.ts` 의 `dateTimeLabel` 하나다(2026-09-18 Q).
 /** 종료 시각 입력은 24시간제 `HH:mm` 이다(네이티브 `input[type=time]`). */
 const endTimeFormatter = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', hour12: false,
@@ -202,7 +199,7 @@ export function ScheduleNewScreen({ caseId, thenRecord = false }: { caseId: numb
           </Field>
           {/* 안내·오류는 카드 안 마지막 줄이다(구 하단 저장 바 대체, 2026-09-18 Q). */}
           <p className="schedule-save-note" aria-live="polite">
-            <Meta parts={[scheduledAt ? scheduleFormatter.format(new Date(scheduledAt)) : '날짜와 시간 선택 필요', saving ? '일정 저장 중' : null]} />
+            <Meta parts={[scheduledAt ? dateTimeLabel(scheduledAt) : '날짜와 시간 선택 필요', saving ? '일정 저장 중' : null]} />
           </p>
           {error && <ErrorText>{error}</ErrorText>}
         </Card>

@@ -18,6 +18,7 @@ import {
   type RevisionKind,
   type SessionRecord,
 } from './api.ts';
+import { dateTimeLabel } from './date-time.ts';
 import {
   Forbidden,
   getTranscript,
@@ -52,11 +53,7 @@ export type OriginalPart = 'written' | 'voice';
 // 부르는 쪽이 리비전 저장 실패를 그 자리에 적는다. 5xx 배너는 `api.ts` 가 띄운다 — 까닭을
 // 화면이 모르는 실패만 배너 몫이고, 409(원본 없음)·400 은 여기서 문구로 보인다.
 
-const stamp = (iso: string): string => {
-  const d = new Date(iso);
-  const two = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}. ${d.getMonth() + 1}. ${d.getDate()}. ${two(d.getHours())}:${two(d.getMinutes())}`;
-};
+// 일시 표기는 `date-time.ts` 의 `dateTimeLabel` 하나다(2026-09-18 Q).
 
 /**
  * 원문 한 단 + 편집 모드. 읽을 때는 본문 단, `수정` 을 누르면 같은 자리가 textarea 가 된다.
@@ -155,7 +152,7 @@ function Revisable({
             <p className="seq-section-note">수정 기록 {mine.length}</p>
             {[...mine].reverse().map((r) => (
               <p className="seq-section-note" key={r.id}>
-                <Meta parts={[stamp(r.created_at), r.actor]} />
+                <Meta parts={[dateTimeLabel(r.created_at), r.actor]} />
               </p>
             ))}
           </div>

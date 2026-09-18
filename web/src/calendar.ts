@@ -3,6 +3,7 @@
  * 기기의 시간대와 무관하게 같은 결과를 낸다 — date-time.ts의 KST 관례를 따른다.
  * 날짜 산술은 KST 날짜를 UTC 자정으로 옮겨 순수 밀리초로만 한다.
  */
+import { timeLabel } from './date-time.ts';
 export type CalendarView = 'month' | 'week' | 'day';
 
 export type CalendarPeriod = {
@@ -33,15 +34,13 @@ export function koreanDay(iso?: string | Date): string {
   return dayFormatter.format(iso === undefined ? new Date() : new Date(iso));
 }
 
-/** ISO 시각을 한국 날짜·24시각·'AM/PM hh:mm' 라벨로 바꾼다(2026-09-17 Q — `AM 07:14` 꼴). */
+/** ISO 시각을 한국 날짜·24시각·전역 시각 라벨(`AM 07:14`)로 바꾼다. 라벨은 `date-time.ts` 것이다. */
 export function calendarTime(iso: string): CalendarTime {
   const local = new Date(Date.parse(iso) + KST_OFFSET_MS);
-  const hour = local.getUTCHours();
-  const minute = String(local.getUTCMinutes()).padStart(2, '0');
   return {
     day: local.toISOString().slice(0, 10),
-    hour,
-    label: `${hour < 12 ? 'AM' : 'PM'} ${String(hour % 12 || 12).padStart(2, '0')}:${minute}`,
+    hour: local.getUTCHours(),
+    label: timeLabel(iso),
   };
 }
 

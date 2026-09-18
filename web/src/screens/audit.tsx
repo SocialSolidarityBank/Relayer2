@@ -18,6 +18,7 @@ import {
   type AuditRow,
   type AuditSummary,
 } from '../api.ts';
+import { dateTimeLabel } from '../date-time.ts';
 import { Badge, Card, Empty, PageHeader, Select } from '../ui.tsx';
 
 const FIELD_LABEL: Record<string, string> = {
@@ -89,8 +90,7 @@ function fieldText(field: string): string {
   return FIELD_LABEL[field] ?? field;
 }
 
-const when = (iso: string): string =>
-  new Date(iso).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+// 일시 표기는 `date-time.ts` 의 `dateTimeLabel` 하나다(2026-09-18 Q).
 
 const TONE: Record<string, 'mint' | 'lavender' | 'blue'> = { 열람: 'blue', 기록: 'mint', 운영: 'lavender' };
 
@@ -241,7 +241,7 @@ export function AuditScreen({ embedded }: { embedded?: boolean } = {}) {
                 <tbody>
                   {shown.map((r) => (
                     <tr key={r.id}>
-                      <td>{when(r.at)}</td>
+                      <td>{dateTimeLabel(r.at)}</td>
                       <td>
                         <Badge tone={TONE[r.kind]}>{r.kind}</Badge>
                       </td>
